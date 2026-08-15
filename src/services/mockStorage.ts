@@ -33,6 +33,7 @@ import {
   syncEncomendaToFirestore,
   syncCobrancaToFirestore,
   deleteCobrancaFromFirestore,
+  syncPlanoConfigToFirestore,
 } from './firebase';
 import { collection, onSnapshot, doc, getDocs } from 'firebase/firestore';
 
@@ -144,10 +145,137 @@ class MockCondoStore {
   private listeners: Set<Listener> = new Set();
   private subUnsubscribers: Record<string, (() => void)[]> = {};
   private version = 0;
+  private isBootstrapping = false;
 
   constructor() {
     this.loadFromStorage();
     this.initFirestoreListeners();
+    this.bootstrapFromFirestore();
+  }
+
+  public async bootstrapFromFirestore(): Promise<boolean> {
+    if (this.isBootstrapping) return true;
+    this.isBootstrapping = true;
+    try {
+      // 1. Condomínios
+      const condoSnap = await getDocs(collection(db, 'condominios'));
+      if (!condoSnap.empty) {
+        const loadedCondos: Condominio[] = [];
+        condoSnap.forEach((docSnap) => {
+          const data = docSnap.data() as Condominio;
+          loadedCondos.push({ ...data, id: docSnap.id });
+        });
+        this.condominios = loadedCondos;
+        for (const condo of loadedCondos) {
+          this.subscribeToCondoSubcollections(condo.id);
+          this.fetchCondoSubcollections(condo.id);
+        }
+      }
+
+      // 2. Usuários do Sistema (SuperAdmin, Síndicos, Portaria)
+      const userSnap = await getDocs(collection(db, 'usuariosSistema'));
+      if (!userSnap.empty) {
+        const loadedUsers: UsuarioSistema[] = [];
+        userSnap.forEach((docSnap) => {
+          const data = docSnap.data() as UsuarioSistema;
+          loadedUsers.push({ ...data, id: docSnap.id });
+        });
+
+        const hasSuper = loadedUsers.some(
+          (u) => u.email.toLowerCase() === 'davileonardo303@gmail.com'
+        );
+        if (!hasSuper) {
+          loadedUsers.unshift(INITIAL_USUARIOS_SISTEMA[0]);
+        }
+
+        this.usuariosSistema = loadedUsers;
+      }
+
+      // 3. Planos Config
+      const planosSnap = await getDocs(collection(db, 'planosConfig'));
+      if (!planosSnap.empty) {
+        planosSnap.forEach((d) => {
+          const key = d.id as PlanoTipo;
+          this.planosConfig[key] = { ...(this.planosConfig[key] || {}), ...(d.data() as any) };
+        });
+      }
+
+      // 4. Cobranças
+      const cobSnap = await getDocs(collection(db, 'cobrancas'));
+      if (!cobSnap.empty) {
+        const loadedCobrancas: CobrancaCondominio[] = [];
+        cobSnap.forEach((d) => {
+          loadedCobrancas.push({ ...(d.data() as CobrancaCondominio), id: d.id });
+        });
+        this.cobrancas = loadedCobrancas;
+      }
+
+      this.saveToStorage();
+      this.notify();
+      this.isBootstrapping = false;
+      return true;
+    } catch (err) {
+      console.warn('Bootstrap Firestore error/warning:', err);
+      this.isBootstrapping = false;
+      return false;
+    }
+  }
+
+  private async fetchCondoSubcollections(condoId: string) {
+    try {
+      // Moradores
+      const morSnap = await getDocs(collection(db, 'condominios', condoId, 'moradores'));
+      if (!morSnap.empty) {
+        const list: Morador[] = [];
+        morSnap.forEach((d) => list.push({ ...(d.data() as Morador), id: d.id }));
+        this.moradores[condoId] = list;
+      }
+
+      // Bikes
+      const bikeSnap = await getDocs(collection(db, 'condominios', condoId, 'bikes'));
+      if (!bikeSnap.empty) {
+        const list: Bicicleta[] = [];
+        bikeSnap.forEach((d) => list.push({ ...(d.data() as Bicicleta), id: d.id }));
+        this.bikes[condoId] = list;
+      }
+
+      // Áreas de Lazer
+      const areaSnap = await getDocs(collection(db, 'condominios', condoId, 'areasLazer'));
+      if (!areaSnap.empty) {
+        const list: AreaLazer[] = [];
+        areaSnap.forEach((d) => list.push({ ...(d.data() as AreaLazer), id: d.id }));
+        this.areasLazer[condoId] = list;
+      }
+
+      // Avisos
+      const avisoSnap = await getDocs(collection(db, 'condominios', condoId, 'avisos'));
+      if (!avisoSnap.empty) {
+        const list: Aviso[] = [];
+        avisoSnap.forEach((d) => list.push({ ...(d.data() as Aviso), id: d.id }));
+        this.avisos[condoId] = list;
+      }
+
+      // Encomendas
+      const encSnap = await getDocs(collection(db, 'condominios', condoId, 'encomendas'));
+      if (!encSnap.empty) {
+        const list: Encomenda[] = [];
+        encSnap.forEach((d) => list.push({ ...(d.data() as Encomenda), id: d.id }));
+        this.encomendas[condoId] = list;
+      }
+
+      // Reservas
+      const resSnap = await getDocs(collection(db, 'condominios', condoId, 'reservas'));
+      if (!resSnap.empty) {
+        const list: Reserva[] = [];
+        resSnap.forEach((d) => list.push({ ...(d.data() as Reserva), id: d.id }));
+        this.reservas[condoId] = list;
+      }
+
+      this.saveToStorage();
+      this.notify();
+    } catch (err) {
+      console.warn(`Erro ao buscar subcoleções do condomínio ${condoId}:`, err);
+    }
   }
 
   private initFirestoreListeners() {
@@ -210,6 +338,19 @@ class MockCondoStore {
         }
       }, (err) => {
         console.warn('Firestore cobrancas listener offline/error:', err.message);
+      });
+
+      // 4. Escuta Configuração dos Planos no Firestore
+      onSnapshot(collection(db, 'planosConfig'), (snapshot) => {
+        if (!snapshot.empty) {
+          snapshot.forEach((docSnap) => {
+            const key = docSnap.id as PlanoTipo;
+            this.planosConfig[key] = { ...(this.planosConfig[key] || {}), ...(docSnap.data() as any) };
+          });
+          this.notify();
+        }
+      }, (err) => {
+        console.warn('Firestore planosConfig listener offline/error:', err.message);
       });
     } catch (err) {
       console.warn('Erro ao inicializar listeners do Firestore:', err);
@@ -514,6 +655,27 @@ class MockCondoStore {
   }
 
   // --- Autenticação e Gestão de Usuários / Síndicos ---
+  public async autenticarUsuarioAsync(
+    email: string,
+    senha: string
+  ): Promise<{
+    success: boolean;
+    user?: UserAccount;
+    error?: string;
+    status?: 'pendente' | 'recusado';
+    moradorData?: Morador;
+  }> {
+    // 1. Tenta autenticar na memória local
+    const localRes = this.autenticarUsuario(email, senha);
+    if (localRes.success || localRes.status) {
+      return localRes;
+    }
+
+    // 2. Se não encontrou, sincroniza com o Firestore e tenta novamente
+    await this.bootstrapFromFirestore();
+    return this.autenticarUsuario(email, senha);
+  }
+
   public autenticarUsuario(
     email: string,
     senha: string
@@ -1676,6 +1838,52 @@ class MockCondoStore {
       );
       this.notify();
     }
+  }
+
+  public estenderPeriodoTeste(
+    condoId: string,
+    options: { dias?: number; meses?: number; dataExata?: string }
+  ): { success: boolean; novaDataFim: string; condo?: Condominio } {
+    const condo = this.getCondominio(condoId);
+    if (!condo) {
+      return { success: false, novaDataFim: '' };
+    }
+
+    let targetDate = new Date();
+    if (condo.dataFimTeste) {
+      const parsedCurrent = new Date(condo.dataFimTeste + 'T23:59:59');
+      if (!isNaN(parsedCurrent.getTime()) && parsedCurrent.getTime() > targetDate.getTime()) {
+        targetDate = parsedCurrent;
+      }
+    }
+
+    if (options.dataExata) {
+      targetDate = new Date(options.dataExata + 'T23:59:59');
+    } else if (options.meses) {
+      targetDate.setMonth(targetDate.getMonth() + options.meses);
+    } else if (options.dias) {
+      targetDate.setDate(targetDate.getDate() + options.dias);
+    } else {
+      targetDate.setDate(targetDate.getDate() + 90);
+    }
+
+    const novaDataStr = targetDate.toISOString().split('T')[0];
+    condo.statusAssinatura = 'em_teste';
+    condo.plano = 'Teste';
+    condo.statusPagamento = 'cortesia';
+    condo.valorMensalidade = 0;
+    condo.dataFimTeste = novaDataStr;
+    if (!condo.dataInicioTeste) {
+      condo.dataInicioTeste = new Date().toISOString().split('T')[0];
+    }
+
+    syncCondominioToFirestore(condo).catch((err) =>
+      console.warn('Sync Condominio estender teste error:', err)
+    );
+    this.saveToStorage();
+    this.notify();
+
+    return { success: true, novaDataFim: novaDataStr, condo };
   }
 
   // --- Consulta de Moradores por Unidade (Múltiplos moradores no mesmo apto) ---

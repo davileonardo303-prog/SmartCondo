@@ -260,6 +260,15 @@ export async function deleteCobrancaFromFirestore(cobrancaId: string): Promise<v
   }
 }
 
+export async function syncPlanoConfigToFirestore(planoKey: string, config: any): Promise<void> {
+  const path = `planosConfig/${planoKey}`;
+  try {
+    await setDoc(doc(db, 'planosConfig', planoKey), config, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
 export async function loginWithGooglePopup(): Promise<FirebaseUser> {
   const result = await signInWithPopup(auth, googleProvider);
   return result.user;
@@ -268,4 +277,5 @@ export async function loginWithGooglePopup(): Promise<FirebaseUser> {
 export async function logoutFirebase(): Promise<void> {
   await signOut(auth);
 }
+
 

@@ -71,6 +71,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   const [editingCondo, setEditingCondo] = useState<Condominio | null>(null);
   const [billingCondo, setBillingCondo] = useState<Condominio | null>(null);
   const [planEditCondo, setPlanEditCondo] = useState<Condominio | null>(null);
+  const [estenderTesteCondo, setEstenderTesteCondo] = useState<Condominio | null>(null);
+  const [extensaoDias, setExtensaoDias] = useState<number>(90);
+  const [extensaoDataCustom, setExtensaoDataCustom] = useState<string>('');
 
   // Dynamic Plans Config from Store
   const planosConfig = condoStore.getPlanosConfig();
@@ -136,6 +139,31 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   const handleAbrirConfigPlanos = () => {
     setEditablePlanos({ ...condoStore.getPlanosConfig() });
     setShowConfigPlanosModal(true);
+  };
+
+  const handleAbrirEstenderTeste = (condo: Condominio) => {
+    setEstenderTesteCondo(condo);
+    setExtensaoDias(90);
+    setExtensaoDataCustom('');
+  };
+
+  const handleConfirmarEstenderTeste = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!estenderTesteCondo) return;
+
+    let res;
+    if (extensaoDataCustom) {
+      res = condoStore.estenderPeriodoTeste(estenderTesteCondo.id, { dataExata: extensaoDataCustom });
+    } else {
+      res = condoStore.estenderPeriodoTeste(estenderTesteCondo.id, { dias: extensaoDias });
+    }
+
+    if (res.success) {
+      confetti({ particleCount: 60, spread: 70 });
+      const dataFmt = res.novaDataFim.split('-').reverse().join('/');
+      showNotification(`🧪 Período de teste do condomínio "${estenderTesteCondo.nome}" estendido com sucesso até ${dataFmt}!`);
+      setEstenderTesteCondo(null);
+    }
   };
 
   const handleSalvarConfigPlanos = (e: React.FormEvent) => {
@@ -616,32 +644,47 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
                         <td className="py-3 px-4">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span
-                              className={`px-2.5 py-0.5 rounded-full font-extrabold text-[11px] ${
-                                currentPlano === 'Teste'
-                                  ? 'bg-cyan-100 text-cyan-900 border border-cyan-300 flex items-center gap-1'
-                                  : currentPlano === 'Plus'
-                                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                                  : currentPlano === 'Pro'
-                                  ? 'bg-purple-100 text-purple-900 border border-purple-300'
-                                  : currentPlano === 'Enterprise'
-                                  ? 'bg-indigo-100 text-indigo-900 border border-indigo-300'
-                                  : 'bg-slate-100 text-slate-800 border border-slate-300'
-                              }`}
-                            >
-                              {currentPlano === 'Teste' && <Gift className="w-3 h-3 text-cyan-700" />}
-                              Plano {currentPlano} {currentPlano === 'Teste' && '(3 Meses)'}
-                            </span>
-                          </div>
-                          <div className="mt-1">
                             {isPlanoTeste ? (
-                              <div className="text-cyan-800 font-bold text-xs">
-                                Gratuito (3 Meses)
-                                {c.dataFimTeste && (
-                                  <div className="text-[10px] text-cyan-600 font-normal">
-                                    Válido até {c.dataFimTeste.split('-').reverse().join('/')}
+                              <span className="px-2.5 py-1 rounded-full font-black text-[11px] bg-cyan-100 text-cyan-900 border border-cyan-300 flex items-center gap-1 shadow-xs">
+                                <span>🧪</span> Teste (3 Meses)
+                              </span>
+                            ) : (
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full font-extrabold text-[11px] ${
+                                  currentPlano === 'Plus'
+                                    ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                    : currentPlano === 'Pro'
+                                    ? 'bg-purple-100 text-purple-900 border border-purple-300'
+                                    : currentPlano === 'Enterprise'
+                                    ? 'bg-indigo-100 text-indigo-900 border border-indigo-300'
+                                    : 'bg-slate-100 text-slate-800 border border-slate-300'
+                                }`}
+                              >
+                                Plano {currentPlano}
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1.5">
+                            {isPlanoTeste ? (
+                              <div className="space-y-1">
+                                <div className="text-cyan-800 font-bold text-xs flex items-center gap-1">
+                                  <span>Período Gratuito</span>
+                                </div>
+                                {c.dataFimTeste ? (
+                                  <div className="text-[11px] bg-cyan-50 border border-cyan-200 text-cyan-900 px-2 py-0.5 rounded-md font-semibold inline-block">
+                                    📅 Vencimento: <strong className="font-black">{c.dataFimTeste.split('-').reverse().join('/')}</strong>
                                   </div>
+                                ) : (
+                                  <div className="text-[10px] text-cyan-600">3 meses de degustação</div>
                                 )}
+                                <div>
+                                  <button
+                                    onClick={() => handleAbrirEstenderTeste(c)}
+                                    className="text-[10px] text-cyan-700 hover:text-cyan-900 font-extrabold hover:underline inline-flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <span>➕ Aumentar Período de Teste</span>
+                                  </button>
+                                </div>
                               </div>
                             ) : (
                               <div className="text-emerald-700 font-extrabold text-xs">
@@ -691,6 +734,18 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         </td>
 
                         <td className="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
+                          {/* Botão Estender Período de Teste */}
+                          {isPlanoTeste && (
+                            <button
+                              onClick={() => handleAbrirEstenderTeste(c)}
+                              title="Aumentar o Período de Teste Gratuito"
+                              className="px-2.5 py-1.5 rounded-lg bg-cyan-50 hover:bg-cyan-100 text-cyan-900 font-extrabold text-xs transition inline-flex items-center gap-1 cursor-pointer border border-cyan-300"
+                            >
+                              <span>🧪</span>
+                              <span>+ Teste</span>
+                            </button>
+                          )}
+
                           {/* Botão Enviar Notificação de Cobrança */}
                           <button
                             onClick={() => handleAbrirModalCobranca(c)}
@@ -2030,6 +2085,106 @@ Condomínio: ${billingCondo.nome}
                     Salvar Valores dos Planos
                   </button>
                 </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 7: ESTENDER PERÍODO DE TESTE GRATUITO DO CONDOMÍNIO */}
+      {estenderTesteCondo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden p-6 text-xs text-slate-800 my-8">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-2xl bg-cyan-100 text-cyan-800 text-base">
+                  🧪
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Aumentar Período de Teste Gratuito</h3>
+                  <p className="text-[11px] text-slate-500">
+                    Condomínio: <strong className="text-slate-800">{estenderTesteCondo.nome}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEstenderTesteCondo(null)}
+                className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmarEstenderTeste} className="space-y-4">
+              <div className="p-3.5 bg-cyan-50/80 border border-cyan-200 rounded-2xl text-cyan-950 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs">Vencimento Atual do Teste:</span>
+                  <span className="font-black text-cyan-900 bg-white px-2.5 py-1 rounded-lg border border-cyan-200 text-xs">
+                    {estenderTesteCondo.dataFimTeste ? estenderTesteCondo.dataFimTeste.split('-').reverse().join('/') : 'Não definido'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-cyan-800">
+                  Você pode estender o período gratuito do síndico quantas vezes quiser para facilitar a adesão do condomínio!
+                </p>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-2">Selecione quanto tempo deseja adicionar:</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: '+ 30 dias (1 Mês)', dias: 30 },
+                    { label: '+ 60 dias (2 Meses)', dias: 60 },
+                    { label: '+ 90 dias (3 Meses)', dias: 90 },
+                    { label: '+ 180 dias (6 Meses)', dias: 180 },
+                  ].map((opt) => (
+                    <button
+                      key={opt.dias}
+                      type="button"
+                      onClick={() => {
+                        setExtensaoDias(opt.dias);
+                        setExtensaoDataCustom('');
+                      }}
+                      className={`p-3 rounded-xl border text-left font-bold transition cursor-pointer ${
+                        extensaoDias === opt.dias && !extensaoDataCustom
+                          ? 'border-cyan-600 bg-cyan-50 text-cyan-900 shadow-xs'
+                          : 'border-slate-200 bg-slate-50/60 text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="text-xs">{opt.label}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Ou escolha uma data de vencimento específica:
+                </label>
+                <input
+                  type="date"
+                  value={extensaoDataCustom}
+                  onChange={(e) => {
+                    setExtensaoDataCustom(e.target.value);
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div className="pt-3 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEstenderTesteCondo(null)}
+                  className="flex-1 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-3 px-4 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-extrabold text-xs shadow-md shadow-cyan-600/20 transition active:scale-98 cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <span>🧪</span>
+                  <span>Confirmar e Estender Teste</span>
+                </button>
               </div>
             </form>
           </div>

@@ -90,8 +90,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     setRegTelefone(val);
   };
 
-  // 1. LOGIN COM E-MAIL E SENHA (VALIDAÇÃO RIGOROSA NO BANCO DE DADOS)
-  const handleEmailLogin = (e: React.FormEvent) => {
+  // 1. LOGIN COM E-MAIL E SENHA (VALIDAÇÃO RIGOROSA NO BANCO DE DADOS E FIRESTORE)
+  const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
@@ -107,30 +107,37 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       return;
     }
 
-    // Chama o autenticador do banco de dados
-    const result = condoStore.autenticarUsuario(cleanEmail, cleanSenha);
+    setIsLoading(true);
+    try {
+      // Chama o autenticador do banco de dados (com sincronização Firestore em nuvem)
+      const result = await condoStore.autenticarUsuarioAsync(cleanEmail, cleanSenha);
 
-    if (!result.success) {
-      if (result.status === 'pendente' && result.moradorData) {
-        const m = result.moradorData;
-        const condo = condoStore.getCondominio(m.condominioId);
-        setPendingMorador({
-          nome: m.nome,
-          condoNome: condo?.nome || 'Condomínio',
-          unidade: `Bloco ${m.unidade.bloco} - Apto ${m.unidade.apto}`,
-          telefone: m.telefone,
-          email: m.email,
-        });
+      if (!result.success) {
+        if (result.status === 'pendente' && result.moradorData) {
+          const m = result.moradorData;
+          const condo = condoStore.getCondominio(m.condominioId);
+          setPendingMorador({
+            nome: m.nome,
+            condoNome: condo?.nome || 'Condomínio',
+            unidade: `Bloco ${m.unidade.bloco} - Apto ${m.unidade.apto}`,
+            telefone: m.telefone,
+            email: m.email,
+          });
+          return;
+        }
+        setErrorMsg(result.error || 'Credenciais inválidas. Verifique os dados digitados.');
         return;
       }
-      setErrorMsg(result.error || 'Credenciais inválidas. Verifique os dados digitados.');
-      return;
-    }
 
-    // Login com sucesso
-    if (result.user) {
-      confetti({ particleCount: 40, spread: 60 });
-      onLoginSuccess(result.user);
+      // Login com sucesso
+      if (result.user) {
+        confetti({ particleCount: 40, spread: 60 });
+        onLoginSuccess(result.user);
+      }
+    } catch {
+      setErrorMsg('Erro de conexão ao validar credenciais. Tente novamente.');
+    } finally {
+      setIsLoading(false);
     }
   };
 

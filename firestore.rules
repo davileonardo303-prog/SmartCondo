@@ -7,73 +7,39 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isSuperAdmin() {
-      return isSignedIn() && (
-        request.auth.token.email == 'davileonardo303@gmail.com' ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-      );
-    }
-
-    // Usuários do Sistema (SuperAdmin, Síndicos, Portaria)
+    // Allow read/write for all application collections in preview/multi-device setup
     match /usuariosSistema/{usuarioId} {
       allow read, write: if true;
     }
 
-    // Condomínios e todas as subcoleções
     match /condominios/{condominioId} {
       allow read, write: if true;
 
-      // Moradores
-      match /moradores/{moradorId} {
-        allow read, write: if true;
-      }
-
-      // Bicicletas
-      match /bikes/{bikeId} {
-        allow read, write: if true;
-      }
-
-      // Encomendas
-      match /encomendas/{encomendaId} {
-        allow read, write: if true;
-      }
-
-      // Áreas de Lazer
-      match /areasLazer/{areaId} {
-        allow read, write: if true;
-      }
-
-      // Reservas
-      match /reservas/{reservaId} {
-        allow read, write: if true;
-      }
-
-      // Avisos
-      match /avisos/{avisoId} {
-        allow read, write: if true;
-      }
-
-      // Locações de Bicicletas
-      match /locacoes/{locacaoId} {
-        allow read, write: if true;
-      }
-
-      // Notificações
-      match /notificacoes/{notificacaoId} {
+      match /{document=**} {
         allow read, write: if true;
       }
     }
 
-    // Admins collection
+    match /cobrancas/{cobrancaId} {
+      allow read, write: if true;
+    }
+
+    match /planosConfig/{planoId} {
+      allow read, write: if true;
+    }
+
     match /admins/{adminId} {
-      allow read: if isSignedIn();
-      allow write: if isSuperAdmin();
+      allow read, write: if true;
     }
 
-    // Test doc for connection health check
     match /test/{testId} {
+      allow read, write: if true;
+    }
+
+    match /{document=**} {
       allow read, write: if true;
     }
   }
 }
+
 
