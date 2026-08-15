@@ -12,6 +12,8 @@ import {
   UsuarioSistema,
   UserAccount,
   CobrancaCondominio,
+  PlanoTipo,
+  PlanoConfigItem,
 } from '../types';
 import { whatsappService } from './whatsappService';
 import {
@@ -35,6 +37,69 @@ import {
 import { collection, onSnapshot, doc, getDocs } from 'firebase/firestore';
 
 const STORAGE_KEY_PREFIX = 'smartcondo_clean_v6';
+
+export const DEFAULT_PLANOS_CONFIG: Record<PlanoTipo, PlanoConfigItem> = {
+  Teste: {
+    id: 'Teste',
+    nome: 'Plano Teste (3 Meses)',
+    valor: 0,
+    unidades: 'Até 100 aptos',
+    bikes: 'Até 10 bikes',
+    desc: 'Período gratuito de 3 meses (90 dias) para o síndico testar sem custo todas as funcionalidades do condomínio.',
+    duracaoMeses: 3,
+    isTesteGratuito: true,
+    destaque: false,
+    ativo: true,
+  },
+  Smart: {
+    id: 'Smart',
+    nome: 'Plano Smart',
+    valor: 249,
+    unidades: 'Até 50 aptos',
+    bikes: 'Até 5 bikes',
+    desc: 'Ideal para condomínios pequenos e vilas residenciais.',
+    duracaoMeses: 1,
+    isTesteGratuito: false,
+    destaque: false,
+    ativo: true,
+  },
+  Plus: {
+    id: 'Plus',
+    nome: 'Plano Plus',
+    valor: 499,
+    unidades: 'Até 150 aptos',
+    bikes: 'Até 15 bikes',
+    desc: 'Mais popular! Inclui áreas de lazer, reservas e disparos de WhatsApp.',
+    duracaoMeses: 1,
+    isTesteGratuito: false,
+    destaque: true,
+    ativo: true,
+  },
+  Pro: {
+    id: 'Pro',
+    nome: 'Plano Pro',
+    valor: 799,
+    unidades: 'Até 300 aptos',
+    bikes: 'Até 30 bikes',
+    desc: 'Para condomínios de médio/grande porte com alto fluxo de encomendas.',
+    duracaoMeses: 1,
+    isTesteGratuito: false,
+    destaque: false,
+    ativo: true,
+  },
+  Enterprise: {
+    id: 'Enterprise',
+    nome: 'Plano Enterprise',
+    valor: 1299,
+    unidades: 'Ilimitado',
+    bikes: 'Frota ampliada',
+    desc: 'Múltiplas torres, relatórios avançados e suporte prioritário 24/7.',
+    duracaoMeses: 1,
+    isTesteGratuito: false,
+    destaque: false,
+    ativo: true,
+  },
+};
 
 // Credenciais Únicas de Acesso Global (Super Administrador)
 const INITIAL_USUARIOS_SISTEMA: UsuarioSistema[] = [
@@ -75,6 +140,7 @@ class MockCondoStore {
   private avisos: Record<string, Aviso[]> = {};
   private notificacoes: AppNotification[] = [];
   private cobrancas: CobrancaCondominio[] = [];
+  private planosConfig: Record<PlanoTipo, PlanoConfigItem> = { ...DEFAULT_PLANOS_CONFIG };
   private listeners: Set<Listener> = new Set();
   private subUnsubscribers: Record<string, (() => void)[]> = {};
   private version = 0;
@@ -254,6 +320,9 @@ class MockCondoStore {
         this.avisos = parsed.avisos || {};
         this.notificacoes = parsed.notificacoes || [];
         this.cobrancas = parsed.cobrancas || [];
+        this.planosConfig = parsed.planosConfig
+          ? { ...DEFAULT_PLANOS_CONFIG, ...parsed.planosConfig }
+          : { ...DEFAULT_PLANOS_CONFIG };
 
         // Garante que o Super Admin Davi Leonardo sempre existe com a senha correta
         const savedUsers: UsuarioSistema[] = parsed.usuariosSistema || [];
@@ -284,6 +353,7 @@ class MockCondoStore {
     this.reservas = {};
     this.avisos = {};
     this.notificacoes = [];
+    this.planosConfig = { ...DEFAULT_PLANOS_CONFIG };
     this.saveToStorage();
   }
 
@@ -301,6 +371,7 @@ class MockCondoStore {
         avisos: this.avisos,
         notificacoes: this.notificacoes,
         cobrancas: this.cobrancas,
+        planosConfig: this.planosConfig,
       };
       localStorage.setItem(STORAGE_KEY_PREFIX, JSON.stringify(data));
     } catch {
@@ -370,6 +441,18 @@ class MockCondoStore {
   public addCondominio(condo: Omit<Condominio, 'id'>): Condominio {
     const newId = `condo_${Date.now()}`;
     const newCondo: Condominio = { ...condo, id: newId };
+
+    if (newCondo.plano === 'Teste') {
+      const hoje = new Date();
+      const fim = new Date();
+      fim.setDate(fim.getDate() + 90);
+      newCondo.statusAssinatura = 'em_teste';
+      newCondo.statusPagamento = 'cortesia';
+      newCondo.valorMensalidade = 0;
+      newCondo.dataInicioTeste = hoje.toISOString().split('T')[0];
+      newCondo.dataFimTeste = fim.toISOString().split('T')[0];
+    }
+
     this.condominios.push(newCondo);
     this.moradores[newId] = [];
     this.bikes[newId] = [];
@@ -1524,9 +1607,39 @@ class MockCondoStore {
     this.notify();
   }
 
+  public getPlanosConfig(): Record<PlanoTipo, PlanoConfigItem> {
+    return { ...this.planosConfig };
+  }
+
+  public getPlanoConfig(planoId: PlanoTipo): PlanoConfigItem {
+    return (
+      this.planosConfig[planoId] ||
+      DEFAULT_PLANOS_CONFIG[planoId] ||
+      DEFAULT_PLANOS_CONFIG.Plus
+    );
+  }
+
+  public updatePlanoConfig(planoId: PlanoTipo, updates: Partial<PlanoConfigItem>) {
+    if (!this.planosConfig[planoId]) {
+      this.planosConfig[planoId] = {
+        ...(DEFAULT_PLANOS_CONFIG[planoId] || DEFAULT_PLANOS_CONFIG.Plus),
+        ...updates,
+        id: planoId,
+      };
+    } else {
+      this.planosConfig[planoId] = { ...this.planosConfig[planoId], ...updates };
+    }
+    this.notify();
+  }
+
+  public resetPlanosConfig() {
+    this.planosConfig = { ...DEFAULT_PLANOS_CONFIG };
+    this.notify();
+  }
+
   public atualizarPlanoCondominio(
     condoId: string,
-    plano: 'Smart' | 'Plus' | 'Pro' | 'Enterprise',
+    plano: PlanoTipo,
     valorMensalidade?: number,
     diaVencimento?: number,
     statusPagamento?: 'em_dia' | 'pendente' | 'vencido' | 'cortesia'
@@ -1534,9 +1647,29 @@ class MockCondoStore {
     const condo = this.getCondominio(condoId);
     if (condo) {
       condo.plano = plano;
-      if (valorMensalidade !== undefined) condo.valorMensalidade = valorMensalidade;
-      if (diaVencimento !== undefined) condo.diaVencimento = diaVencimento;
-      if (statusPagamento !== undefined) condo.statusPagamento = statusPagamento;
+
+      if (plano === 'Teste') {
+        const hoje = new Date();
+        const fim = new Date();
+        fim.setDate(fim.getDate() + 90); // 3 meses (90 dias)
+
+        condo.statusAssinatura = 'em_teste';
+        condo.statusPagamento = statusPagamento || 'cortesia';
+        condo.valorMensalidade = 0;
+        condo.dataInicioTeste = hoje.toISOString().split('T')[0];
+        condo.dataFimTeste = fim.toISOString().split('T')[0];
+      } else {
+        if (condo.statusAssinatura === 'em_teste') {
+          condo.statusAssinatura = 'ativo';
+        }
+        if (valorMensalidade !== undefined) {
+          condo.valorMensalidade = valorMensalidade;
+        } else {
+          condo.valorMensalidade = this.getPlanoConfig(plano).valor;
+        }
+        if (diaVencimento !== undefined) condo.diaVencimento = diaVencimento;
+        if (statusPagamento !== undefined) condo.statusPagamento = statusPagamento;
+      }
 
       syncCondominioToFirestore(condo).catch((err) =>
         console.warn('Sync Condominio error:', err)

@@ -31,11 +31,21 @@ import {
   Search,
   Filter,
   ArrowUpRight,
+  SlidersHorizontal,
+  Gift,
   HelpCircle,
   FileText,
   Settings,
 } from 'lucide-react';
-import { Condominio, UserRole, UsuarioSistema, CobrancaCondominio, Morador } from '../../types';
+import {
+  Condominio,
+  UserRole,
+  UsuarioSistema,
+  CobrancaCondominio,
+  Morador,
+  PlanoTipo,
+  PlanoConfigItem,
+} from '../../types';
 import { condoStore } from '../../services/mockStorage';
 import { whatsappService } from '../../services/whatsappService';
 import confetti from 'canvas-confetti';
@@ -57,9 +67,16 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   // Modais
   const [showNewCondoModal, setShowNewCondoModal] = useState(false);
   const [showNewSindicoModal, setShowNewSindicoModal] = useState(false);
+  const [showConfigPlanosModal, setShowConfigPlanosModal] = useState(false);
   const [editingCondo, setEditingCondo] = useState<Condominio | null>(null);
   const [billingCondo, setBillingCondo] = useState<Condominio | null>(null);
   const [planEditCondo, setPlanEditCondo] = useState<Condominio | null>(null);
+
+  // Dynamic Plans Config from Store
+  const planosConfig = condoStore.getPlanosConfig();
+  const [editablePlanos, setEditablePlanos] = useState<Record<PlanoTipo, PlanoConfigItem>>(() => ({
+    ...condoStore.getPlanosConfig(),
+  }));
 
   // Form Novo Condomínio
   const [nome, setNome] = useState('');
@@ -68,8 +85,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   const [cidade, setCidade] = useState('');
   const [uf, setUf] = useState('RJ');
   const [totalUnidades, setTotalUnidades] = useState(100);
-  const [plano, setPlano] = useState<'Smart' | 'Plus' | 'Pro' | 'Enterprise'>('Plus');
-  const [valorMensalidade, setValorMensalidade] = useState(499);
+  const [plano, setPlano] = useState<PlanoTipo>('Teste');
+  const [valorMensalidade, setValorMensalidade] = useState(0);
   const [sindicoNome, setSindicoNome] = useState('');
   const [sindicoEmail, setSindicoEmail] = useState('');
   const [sindicoTelefone, setSindicoTelefone] = useState('');
@@ -99,7 +116,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   const [copiedPix, setCopiedPix] = useState(false);
 
   // Form Ajuste de Plano
-  const [novoPlano, setNovoPlano] = useState<'Smart' | 'Plus' | 'Pro' | 'Enterprise'>('Plus');
+  const [novoPlano, setNovoPlano] = useState<PlanoTipo>('Plus');
   const [novoValor, setNovoValor] = useState<number>(499);
   const [novoVencimento, setNovoVencimento] = useState<number>(10);
   const [novoStatusPag, setNovoStatusPag] = useState<'em_dia' | 'pendente' | 'vencido' | 'cortesia'>('em_dia');
@@ -111,22 +128,42 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
     setTimeout(() => setFeedbackMsg(null), 5000);
   };
 
-  // Valores padrão dos planos
-  const planosConfig = {
-    Smart: { valor: 249, unidades: 'Até 50 aptos', bikes: 'Até 5 bikes', desc: 'Ideal para condomínios pequenos e vilas.' },
-    Plus: { valor: 499, unidades: 'Até 150 aptos', bikes: 'Até 15 bikes', desc: 'Mais popular! Inclui áreas de lazer, reservas e disparos de WhatsApp.' },
-    Pro: { valor: 799, unidades: 'Até 300 aptos', bikes: 'Até 30 bikes', desc: 'Para condomínios de médio/grande porte com alto fluxo de encomendas.' },
-    Enterprise: { valor: 1299, unidades: 'Ilimitado', bikes: 'Frota ampliada', desc: 'Múltiplas torres, relatórios avançados e suporte prioritário 24/7.' },
+  const handlePlanoChange = (novoP: PlanoTipo) => {
+    setPlano(novoP);
+    setValorMensalidade(planosConfig[novoP]?.valor || 0);
   };
 
-  const handlePlanoChange = (novoP: 'Smart' | 'Plus' | 'Pro' | 'Enterprise') => {
-    setPlano(novoP);
-    setValorMensalidade(planosConfig[novoP].valor);
+  const handleAbrirConfigPlanos = () => {
+    setEditablePlanos({ ...condoStore.getPlanosConfig() });
+    setShowConfigPlanosModal(true);
+  };
+
+  const handleSalvarConfigPlanos = (e: React.FormEvent) => {
+    e.preventDefault();
+    Object.entries(editablePlanos).forEach(([key, item]) => {
+      condoStore.updatePlanoConfig(key as PlanoTipo, item);
+    });
+    confetti({ particleCount: 50, spread: 60 });
+    setShowConfigPlanosModal(false);
+    showNotification('Tabela de valores e planos atualizada com sucesso!');
+  };
+
+  const handleRestaurarPlanosPadrao = () => {
+    if (confirm('Deseja restaurar as configurações e preços padrões de fábrica dos planos?')) {
+      condoStore.resetPlanosConfig();
+      setEditablePlanos({ ...condoStore.getPlanosConfig() });
+      showNotification('Planos restaurados para o padrão original.', 'info');
+    }
   };
 
   const handleCreateCondo = (e: React.FormEvent) => {
     e.preventDefault();
     if (!nome || !sindicoNome || !sindicoEmail) return;
+
+    const isTeste = plano === 'Teste';
+    const hoje = new Date();
+    const fim = new Date();
+    fim.setDate(fim.getDate() + 90);
 
     const newCondo = condoStore.addCondominio({
       nome,
@@ -135,11 +172,13 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       cidade: cidade || 'Rio de Janeiro',
       uf: uf || 'RJ',
       totalUnidades: Number(totalUnidades) || 80,
-      statusAssinatura: 'ativo',
+      statusAssinatura: isTeste ? 'em_teste' : 'ativo',
       plano,
-      valorMensalidade: Number(valorMensalidade) || planosConfig[plano].valor,
+      valorMensalidade: isTeste ? 0 : Number(valorMensalidade) || planosConfig[plano]?.valor || 0,
       diaVencimento: 10,
-      statusPagamento: 'em_dia',
+      statusPagamento: isTeste ? 'cortesia' : 'em_dia',
+      dataInicioTeste: isTeste ? hoje.toISOString().split('T')[0] : undefined,
+      dataFimTeste: isTeste ? fim.toISOString().split('T')[0] : undefined,
       chavePix: 'davileonardo303@gmail.com',
       sindicoNome,
       sindicoEmail,
@@ -341,6 +380,16 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
         </div>
 
         <div className="flex flex-wrap gap-2.5">
+          <button
+            id="btn-config-planos-modal"
+            onClick={handleAbrirConfigPlanos}
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs shadow-sm transition active:scale-98 cursor-pointer"
+            title="Cadastrar e alterar valores dos planos Smart, Plus, Pro, Enterprise e Teste"
+          >
+            <SlidersHorizontal className="w-4 h-4 text-amber-400" />
+            <span>Valores dos Planos</span>
+          </button>
+
           <button
             id="btn-cadastrar-sindico-modal"
             onClick={() => {
@@ -552,8 +601,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                     const sindicoPrincipal = sindicos[0];
                     const moradoresTotal = condoStore.getMoradores(c.id, false).length;
                     const moradoresAtivos = condoStore.getMoradores(c.id, true).length;
-                    const currentPlano = c.plano || 'Plus';
-                    const mensalidade = c.valorMensalidade || planosConfig[currentPlano].valor;
+                    const currentPlano: PlanoTipo = (c.plano as PlanoTipo) || 'Plus';
+                    const isPlanoTeste = currentPlano === 'Teste' || c.statusAssinatura === 'em_teste';
+                    const mensalidade = isPlanoTeste ? 0 : (c.valorMensalidade !== undefined ? c.valorMensalidade : (planosConfig[currentPlano]?.valor || 0));
 
                     return (
                       <tr key={c.id} className="hover:bg-slate-50/80 transition">
@@ -565,10 +615,12 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         </td>
 
                         <td className="py-3 px-4">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
                             <span
                               className={`px-2.5 py-0.5 rounded-full font-extrabold text-[11px] ${
-                                currentPlano === 'Plus'
+                                currentPlano === 'Teste'
+                                  ? 'bg-cyan-100 text-cyan-900 border border-cyan-300 flex items-center gap-1'
+                                  : currentPlano === 'Plus'
                                   ? 'bg-amber-100 text-amber-900 border border-amber-300'
                                   : currentPlano === 'Pro'
                                   ? 'bg-purple-100 text-purple-900 border border-purple-300'
@@ -577,12 +629,26 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                                   : 'bg-slate-100 text-slate-800 border border-slate-300'
                               }`}
                             >
-                              Plano {currentPlano}
+                              {currentPlano === 'Teste' && <Gift className="w-3 h-3 text-cyan-700" />}
+                              Plano {currentPlano} {currentPlano === 'Teste' && '(3 Meses)'}
                             </span>
                           </div>
-                          <div className="text-emerald-700 font-extrabold text-xs mt-1">
-                            {mensalidade.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            <span className="text-slate-400 font-normal text-[10px]"> / mês</span>
+                          <div className="mt-1">
+                            {isPlanoTeste ? (
+                              <div className="text-cyan-800 font-bold text-xs">
+                                Gratuito (3 Meses)
+                                {c.dataFimTeste && (
+                                  <div className="text-[10px] text-cyan-600 font-normal">
+                                    Válido até {c.dataFimTeste.split('-').reverse().join('/')}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-emerald-700 font-extrabold text-xs">
+                                {mensalidade.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                <span className="text-slate-400 font-normal text-[10px]"> / mês</span>
+                              </div>
+                            )}
                           </div>
                         </td>
 
@@ -687,26 +753,60 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
         <div className="space-y-6">
           {/* Vitrine Oficial dos Planos */}
           <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950 p-6 rounded-3xl text-white shadow-xl">
-            <div className="max-w-3xl mb-6">
-              <span className="text-xs font-bold uppercase tracking-wider text-amber-400 bg-amber-400/10 px-3 py-1 rounded-full border border-amber-400/30">
-                Tabela Oficial de Planos SmartCondo
-              </span>
-              <h2 className="text-2xl font-black mt-2">Valores e Recursos dos Planos de Assinatura</h2>
-              <p className="text-slate-300 text-xs mt-1">
-                Configure os valores cobrados dos condomínios clientes. O <strong>Plano Plus</strong> é o plano recomendado com todos os recursos de controle de moradores, portaria e bicicletário.
-              </p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+              <div className="max-w-2xl">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-400 bg-amber-400/10 px-3 py-1 rounded-full border border-amber-400/30">
+                  Tabela Oficial de Planos SmartCondo
+                </span>
+                <h2 className="text-2xl font-black mt-2">Valores e Recursos dos Planos de Assinatura</h2>
+                <p className="text-slate-300 text-xs mt-1">
+                  Valores configuráveis para cada condomínio cliente. O <strong>Plano Teste</strong> permite 3 meses gratuitos para avaliação do síndico, e o <strong>Plano Plus</strong> é o mais popular.
+                </p>
+              </div>
+
+              <button
+                onClick={handleAbrirConfigPlanos}
+                className="self-start md:self-auto flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black text-xs shadow-lg transition active:scale-98 cursor-pointer"
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+                <span>Editar Valores dos Planos</span>
+              </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+              {/* Plano Teste (3 Meses Grátis) */}
+              <div className="bg-cyan-950/40 backdrop-blur-md rounded-2xl p-5 border-2 border-cyan-400/60 flex flex-col justify-between relative shadow-lg">
+                <div className="absolute -top-3 right-3 bg-cyan-400 text-cyan-950 font-black text-[9px] uppercase px-2 py-0.5 rounded-full shadow">
+                  🎁 Teste Grátis
+                </div>
+                <div>
+                  <span className="text-xs font-black text-cyan-300 uppercase flex items-center gap-1">
+                    <Gift className="w-3.5 h-3.5" /> Plano Teste
+                  </span>
+                  <div className="text-2xl font-extrabold text-white mt-1">
+                    R$ 0<span className="text-xs text-cyan-300 font-bold"> / 3 meses</span>
+                  </div>
+                  <div className="mt-1 inline-block text-[10px] bg-cyan-500/20 text-cyan-200 px-2 py-0.5 rounded-md font-semibold border border-cyan-400/30">
+                    Duração: 3 Meses Sem Custo
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-2">{planosConfig.Teste?.desc || 'Período gratuito de 3 meses para o síndico testar no condomínio.'}</p>
+                  <ul className="text-[11px] text-slate-200 mt-3 space-y-1.5">
+                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-cyan-400" /> {planosConfig.Teste?.unidades || 'Até 100 aptos'}</li>
+                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-cyan-400" /> {planosConfig.Teste?.bikes || 'Até 10 bikes'}</li>
+                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-cyan-400" /> Avaliação completa sem custo</li>
+                  </ul>
+                </div>
+              </div>
+
               {/* Plano Smart */}
               <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/15 flex flex-col justify-between">
                 <div>
                   <span className="text-xs font-bold text-slate-300 uppercase">Plano Smart</span>
-                  <div className="text-2xl font-extrabold mt-1">R$ 249<span className="text-xs text-slate-300">/mês</span></div>
-                  <p className="text-[11px] text-slate-300 mt-2">{planosConfig.Smart.desc}</p>
+                  <div className="text-2xl font-extrabold mt-1">R$ {planosConfig.Smart?.valor ?? 249}<span className="text-xs text-slate-300">/mês</span></div>
+                  <p className="text-[11px] text-slate-300 mt-2">{planosConfig.Smart?.desc}</p>
                   <ul className="text-[11px] text-slate-200 mt-3 space-y-1.5">
-                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-400" /> {planosConfig.Smart.unidades}</li>
-                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-400" /> {planosConfig.Smart.bikes}</li>
+                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-400" /> {planosConfig.Smart?.unidades}</li>
+                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-400" /> {planosConfig.Smart?.bikes}</li>
                     <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-400" /> Gestão de Encomendas</li>
                   </ul>
                 </div>
@@ -714,21 +814,20 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
 
               {/* Plano Plus (Destaque Principal) */}
               <div className="bg-gradient-to-b from-amber-500/20 to-purple-500/20 backdrop-blur-md rounded-2xl p-5 border-2 border-amber-400 shadow-lg relative flex flex-col justify-between">
-                <div className="absolute -top-3 right-4 bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 font-black text-[10px] uppercase px-2.5 py-0.5 rounded-full shadow">
-                  ⭐ Mais Popular / Recomendado
+                <div className="absolute -top-3 right-3 bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 font-black text-[9px] uppercase px-2 py-0.5 rounded-full shadow">
+                  ⭐ Mais Popular
                 </div>
                 <div>
                   <span className="text-xs font-bold text-amber-300 uppercase flex items-center gap-1">
                     <Sparkles className="w-3.5 h-3.5" /> Plano Plus
                   </span>
-                  <div className="text-3xl font-black text-amber-300 mt-1">R$ 499<span className="text-xs text-slate-200">/mês</span></div>
-                  <p className="text-[11px] text-slate-200 mt-2">{planosConfig.Plus.desc}</p>
+                  <div className="text-3xl font-black text-amber-300 mt-1">R$ {planosConfig.Plus?.valor ?? 499}<span className="text-xs text-slate-200">/mês</span></div>
+                  <p className="text-[11px] text-slate-200 mt-2">{planosConfig.Plus?.desc}</p>
                   <ul className="text-[11px] text-slate-100 mt-3 space-y-1.5 font-medium">
-                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-amber-400" /> <strong>{planosConfig.Plus.unidades}</strong></li>
-                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-amber-400" /> <strong>{planosConfig.Plus.bikes}</strong></li>
+                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-amber-400" /> <strong>{planosConfig.Plus?.unidades}</strong></li>
+                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-amber-400" /> <strong>{planosConfig.Plus?.bikes}</strong></li>
                     <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-amber-400" /> Áreas de Lazer & Reservas</li>
                     <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-amber-400" /> Disparador WhatsApp Integrado</li>
-                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-amber-400" /> Múltiplos Moradores por Apto</li>
                   </ul>
                 </div>
               </div>
@@ -737,11 +836,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
               <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/15 flex flex-col justify-between">
                 <div>
                   <span className="text-xs font-bold text-purple-300 uppercase">Plano Pro</span>
-                  <div className="text-2xl font-extrabold mt-1">R$ 799<span className="text-xs text-slate-300">/mês</span></div>
-                  <p className="text-[11px] text-slate-300 mt-2">{planosConfig.Pro.desc}</p>
+                  <div className="text-2xl font-extrabold mt-1">R$ {planosConfig.Pro?.valor ?? 799}<span className="text-xs text-slate-300">/mês</span></div>
+                  <p className="text-[11px] text-slate-300 mt-2">{planosConfig.Pro?.desc}</p>
                   <ul className="text-[11px] text-slate-200 mt-3 space-y-1.5">
-                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-400" /> {planosConfig.Pro.unidades}</li>
-                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-400" /> {planosConfig.Pro.bikes}</li>
+                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-400" /> {planosConfig.Pro?.unidades}</li>
+                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-400" /> {planosConfig.Pro?.bikes}</li>
                     <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-400" /> Relatórios de Governança</li>
                   </ul>
                 </div>
@@ -751,11 +850,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
               <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/15 flex flex-col justify-between">
                 <div>
                   <span className="text-xs font-bold text-indigo-300 uppercase">Plano Enterprise</span>
-                  <div className="text-2xl font-extrabold mt-1">R$ 1.299<span className="text-xs text-slate-300">/mês</span></div>
-                  <p className="text-[11px] text-slate-300 mt-2">{planosConfig.Enterprise.desc}</p>
+                  <div className="text-2xl font-extrabold mt-1">R$ {planosConfig.Enterprise?.valor ?? 1299}<span className="text-xs text-slate-300">/mês</span></div>
+                  <p className="text-[11px] text-slate-300 mt-2">{planosConfig.Enterprise?.desc}</p>
                   <ul className="text-[11px] text-slate-200 mt-3 space-y-1.5">
-                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-400" /> {planosConfig.Enterprise.unidades}</li>
-                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-400" /> {planosConfig.Enterprise.bikes}</li>
+                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-400" /> {planosConfig.Enterprise?.unidades}</li>
+                    <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-400" /> {planosConfig.Enterprise?.bikes}</li>
                     <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-400" /> Suporte VIP 24h com SLA</li>
                   </ul>
                 </div>
@@ -1238,35 +1337,47 @@ Condomínio: ${billingCondo.nome}
             <form onSubmit={handleSalvarAjustePlano} className="space-y-4">
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Selecione o Plano da Plataforma *</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['Smart', 'Plus', 'Pro', 'Enterprise'] as const).map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => {
-                        setNovoPlano(p);
-                        setNovoValor(planosConfig[p].valor);
-                      }}
-                      className={`p-3 rounded-xl border text-left transition cursor-pointer ${
-                        novoPlano === p
-                          ? 'border-purple-600 bg-purple-50/80 text-purple-950 font-bold ring-2 ring-purple-500/20'
-                          : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-xs">{p}</span>
-                        {p === 'Plus' && (
-                          <span className="text-[9px] bg-amber-200 text-amber-900 font-bold px-1.5 py-0.5 rounded">
-                            Popular
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-emerald-700 font-extrabold text-sm mt-1">
-                        R$ {planosConfig[p].valor}
-                        <span className="text-[10px] text-slate-400 font-normal">/mês</span>
-                      </div>
-                    </button>
-                  ))}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {(['Teste', 'Smart', 'Plus', 'Pro', 'Enterprise'] as const).map((p) => {
+                    const cfg = planosConfig[p];
+                    const isSelected = novoPlano === p;
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => {
+                          setNovoPlano(p);
+                          setNovoValor(cfg?.valor ?? (p === 'Teste' ? 0 : 499));
+                          if (p === 'Teste') {
+                            setNovoStatusPag('cortesia');
+                          }
+                        }}
+                        className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                          isSelected
+                            ? 'border-purple-600 bg-purple-50/80 text-purple-950 font-bold ring-2 ring-purple-500/20'
+                            : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs">{p}</span>
+                          {p === 'Plus' && (
+                            <span className="text-[9px] bg-amber-200 text-amber-900 font-bold px-1.5 py-0.5 rounded">
+                              Popular
+                            </span>
+                          )}
+                          {p === 'Teste' && (
+                            <span className="text-[9px] bg-cyan-200 text-cyan-900 font-bold px-1.5 py-0.5 rounded">
+                              3 Meses
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-emerald-700 font-extrabold text-sm mt-1">
+                          {p === 'Teste' ? 'R$ 0,00' : `R$ ${cfg?.valor ?? 0}`}
+                          <span className="text-[10px] text-slate-400 font-normal">{p === 'Teste' ? ' (teste)' : '/mês'}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1307,7 +1418,7 @@ Condomínio: ${billingCondo.nome}
                   <option value="em_dia">Em Dia (Acesso Liberado)</option>
                   <option value="pendente">Pendente (Aguardando Pagamento)</option>
                   <option value="vencido">Vencido (Alerta no Painel)</option>
-                  <option value="cortesia">Cortesia / Período de Demonstração</option>
+                  <option value="cortesia">Cortesia / Período de Demonstração / Teste</option>
                 </select>
               </div>
 
@@ -1412,10 +1523,11 @@ Condomínio: ${billingCondo.nome}
                     onChange={(e) => handlePlanoChange(e.target.value as any)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs font-bold focus:outline-none focus:border-purple-500 cursor-pointer"
                   >
-                    <option value="Smart">Plano Smart (R$ 249/mês)</option>
-                    <option value="Plus">Plano Plus - Recomendado (R$ 499/mês)</option>
-                    <option value="Pro">Plano Pro (R$ 799/mês)</option>
-                    <option value="Enterprise">Plano Enterprise (R$ 1.299/mês)</option>
+                    <option value="Teste">🎁 Plano Teste (3 Meses Grátis - R$ 0,00)</option>
+                    <option value="Smart">Plano Smart (R$ {planosConfig.Smart?.valor ?? 249}/mês)</option>
+                    <option value="Plus">Plano Plus - Recomendado (R$ {planosConfig.Plus?.valor ?? 499}/mês)</option>
+                    <option value="Pro">Plano Pro (R$ {planosConfig.Pro?.valor ?? 799}/mês)</option>
+                    <option value="Enterprise">Plano Enterprise (R$ {planosConfig.Enterprise?.valor ?? 1299}/mês)</option>
                   </select>
                 </div>
 
@@ -1718,6 +1830,206 @@ Condomínio: ${billingCondo.nome}
                 >
                   Salvar Alterações
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 6: CONFIGURAR E CADASTRAR VALORES DOS PLANOS */}
+      {showConfigPlanosModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+          <div className="relative w-full max-w-3xl bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden p-6 text-xs text-slate-800 my-8">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-100 text-amber-800">
+                  <SlidersHorizontal className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Cadastrar e Editar Valores dos Planos</h3>
+                  <p className="text-[11px] text-slate-500">
+                    Defina os preços, limites de apartamentos, bicicletário e período de teste gratuito (3 meses) para os síndicos.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowConfigPlanosModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarConfigPlanos} className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-1">
+                {(['Teste', 'Smart', 'Plus', 'Pro', 'Enterprise'] as const).map((pKey) => {
+                  const item = editablePlanos[pKey] || {
+                    nome: pKey,
+                    valor: 0,
+                    unidades: '',
+                    bikes: '',
+                    desc: '',
+                    periodoMesesTeste: 3,
+                  };
+
+                  const isTestePlan = pKey === 'Teste';
+
+                  return (
+                    <div
+                      key={pKey}
+                      className={`p-4 rounded-2xl border ${
+                        isTestePlan
+                          ? 'border-cyan-300 bg-cyan-50/40 md:col-span-2'
+                          : pKey === 'Plus'
+                          ? 'border-amber-300 bg-amber-50/30'
+                          : 'border-slate-200 bg-slate-50/70'
+                      } space-y-3`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          {isTestePlan ? (
+                            <Gift className="w-4 h-4 text-cyan-600" />
+                          ) : (
+                            <Sparkles className="w-4 h-4 text-purple-600" />
+                          )}
+                          <span className="font-extrabold text-sm text-slate-900">Plano {pKey}</span>
+                          {isTestePlan && (
+                            <span className="text-[10px] bg-cyan-200 text-cyan-900 font-bold px-2 py-0.5 rounded-full">
+                              3 Meses Grátis para o Síndico
+                            </span>
+                          )}
+                          {pKey === 'Plus' && (
+                            <span className="text-[10px] bg-amber-200 text-amber-900 font-bold px-2 py-0.5 rounded-full">
+                              Mais Popular
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <div>
+                          <label className="font-bold text-slate-700 block mb-1">
+                            {isTestePlan ? 'Valor (R$ / Teste)' : 'Valor Mensal (R$)'} *
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={item.valor}
+                            onChange={(e) =>
+                              setEditablePlanos({
+                                ...editablePlanos,
+                                [pKey]: { ...item, valor: Number(e.target.value) },
+                              })
+                            }
+                            required
+                            className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-emerald-700 focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-bold text-slate-700 block mb-1">Limite Unidades *</label>
+                          <input
+                            type="text"
+                            placeholder="Ex: Até 100 aptos"
+                            value={item.unidades}
+                            onChange={(e) =>
+                              setEditablePlanos({
+                                ...editablePlanos,
+                                [pKey]: { ...item, unidades: e.target.value },
+                              })
+                            }
+                            required
+                            className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-bold text-slate-700 block mb-1">Bicicletário *</label>
+                          <input
+                            type="text"
+                            placeholder="Ex: Até 15 bikes"
+                            value={item.bikes}
+                            onChange={(e) =>
+                              setEditablePlanos({
+                                ...editablePlanos,
+                                [pKey]: { ...item, bikes: e.target.value },
+                              })
+                            }
+                            required
+                            className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+                      </div>
+
+                      {isTestePlan && (
+                        <div>
+                          <label className="font-bold text-slate-700 block mb-1">
+                            Período de Teste Gratuito (Meses):
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="12"
+                            value={item.periodoMesesTeste || 3}
+                            onChange={(e) =>
+                              setEditablePlanos({
+                                ...editablePlanos,
+                                [pKey]: { ...item, periodoMesesTeste: Number(e.target.value) },
+                              })
+                            }
+                            className="w-full sm:w-1/3 bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-cyan-800 focus:outline-none focus:border-cyan-500"
+                          />
+                          <p className="text-[10px] text-cyan-700 mt-1">
+                            Ao cadastrar um condomínio com este plano, o síndico terá acesso total durante {item.periodoMesesTeste || 3} meses sem cobrança.
+                          </p>
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Descrição / Benefícios *</label>
+                        <input
+                          type="text"
+                          placeholder="Descrição rápida do plano..."
+                          value={item.desc}
+                          onChange={(e) =>
+                            setEditablePlanos({
+                              ...editablePlanos,
+                              [pKey]: { ...item, desc: e.target.value },
+                            })
+                          }
+                          required
+                          className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={handleRestaurarPlanosPadrao}
+                  className="py-3 px-4 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs transition cursor-pointer"
+                >
+                  Restaurar Padrão
+                </button>
+
+                <div className="flex-1 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowConfigPlanosModal(false)}
+                    className="flex-1 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-md shadow-amber-500/20 transition active:scale-98 cursor-pointer"
+                  >
+                    Salvar Valores dos Planos
+                  </button>
+                </div>
               </div>
             </form>
           </div>

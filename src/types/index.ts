@@ -59,6 +59,21 @@ export interface UserAccount {
   authProvider: 'google' | 'email';
 }
 
+export type PlanoTipo = 'Teste' | 'Smart' | 'Plus' | 'Pro' | 'Enterprise';
+
+export interface PlanoConfigItem {
+  id: PlanoTipo;
+  nome: string;
+  valor: number;
+  unidades: string;
+  bikes: string;
+  desc: string;
+  duracaoMeses?: number;
+  isTesteGratuito?: boolean;
+  destaque?: boolean;
+  ativo?: boolean;
+}
+
 export interface Condominio {
   id: string;
   nome: string;
@@ -68,11 +83,13 @@ export interface Condominio {
   uf: string;
   totalUnidades: number;
   statusAssinatura: 'ativo' | 'suspenso' | 'em_teste';
-  plano: 'Smart' | 'Plus' | 'Pro' | 'Enterprise';
+  plano: PlanoTipo;
   valorMensalidade?: number;
   diaVencimento?: number;
   statusPagamento?: 'em_dia' | 'pendente' | 'vencido' | 'cortesia';
   chavePix?: string;
+  dataInicioTeste?: string;
+  dataFimTeste?: string;
   sindicoNome: string;
   sindicoEmail: string;
   regras: {
@@ -92,7 +109,7 @@ export interface CobrancaCondominio {
   sindicoEmail: string;
   sindicoTelefone?: string;
   mesReferencia: string; // Ex: "Agosto/2026"
-  plano: 'Smart' | 'Plus' | 'Pro' | 'Enterprise';
+  plano: PlanoTipo;
   valor: number;
   dataVencimento: string; // YYYY-MM-DD
   status: 'pendente' | 'enviada' | 'paga' | 'cancelada';

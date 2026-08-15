@@ -202,39 +202,55 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     }
   };
 
-  // 3. FLUXO GOOGLE (LOGIN E CADASTRO)
+  // 3. FLUXO GOOGLE (LOGIN E CADASTRO REAL)
   const handleGoogleLogin = async () => {
     setErrorMsg('');
     setIsLoading(true);
 
     try {
-      let googleUser = {
-        nome: 'Davi Leonardo',
-        email: 'davileonardo303@gmail.com',
-        avatarUrl: '',
-      };
+      let googleUser: { nome: string; email: string; avatarUrl: string } | null = null;
 
       try {
         const result = await signInWithPopup(auth, googleProvider);
-        if (result.user) {
+        if (result.user && result.user.email) {
           googleUser = {
-            nome: result.user.displayName || 'Morador Conectado',
-            email: result.user.email || 'morador@smartcondo.com',
+            nome: result.user.displayName || result.user.email.split('@')[0],
+            email: result.user.email.trim().toLowerCase(),
             avatarUrl: result.user.photoURL || '',
           };
         }
       } catch (authErr: any) {
-        console.warn('Google Popup aviso:', authErr?.message);
+        if (
+          authErr?.code === 'auth/popup-closed-by-user' ||
+          authErr?.code === 'auth/cancelled-popup-request' ||
+          authErr?.message?.includes('closed')
+        ) {
+          setErrorMsg('A janela de login com o Google foi fechada. Selecione sua conta Google para prosseguir ou use o login com e-mail e senha.');
+        } else if (authErr?.code === 'auth/popup-blocked') {
+          setErrorMsg('O popup do Google foi bloqueado pelo seu navegador. Por favor, permita popups para este site ou entre com e-mail e senha.');
+        } else {
+          setErrorMsg('Não foi possível conectar com o Google (' + (authErr?.message || 'Tente novamente') + '). Se preferir, utilize seu e-mail e senha cadastrados.');
+        }
+        setIsLoading(false);
+        return;
       }
 
-      // Se for o Davi Leonardo (Super Admin)
-      if (googleUser.email.toLowerCase() === 'davileonardo303@gmail.com') {
+      if (!googleUser || !googleUser.email) {
+        setErrorMsg('Nenhuma conta Google foi selecionada ou confirmada.');
+        setIsLoading(false);
+        return;
+      }
+
+      const userEmail = googleUser.email.toLowerCase();
+
+      // 1. Se for o Super Admin Geral (Davi Leonardo)
+      if (userEmail === 'davileonardo303@gmail.com') {
         onLoginSuccess({
           id: 'super_admin_davi',
-          nome: 'Davi Leonardo',
+          nome: googleUser.nome || 'Davi Leonardo',
           email: 'davileonardo303@gmail.com',
           role: 'super_admin',
-          condominioId: 'condo_park_avenue',
+          condominioId: condominios[0]?.id || '',
           statusCadastro: 'ativo',
           avatarUrl: googleUser.avatarUrl,
           authProvider: 'google',
@@ -243,8 +259,29 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         return;
       }
 
-      // Verifica se o morador já existe no storage
-      const existing = condoStore.findMoradorByEmail(googleUser.email);
+      // 2. Se for Síndico ou Portaria cadastrado no sistema
+      const sysUser = condoStore.getUsuariosSistema().find(
+        (u) => u.email.toLowerCase() === userEmail
+      );
+      if (sysUser) {
+        onLoginSuccess({
+          id: sysUser.id,
+          nome: sysUser.nome,
+          email: sysUser.email,
+          telefone: sysUser.telefone,
+          role: sysUser.role,
+          condominioId: sysUser.condominioId,
+          unidade: sysUser.unidade,
+          statusCadastro: sysUser.statusCadastro,
+          avatarUrl: googleUser.avatarUrl || sysUser.avatarUrl,
+          authProvider: 'google',
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // 3. Verifica se já é um morador cadastrado no condomínio
+      const existing = condoStore.findMoradorByEmail(userEmail);
       if (existing) {
         if (existing.statusCadastro === 'pendente_aprovacao') {
           const condo = condoStore.getCondominio(existing.condominioId);
@@ -255,6 +292,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             telefone: existing.telefone,
             email: existing.email,
           });
+          setIsLoading(false);
+          return;
+        }
+
+        if (existing.statusCadastro === 'recusado') {
+          setErrorMsg('Seu cadastro neste condomínio foi recusado pela administração. Entre em contato com a portaria ou síndico.');
           setIsLoading(false);
           return;
         }
@@ -277,7 +320,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         }
       }
 
-      // Se for primeiro acesso via Google, abre o formulário de endereço
+      // 4. Se for primeiro acesso via Google deste usuário (novo morador), abre o formulário de cadastro de unidade
       setOnboardingGoogleData(googleUser);
       setRegNome(googleUser.nome);
       setRegEmail(googleUser.email);
