@@ -16,6 +16,7 @@ import {
   updateDoc,
   getDocs,
   deleteDoc,
+  Unsubscribe,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import {
@@ -28,6 +29,8 @@ import {
   Aviso,
   HistoricoLocacao,
   AppNotification,
+  UsuarioSistema,
+  CobrancaCondominio,
 } from '../types';
 
 // Initialize Firebase App
@@ -117,6 +120,33 @@ export async function syncCondominioToFirestore(condo: Condominio): Promise<void
   }
 }
 
+export async function deleteCondominioFromFirestore(condoId: string): Promise<void> {
+  const path = `condominios/${condoId}`;
+  try {
+    await deleteDoc(doc(db, 'condominios', condoId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export async function syncUsuarioSistemaToFirestore(user: UsuarioSistema): Promise<void> {
+  const path = `usuariosSistema/${user.id}`;
+  try {
+    await setDoc(doc(db, 'usuariosSistema', user.id), user, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteUsuarioSistemaFromFirestore(userId: string): Promise<void> {
+  const path = `usuariosSistema/${userId}`;
+  try {
+    await deleteDoc(doc(db, 'usuariosSistema', userId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
 export async function syncMoradorToFirestore(morador: Morador): Promise<void> {
   const path = `condominios/${morador.condominioId}/moradores/${morador.id}`;
   try {
@@ -128,6 +158,108 @@ export async function syncMoradorToFirestore(morador: Morador): Promise<void> {
   }
 }
 
+export async function deleteMoradorFromFirestore(condoId: string, moradorId: string): Promise<void> {
+  const path = `condominios/${condoId}/moradores/${moradorId}`;
+  try {
+    await deleteDoc(doc(db, 'condominios', condoId, 'moradores', moradorId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export async function syncBikeToFirestore(bike: Bicicleta): Promise<void> {
+  const path = `condominios/${bike.condominioId}/bikes/${bike.id}`;
+  try {
+    await setDoc(doc(db, 'condominios', bike.condominioId, 'bikes', bike.id), bike, {
+      merge: true,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteBikeFromFirestore(condoId: string, bikeId: string): Promise<void> {
+  const path = `condominios/${condoId}/bikes/${bikeId}`;
+  try {
+    await deleteDoc(doc(db, 'condominios', condoId, 'bikes', bikeId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export async function syncAreaLazerToFirestore(area: AreaLazer): Promise<void> {
+  const path = `condominios/${area.condominioId}/areasLazer/${area.id}`;
+  try {
+    await setDoc(doc(db, 'condominios', area.condominioId, 'areasLazer', area.id), area, {
+      merge: true,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteAreaLazerFromFirestore(condoId: string, areaId: string): Promise<void> {
+  const path = `condominios/${condoId}/areasLazer/${areaId}`;
+  try {
+    await deleteDoc(doc(db, 'condominios', condoId, 'areasLazer', areaId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export async function syncAvisoToFirestore(aviso: Aviso): Promise<void> {
+  const path = `condominios/${aviso.condominioId}/avisos/${aviso.id}`;
+  try {
+    await setDoc(doc(db, 'condominios', aviso.condominioId, 'avisos', aviso.id), aviso, {
+      merge: true,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function syncReservaToFirestore(reserva: Reserva): Promise<void> {
+  const path = `condominios/${reserva.condominioId}/reservas/${reserva.id}`;
+  try {
+    await setDoc(doc(db, 'condominios', reserva.condominioId, 'reservas', reserva.id), reserva, {
+      merge: true,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function syncEncomendaToFirestore(encomenda: Encomenda): Promise<void> {
+  const path = `condominios/${encomenda.condominioId}/encomendas/${encomenda.id}`;
+  try {
+    await setDoc(doc(db, 'condominios', encomenda.condominioId, 'encomendas', encomenda.id), encomenda, {
+      merge: true,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function syncCobrancaToFirestore(cobranca: CobrancaCondominio): Promise<void> {
+  const path = `cobrancas/${cobranca.id}`;
+  try {
+    await setDoc(doc(db, 'cobrancas', cobranca.id), cobranca, {
+      merge: true,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteCobrancaFromFirestore(cobrancaId: string): Promise<void> {
+  const path = `cobrancas/${cobrancaId}`;
+  try {
+    await deleteDoc(doc(db, 'cobrancas', cobrancaId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
 export async function loginWithGooglePopup(): Promise<FirebaseUser> {
   const result = await signInWithPopup(auth, googleProvider);
   return result.user;
@@ -136,3 +268,4 @@ export async function loginWithGooglePopup(): Promise<FirebaseUser> {
 export async function logoutFirebase(): Promise<void> {
   await signOut(auth);
 }
+

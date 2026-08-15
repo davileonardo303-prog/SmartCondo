@@ -200,6 +200,53 @@ ${dados.incluirContatoAdmin ? `👤 _Emitido por: ${dados.enviadoPor} (${dados.c
     return broadcast;
   }
 
+  // Notificação de Cobrança da Mensalidade ao Síndico
+  public notificarCobrancaSindico(dados: {
+    condominioNome: string;
+    sindicoNome: string;
+    sindicoTelefone: string;
+    mesReferencia: string;
+    plano: string;
+    valor: number;
+    dataVencimento: string;
+    chavePix: string;
+    codigoPixCopiaCola: string;
+    mensagemAdicional?: string;
+  }): { mensagem: string; whatsappUrl: string } {
+    const dataHora = new Date().toLocaleString('pt-BR');
+    const valorFormatado = dados.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const dataVencFormatada = dados.dataVencimento.includes('-')
+      ? new Date(dados.dataVencimento + 'T12:00:00').toLocaleDateString('pt-BR')
+      : dados.dataVencimento;
+
+    const msgFormatada = `🏢 *PLATAFORMA SMARTCONDO - GESTÃO CENTRAL*
+💳 *NOTIFICAÇÃO DE FATURA / MENSALIDADE*
+━━━━━━━━━━━━━━━━━━━━
+Prezado(a) Síndico(a) *${dados.sindicoNome}*,
+Condomínio: *${dados.condominioNome}*
+
+Informamos os dados para quitação da mensalidade da plataforma SmartCondo:
+
+📌 *Referência:* ${dados.mesReferencia}
+📦 *Plano Contratado:* ${dados.plano}
+💰 *Valor:* ${valorFormatado}
+📅 *Vencimento:* ${dataVencFormatada}
+
+🔑 *CHAVE PIX PARA PAGAMENTO:*
+\`${dados.chavePix}\`
+
+📋 *CÓDIGO PIX (COPIA E COLA):*
+\`${dados.codigoPixCopiaCola}\`
+${dados.mensagemAdicional ? `\n📝 *Observação:* ${dados.mensagemAdicional}\n` : ''}
+━━━━━━━━━━━━━━━━━━━━
+Após realizar o pagamento, o comprovante pode ser enviado por aqui ou validado pelo painel.
+Dúvidas ou suporte: davileonardo303@gmail.com
+📅 _Emitido em: ${dataHora}_`;
+
+    const link = this.gerarLinkWhatsApp(dados.sindicoTelefone, msgFormatada);
+    return { mensagem: msgFormatada, whatsappUrl: link };
+  }
+
   public limparHistorico() {
     this.logs = [];
     this.broadcasts = [];

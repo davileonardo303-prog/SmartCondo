@@ -11,8 +11,28 @@ import {
   Unidade,
   UsuarioSistema,
   UserAccount,
+  CobrancaCondominio,
 } from '../types';
 import { whatsappService } from './whatsappService';
+import {
+  db,
+  syncCondominioToFirestore,
+  deleteCondominioFromFirestore,
+  syncUsuarioSistemaToFirestore,
+  deleteUsuarioSistemaFromFirestore,
+  syncMoradorToFirestore,
+  deleteMoradorFromFirestore,
+  syncBikeToFirestore,
+  deleteBikeFromFirestore,
+  syncAreaLazerToFirestore,
+  deleteAreaLazerFromFirestore,
+  syncAvisoToFirestore,
+  syncReservaToFirestore,
+  syncEncomendaToFirestore,
+  syncCobrancaToFirestore,
+  deleteCobrancaFromFirestore,
+} from './firebase';
+import { collection, onSnapshot, doc, getDocs } from 'firebase/firestore';
 
 const STORAGE_KEY_PREFIX = 'smartcondo_clean_v6';
 
@@ -54,11 +74,169 @@ class MockCondoStore {
   private reservas: Record<string, Reserva[]> = {};
   private avisos: Record<string, Aviso[]> = {};
   private notificacoes: AppNotification[] = [];
+  private cobrancas: CobrancaCondominio[] = [];
   private listeners: Set<Listener> = new Set();
+  private subUnsubscribers: Record<string, (() => void)[]> = {};
   private version = 0;
 
   constructor() {
     this.loadFromStorage();
+    this.initFirestoreListeners();
+  }
+
+  private initFirestoreListeners() {
+    try {
+      // 1. Escuta Condomínios no Firestore
+      onSnapshot(collection(db, 'condominios'), (snapshot) => {
+        if (!snapshot.empty) {
+          const loadedCondos: Condominio[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as Condominio;
+            loadedCondos.push({ ...data, id: docSnap.id });
+          });
+
+          this.condominios = loadedCondos;
+
+          // Inscreve para subcoleções de cada condomínio
+          loadedCondos.forEach((condo) => {
+            this.subscribeToCondoSubcollections(condo.id);
+          });
+
+          this.notify();
+        }
+      }, (err) => {
+        console.warn('Firestore condominios listener offline/error:', err.message);
+      });
+
+      // 2. Escuta Usuários do Sistema (Síndicos, Portaria) no Firestore
+      onSnapshot(collection(db, 'usuariosSistema'), (snapshot) => {
+        if (!snapshot.empty) {
+          const loadedUsers: UsuarioSistema[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as UsuarioSistema;
+            loadedUsers.push({ ...data, id: docSnap.id });
+          });
+
+          const hasSuper = loadedUsers.some(
+            (u) => u.email.toLowerCase() === 'davileonardo303@gmail.com'
+          );
+          if (!hasSuper) {
+            loadedUsers.unshift(INITIAL_USUARIOS_SISTEMA[0]);
+          }
+
+          this.usuariosSistema = loadedUsers;
+          this.notify();
+        }
+      }, (err) => {
+        console.warn('Firestore usuariosSistema listener offline/error:', err.message);
+      });
+
+      // 3. Escuta Cobranças no Firestore
+      onSnapshot(collection(db, 'cobrancas'), (snapshot) => {
+        if (!snapshot.empty) {
+          const loadedCobrancas: CobrancaCondominio[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as CobrancaCondominio;
+            loadedCobrancas.push({ ...data, id: docSnap.id });
+          });
+          this.cobrancas = loadedCobrancas;
+          this.notify();
+        }
+      }, (err) => {
+        console.warn('Firestore cobrancas listener offline/error:', err.message);
+      });
+    } catch (err) {
+      console.warn('Erro ao inicializar listeners do Firestore:', err);
+    }
+  }
+
+  private subscribeToCondoSubcollections(condoId: string) {
+    if (this.subUnsubscribers[condoId]) return;
+
+    const unsubs: (() => void)[] = [];
+    try {
+      // Moradores
+      const unsubMoradores = onSnapshot(
+        collection(db, 'condominios', condoId, 'moradores'),
+        (snap) => {
+          const list: Morador[] = [];
+          snap.forEach((d) => list.push({ ...(d.data() as Morador), id: d.id }));
+          this.moradores[condoId] = list;
+          this.notify();
+        },
+        (err) => console.warn('Moradores sync error:', err.message)
+      );
+      unsubs.push(unsubMoradores);
+
+      // Bikes
+      const unsubBikes = onSnapshot(
+        collection(db, 'condominios', condoId, 'bikes'),
+        (snap) => {
+          const list: Bicicleta[] = [];
+          snap.forEach((d) => list.push({ ...(d.data() as Bicicleta), id: d.id }));
+          this.bikes[condoId] = list;
+          this.notify();
+        },
+        (err) => console.warn('Bikes sync error:', err.message)
+      );
+      unsubs.push(unsubBikes);
+
+      // Áreas de Lazer
+      const unsubAreas = onSnapshot(
+        collection(db, 'condominios', condoId, 'areasLazer'),
+        (snap) => {
+          const list: AreaLazer[] = [];
+          snap.forEach((d) => list.push({ ...(d.data() as AreaLazer), id: d.id }));
+          this.areasLazer[condoId] = list;
+          this.notify();
+        },
+        (err) => console.warn('AreasLazer sync error:', err.message)
+      );
+      unsubs.push(unsubAreas);
+
+      // Encomendas
+      const unsubEnc = onSnapshot(
+        collection(db, 'condominios', condoId, 'encomendas'),
+        (snap) => {
+          const list: Encomenda[] = [];
+          snap.forEach((d) => list.push({ ...(d.data() as Encomenda), id: d.id }));
+          this.encomendas[condoId] = list;
+          this.notify();
+        },
+        (err) => console.warn('Encomendas sync error:', err.message)
+      );
+      unsubs.push(unsubEnc);
+
+      // Reservas
+      const unsubRes = onSnapshot(
+        collection(db, 'condominios', condoId, 'reservas'),
+        (snap) => {
+          const list: Reserva[] = [];
+          snap.forEach((d) => list.push({ ...(d.data() as Reserva), id: d.id }));
+          this.reservas[condoId] = list;
+          this.notify();
+        },
+        (err) => console.warn('Reservas sync error:', err.message)
+      );
+      unsubs.push(unsubRes);
+
+      // Avisos
+      const unsubAvisos = onSnapshot(
+        collection(db, 'condominios', condoId, 'avisos'),
+        (snap) => {
+          const list: Aviso[] = [];
+          snap.forEach((d) => list.push({ ...(d.data() as Aviso), id: d.id }));
+          this.avisos[condoId] = list;
+          this.notify();
+        },
+        (err) => console.warn('Avisos sync error:', err.message)
+      );
+      unsubs.push(unsubAvisos);
+
+      this.subUnsubscribers[condoId] = unsubs;
+    } catch (err) {
+      console.warn(`Erro ao assinar subcoleções do condomínio ${condoId}:`, err);
+    }
   }
 
   private loadFromStorage() {
@@ -75,6 +253,7 @@ class MockCondoStore {
         this.reservas = parsed.reservas || {};
         this.avisos = parsed.avisos || {};
         this.notificacoes = parsed.notificacoes || [];
+        this.cobrancas = parsed.cobrancas || [];
 
         // Garante que o Super Admin Davi Leonardo sempre existe com a senha correta
         const savedUsers: UsuarioSistema[] = parsed.usuariosSistema || [];
@@ -121,6 +300,7 @@ class MockCondoStore {
         reservas: this.reservas,
         avisos: this.avisos,
         notificacoes: this.notificacoes,
+        cobrancas: this.cobrancas,
       };
       localStorage.setItem(STORAGE_KEY_PREFIX, JSON.stringify(data));
     } catch {
@@ -212,6 +392,18 @@ class MockCondoStore {
     ];
     this.reservas[newId] = [];
     this.avisos[newId] = [];
+
+    // Sync condo and default area to Firestore
+    syncCondominioToFirestore(newCondo).catch((err) =>
+      console.warn('Sync Condominio error:', err)
+    );
+    this.areasLazer[newId].forEach((area) => {
+      syncAreaLazerToFirestore(area).catch((err) =>
+        console.warn('Sync AreaLazer error:', err)
+      );
+    });
+
+    this.subscribeToCondoSubcollections(newId);
     this.notify();
     return newCondo;
   }
@@ -220,6 +412,9 @@ class MockCondoStore {
     const condo = this.condominios.find((c) => c.id === id);
     if (condo) {
       condo.statusAssinatura = status;
+      syncCondominioToFirestore(condo).catch((err) =>
+        console.warn('Sync Condominio status error:', err)
+      );
       this.notify();
     }
   }
@@ -228,6 +423,9 @@ class MockCondoStore {
     const condo = this.condominios.find((c) => c.id === id);
     if (condo) {
       Object.assign(condo, data);
+      syncCondominioToFirestore(condo).catch((err) =>
+        console.warn('Sync Condominio error:', err)
+      );
       this.notify();
     }
   }
@@ -374,13 +572,26 @@ class MockCondoStore {
     if (condo) {
       condo.sindicoNome = newSindico.nome;
       condo.sindicoEmail = newSindico.email;
+      syncCondominioToFirestore(condo).catch((err) =>
+        console.warn('Sync Condominio with Sindico error:', err)
+      );
     }
+
+    // Sincroniza usuário do síndico no Firestore
+    syncUsuarioSistemaToFirestore(newSindico).catch((err) =>
+      console.warn('Sync UsuarioSistema error:', err)
+    );
 
     this.notify();
     return newSindico;
   }
 
-  public getSindicos(): UsuarioSistema[] {
+  public getSindicos(condoId?: string): UsuarioSistema[] {
+    if (condoId) {
+      return this.usuariosSistema.filter(
+        (u) => u.role === 'sindico' && u.condominioId === condoId
+      );
+    }
     return this.usuariosSistema.filter((u) => u.role === 'sindico');
   }
 
@@ -390,6 +601,9 @@ class MockCondoStore {
 
   public removerSindico(sindicoId: string) {
     this.usuariosSistema = this.usuariosSistema.filter((u) => u.id !== sindicoId);
+    deleteUsuarioSistemaFromFirestore(sindicoId).catch((err) =>
+      console.warn('Delete UsuarioSistema error:', err)
+    );
     this.notify();
   }
 
@@ -457,6 +671,11 @@ class MockCondoStore {
     }
     this.moradores[data.condominioId].push(newMorador);
 
+    // Sync to Firestore
+    syncMoradorToFirestore(newMorador).catch((err) =>
+      console.warn('Sync Morador error:', err)
+    );
+
     // Cria notificação para o síndico
     this.addNotification({
       condominioId: data.condominioId,
@@ -477,6 +696,10 @@ class MockCondoStore {
     morador.statusCadastro = 'ativo';
     morador.aprovadoPor = aprovadorNome;
     morador.aprovadoEm = Date.now();
+
+    syncMoradorToFirestore(morador).catch((err) =>
+      console.warn('Sync Morador error:', err)
+    );
 
     this.addNotification({
       condominioId: condoId,
@@ -508,6 +731,10 @@ class MockCondoStore {
 
     morador.statusCadastro = 'recusado';
 
+    syncMoradorToFirestore(morador).catch((err) =>
+      console.warn('Sync Morador recusado error:', err)
+    );
+
     const condo = this.getCondominio(condoId);
     const condoNome = condo ? condo.nome : 'Condomínio Residencial';
     whatsappService.notificarMorador({
@@ -534,6 +761,11 @@ class MockCondoStore {
     };
     if (!this.moradores[condoId]) this.moradores[condoId] = [];
     this.moradores[condoId].push(newM);
+
+    syncMoradorToFirestore(newM).catch((err) =>
+      console.warn('Sync Morador error:', err)
+    );
+
     this.notify();
     return newM;
   }
@@ -543,6 +775,9 @@ class MockCondoStore {
     const m = list.find((x) => x.id === moradorId);
     if (m) {
       Object.assign(m, data);
+      syncMoradorToFirestore(m).catch((err) =>
+        console.warn('Sync Morador error:', err)
+      );
       this.notify();
     }
   }
@@ -550,6 +785,9 @@ class MockCondoStore {
   public deleteMorador(condoId: string, moradorId: string) {
     if (this.moradores[condoId]) {
       this.moradores[condoId] = this.moradores[condoId].filter((m) => m.id !== moradorId);
+      deleteMoradorFromFirestore(condoId, moradorId).catch((err) =>
+        console.warn('Delete Morador error:', err)
+      );
       this.notify();
     }
   }
@@ -559,6 +797,9 @@ class MockCondoStore {
     const m = list.find((x) => x.id === moradorId);
     if (m) {
       m.statusAdimplencia = status;
+      syncMoradorToFirestore(m).catch((err) =>
+        console.warn('Sync Morador error:', err)
+      );
       this.notify();
     }
   }
@@ -577,6 +818,7 @@ class MockCondoStore {
     const newB: Bicicleta = { ...bike, id: newId, condominioId: condoId };
     if (!this.bikes[condoId]) this.bikes[condoId] = [];
     this.bikes[condoId].push(newB);
+    syncBikeToFirestore(newB).catch((err) => console.warn('Sync Bike error:', err));
     this.notify();
     return newB;
   }
@@ -585,6 +827,7 @@ class MockCondoStore {
     const bike = this.getBike(condoId, bikeId);
     if (bike) {
       Object.assign(bike, data);
+      syncBikeToFirestore(bike).catch((err) => console.warn('Sync Bike error:', err));
       this.notify();
     }
   }
@@ -592,6 +835,7 @@ class MockCondoStore {
   public deleteBike(condoId: string, bikeId: string) {
     if (this.bikes[condoId]) {
       this.bikes[condoId] = this.bikes[condoId].filter((b) => b.id !== bikeId);
+      deleteBikeFromFirestore(condoId, bikeId).catch((err) => console.warn('Delete Bike error:', err));
       this.notify();
     }
   }
@@ -614,6 +858,7 @@ class MockCondoStore {
       if (avarias) {
         bike.avariasAtuais = avarias;
       }
+      syncBikeToFirestore(bike).catch((err) => console.warn('Sync Bike status error:', err));
       this.notify();
     }
   }
@@ -666,6 +911,8 @@ class MockCondoStore {
     bike.usuarioAtualUnidade = `Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto}`;
     bike.inicioUsoTimestamp = Date.now();
     bike.localizacaoAtual = 'Em trânsito com morador';
+
+    syncBikeToFirestore(bike).catch((err) => console.warn('Sync Bike checkout error:', err));
 
     // Log notification
     this.addNotification({
@@ -776,6 +1023,8 @@ class MockCondoStore {
     bike.usuarioAtualUnidade = null;
     bike.inicioUsoTimestamp = null;
 
+    syncBikeToFirestore(bike).catch((err) => console.warn('Sync Bike checkin error:', err));
+
     const condo = this.getCondominio(condoId);
     const condoNome = condo ? condo.nome : 'Condomínio Residencial';
     whatsappService.notificarMorador({
@@ -844,6 +1093,8 @@ class MockCondoStore {
     if (!this.encomendas[condoId]) this.encomendas[condoId] = [];
     this.encomendas[condoId].unshift(novaEnc);
 
+    syncEncomendaToFirestore(novaEnc).catch((err) => console.warn('Sync Encomenda error:', err));
+
     // Disparo imediato de Push Notification para o morador
     this.addNotification({
       condominioId: condoId,
@@ -896,6 +1147,8 @@ class MockCondoStore {
     enc.entregueEm = Date.now();
     enc.entreguePara = `${enc.moradorNome} (Código ${enc.codigoResgate} Validado por ${operadorNome})`;
 
+    syncEncomendaToFirestore(enc).catch((err) => console.warn('Sync Encomenda baixa error:', err));
+
     this.addNotification({
       condominioId: condoId,
       paraMoradorId: enc.moradorId,
@@ -944,6 +1197,7 @@ class MockCondoStore {
     };
     if (!this.areasLazer[condoId]) this.areasLazer[condoId] = [];
     this.areasLazer[condoId].push(newArea);
+    syncAreaLazerToFirestore(newArea).catch((err) => console.warn('Sync AreaLazer error:', err));
     this.notify();
     return newArea;
   }
@@ -954,6 +1208,7 @@ class MockCondoStore {
     if (area) {
       Object.assign(area, data);
       area.atualizadoEm = Date.now();
+      syncAreaLazerToFirestore(area).catch((err) => console.warn('Sync AreaLazer error:', err));
       this.notify();
     }
   }
@@ -961,6 +1216,7 @@ class MockCondoStore {
   public deleteAreaLazer(condoId: string, areaId: string) {
     if (this.areasLazer[condoId]) {
       this.areasLazer[condoId] = this.areasLazer[condoId].filter((a) => a.id !== areaId);
+      deleteAreaLazerFromFirestore(condoId, areaId).catch((err) => console.warn('Delete AreaLazer error:', err));
       this.notify();
     }
   }
@@ -979,6 +1235,8 @@ class MockCondoStore {
       area.aviso = aviso;
       area.previsaoReabertura = previsaoReabertura;
       area.atualizadoEm = Date.now();
+
+      syncAreaLazerToFirestore(area).catch((err) => console.warn('Sync AreaLazer status error:', err));
 
       // Notificação geral para o condomínio se for alteração crítica
       if (status !== 'aberto') {
@@ -1056,6 +1314,8 @@ class MockCondoStore {
     if (!this.reservas[condoId]) this.reservas[condoId] = [];
     this.reservas[condoId].unshift(novaReserva);
 
+    syncReservaToFirestore(novaReserva).catch((err) => console.warn('Sync Reserva error:', err));
+
     this.addNotification({
       condominioId: condoId,
       paraMoradorId: morador.id,
@@ -1090,6 +1350,7 @@ class MockCondoStore {
     const r = list.find((x) => x.id === reservaId);
     if (r) {
       r.status = 'cancelada';
+      syncReservaToFirestore(r).catch((err) => console.warn('Sync Reserva cancelada error:', err));
 
       const morador = this.getMorador(condoId, r.moradorId);
       const condo = this.getCondominio(condoId);
@@ -1124,6 +1385,8 @@ class MockCondoStore {
 
     if (!this.avisos[condoId]) this.avisos[condoId] = [];
     this.avisos[condoId].unshift(novoAviso);
+
+    syncAvisoToFirestore(novoAviso).catch((err) => console.warn('Sync Aviso error:', err));
 
     if (aviso.prioritario) {
       this.addNotification({
@@ -1180,6 +1443,133 @@ class MockCondoStore {
       }
     });
     this.notify();
+  }
+
+  // --- Gestão de Cobranças & Planos (Super Admin) ---
+  public getCobrancas(): CobrancaCondominio[] {
+    return [...this.cobrancas].sort((a, b) => b.enviadoEm - a.enviadoEm);
+  }
+
+  public getCobrancasByCondo(condoId: string): CobrancaCondominio[] {
+    return this.cobrancas
+      .filter((c) => c.condominioId === condoId)
+      .sort((a, b) => b.enviadoEm - a.enviadoEm);
+  }
+
+  public criarCobranca(data: Omit<CobrancaCondominio, 'id' | 'enviadoEm'>): CobrancaCondominio {
+    const newId = `cobranca_${Date.now()}`;
+    const novaCobranca: CobrancaCondominio = {
+      ...data,
+      id: newId,
+      enviadoEm: Date.now(),
+    };
+
+    this.cobrancas.unshift(novaCobranca);
+    syncCobrancaToFirestore(novaCobranca).catch((err) =>
+      console.warn('Sync Cobranca error:', err)
+    );
+
+    // Cria notificação no painel do síndico
+    this.addNotification({
+      condominioId: data.condominioId,
+      titulo: `💳 Fatura SmartCondo - ${data.mesReferencia}`,
+      mensagem: `A fatura no valor de R$ ${data.valor.toFixed(2)} com vencimento em ${new Date(data.dataVencimento + 'T12:00:00').toLocaleDateString('pt-BR')} está disponível para pagamento via PIX.`,
+      tipo: 'sistema',
+    });
+
+    // Atualiza status financeiro do condomínio se pendente
+    const condo = this.getCondominio(data.condominioId);
+    if (condo && condo.statusPagamento !== 'em_dia') {
+      condo.statusPagamento = 'pendente';
+      syncCondominioToFirestore(condo).catch((err) =>
+        console.warn('Sync Condominio error:', err)
+      );
+    }
+
+    this.notify();
+    return novaCobranca;
+  }
+
+  public atualizarStatusCobranca(
+    id: string,
+    status: 'pendente' | 'enviada' | 'paga' | 'cancelada'
+  ) {
+    const cobranca = this.cobrancas.find((c) => c.id === id);
+    if (cobranca) {
+      cobranca.status = status;
+      syncCobrancaToFirestore(cobranca).catch((err) =>
+        console.warn('Sync Cobranca error:', err)
+      );
+
+      // Se foi paga, atualiza status do condomínio
+      if (status === 'paga') {
+        const condo = this.getCondominio(cobranca.condominioId);
+        if (condo) {
+          condo.statusPagamento = 'em_dia';
+          syncCondominioToFirestore(condo).catch((err) =>
+            console.warn('Sync Condominio error:', err)
+          );
+        }
+      }
+
+      this.notify();
+    }
+  }
+
+  public excluirCobranca(id: string) {
+    this.cobrancas = this.cobrancas.filter((c) => c.id !== id);
+    deleteCobrancaFromFirestore(id).catch((err) =>
+      console.warn('Delete Cobranca error:', err)
+    );
+    this.notify();
+  }
+
+  public atualizarPlanoCondominio(
+    condoId: string,
+    plano: 'Smart' | 'Plus' | 'Pro' | 'Enterprise',
+    valorMensalidade?: number,
+    diaVencimento?: number,
+    statusPagamento?: 'em_dia' | 'pendente' | 'vencido' | 'cortesia'
+  ) {
+    const condo = this.getCondominio(condoId);
+    if (condo) {
+      condo.plano = plano;
+      if (valorMensalidade !== undefined) condo.valorMensalidade = valorMensalidade;
+      if (diaVencimento !== undefined) condo.diaVencimento = diaVencimento;
+      if (statusPagamento !== undefined) condo.statusPagamento = statusPagamento;
+
+      syncCondominioToFirestore(condo).catch((err) =>
+        console.warn('Sync Condominio error:', err)
+      );
+      this.notify();
+    }
+  }
+
+  // --- Consulta de Moradores por Unidade (Múltiplos moradores no mesmo apto) ---
+  public getMoradoresDaUnidade(
+    condoId: string,
+    bloco: string,
+    apto: string
+  ): Morador[] {
+    const list = this.moradores[condoId] || [];
+    const bTrim = bloco.trim().toLowerCase();
+    const aTrim = apto.trim().toLowerCase();
+    return list.filter(
+      (m) =>
+        m.unidade.bloco.trim().toLowerCase() === bTrim &&
+        m.unidade.apto.trim().toLowerCase() === aTrim
+    );
+  }
+
+  public getMoradoresPorUnidade(condoId: string): Record<string, Morador[]> {
+    const list = this.moradores[condoId] || [];
+    const map: Record<string, Morador[]> = {};
+    list.forEach((m) => {
+      const key = `Bloco ${m.unidade.bloco || '1'} - Apto ${m.unidade.apto}`;
+      if (!map[key]) map[key] = [];
+      map[key].push(m);
+    });
+    return map;
   }
 }
 

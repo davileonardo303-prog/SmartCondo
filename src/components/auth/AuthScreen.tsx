@@ -24,6 +24,7 @@ import { condoStore } from '../../services/mockStorage';
 import { auth, googleProvider, syncMoradorToFirestore } from '../../services/firebase';
 import { signInWithPopup } from 'firebase/auth';
 import confetti from 'canvas-confetti';
+import { SmartCondoLogo } from '../common/SmartCondoLogo';
 
 interface AuthScreenProps {
   condominios: Condominio[];
@@ -339,20 +340,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       </div>
 
       <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200/80 overflow-hidden relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-300">
-        {/* Header do Card */}
+        {/* Header do Card com a Logo Oficial do SmartCondo */}
         <div className="bg-slate-900 px-6 py-5 text-white border-b border-slate-800">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-600 flex items-center justify-center text-white shadow-lg shadow-emerald-600/30">
-                <Building2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h1 className="text-xl sm:text-2xl font-black tracking-tight">SmartCondo</h1>
-                <p className="text-xs text-emerald-400 font-medium">
-                  Gestão Residencial & Mobilidade Compartilhada
-                </p>
-              </div>
-            </div>
+            <SmartCondoLogo
+              size="lg"
+              showText={true}
+              showTagline={true}
+              textColor="light"
+            />
             <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold px-3 py-1 rounded-full bg-slate-800 text-emerald-300 border border-slate-700">
               <ShieldCheck className="w-3.5 h-3.5" />
               Firebase Conectado
@@ -458,7 +454,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                   >
                     {condominios.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.nome} ({c.cidade} - {c.uf})
+                        {c.nome} — {c.endereco ? `${c.endereco}, ` : ''}{c.cidade}/{c.uf}
                       </option>
                     ))}
                   </select>
@@ -804,7 +800,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                         >
                           {condominios.map((c) => (
                             <option key={c.id} value={c.id}>
-                              {c.nome} ({c.cidade} - {c.uf})
+                              {c.nome} — {c.endereco ? `${c.endereco}, ` : ''}{c.cidade}/{c.uf}
                             </option>
                           ))}
                         </select>

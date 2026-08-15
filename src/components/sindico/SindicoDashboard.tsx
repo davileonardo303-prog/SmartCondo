@@ -419,19 +419,45 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
           </p>
         </div>
 
-        {/* Resumos Executivos */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <div className="bg-indigo-50 px-3.5 py-2 rounded-xl border border-indigo-200 text-center">
-            <div className="text-xl font-extrabold text-indigo-900">{moradores.length}</div>
-            <div className="text-[11px] font-semibold text-indigo-700">Moradores</div>
+        {/* Ações Rápidas do Síndico */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              id="btn-sindico-header-novo-morador"
+              onClick={() => {
+                setActiveTab('moradores');
+                setShowAddMoradorModal(true);
+              }}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm shadow-indigo-600/20 transition active:scale-98 cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>+ Cadastrar Morador</span>
+            </button>
+
+            <button
+              id="btn-sindico-header-config"
+              onClick={() => setActiveTab('configuracoes')}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition active:scale-98 cursor-pointer border border-slate-200"
+            >
+              <Settings className="w-4 h-4 text-slate-600" />
+              <span>Alterar Dados & Regras</span>
+            </button>
           </div>
-          <div className="bg-purple-50 px-3.5 py-2 rounded-xl border border-purple-200 text-center">
-            <div className="text-xl font-extrabold text-purple-900">{bikes.length}</div>
-            <div className="text-[11px] font-semibold text-purple-700">Frota Bikes</div>
-          </div>
-          <div className="bg-emerald-50 px-3.5 py-2 rounded-xl border border-emerald-200 text-center">
-            <div className="text-xl font-extrabold text-emerald-900">{areasLazer.length}</div>
-            <div className="text-[11px] font-semibold text-emerald-700">Áreas de Lazer</div>
+
+          {/* Resumos Executivos */}
+          <div className="flex items-center gap-2">
+            <div className="bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-200 text-center">
+              <div className="text-base font-extrabold text-indigo-900 leading-tight">{moradores.length}</div>
+              <div className="text-[10px] font-semibold text-indigo-700">Moradores</div>
+            </div>
+            <div className="bg-purple-50 px-3 py-1.5 rounded-xl border border-purple-200 text-center">
+              <div className="text-base font-extrabold text-purple-900 leading-tight">{bikes.length}</div>
+              <div className="text-[10px] font-semibold text-purple-700">Frota Bikes</div>
+            </div>
+            <div className="bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 text-center">
+              <div className="text-base font-extrabold text-emerald-900 leading-tight">{areasLazer.length}</div>
+              <div className="text-[10px] font-semibold text-emerald-700">Áreas Lazer</div>
+            </div>
           </div>
         </div>
       </div>
@@ -1375,36 +1401,51 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {moradoresPendentes.map((m) => (
-                      <tr key={m.id} className="hover:bg-slate-50 transition">
-                        <td className="py-3 px-4">
-                          <div className="font-bold text-slate-900">{m.nome}</div>
-                          <div className="text-[10px] text-slate-400">
-                            Solicitado em {m.solicitadoEm ? new Date(m.solicitadoEm).toLocaleString('pt-BR') : 'Hoje'}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 font-bold text-indigo-900">
-                          Bloco {m.unidade.bloco} - Apto {m.unidade.apto}
-                        </td>
-                        <td className="py-3 px-4 font-semibold text-slate-700">{m.telefone}</td>
-                        <td className="py-3 px-4 text-slate-600">{m.email}</td>
-                        <td className="py-3 px-4 text-right space-x-2">
-                          <button
-                            onClick={() => handleRecusar(m.id, m.nome)}
-                            className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-rose-50 hover:text-rose-700 font-bold transition text-xs cursor-pointer"
-                          >
-                            Recusar
-                          </button>
-                          <button
-                            onClick={() => handleAprovar(m.id, m.nome)}
-                            className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition shadow text-xs inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            Aprovar Acesso
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {moradoresPendentes.map((m) => {
+                      const outrosMoradoresNaUnidade = condoStore
+                        .getMoradoresDaUnidade(m.condominioId, m.unidade.bloco, m.unidade.apto)
+                        .filter((outro) => outro.id !== m.id);
+
+                      return (
+                        <tr key={m.id} className="hover:bg-slate-50 transition">
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-slate-900">{m.nome}</div>
+                            <div className="text-[10px] text-slate-400">
+                              Solicitado em {m.solicitadoEm ? new Date(m.solicitadoEm).toLocaleString('pt-BR') : 'Hoje'}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 font-bold text-indigo-900">
+                            <div>Bloco {m.unidade.bloco} - Apto {m.unidade.apto}</div>
+                            {outrosMoradoresNaUnidade.length > 0 ? (
+                              <div className="mt-1 p-1 bg-blue-50 border border-blue-200 rounded text-[10px] text-blue-800 font-normal">
+                                👥 <strong>Outros no apto:</strong> {outrosMoradoresNaUnidade.map((o) => `${o.nome} (${o.statusCadastro})`).join(', ')}
+                              </div>
+                            ) : (
+                              <div className="text-[10px] text-slate-400 font-normal">
+                                1º morador cadastrado nesta unidade
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 font-semibold text-slate-700">{m.telefone}</td>
+                          <td className="py-3 px-4 text-slate-600">{m.email}</td>
+                          <td className="py-3 px-4 text-right space-x-2 whitespace-nowrap">
+                            <button
+                              onClick={() => handleRecusar(m.id, m.nome)}
+                              className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-rose-50 hover:text-rose-700 font-bold transition text-xs cursor-pointer"
+                            >
+                              Recusar
+                            </button>
+                            <button
+                              onClick={() => handleAprovar(m.id, m.nome)}
+                              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition shadow text-xs inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              Aprovar Acesso
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

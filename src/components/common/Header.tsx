@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { UserRole, Condominio, Morador, AppNotification, UserAccount } from '../../types';
 import { condoStore } from '../../services/mockStorage';
+import { SmartCondoLogo } from './SmartCondoLogo';
 
 interface HeaderProps {
   currentUser: UserAccount;
@@ -77,24 +78,14 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Top Bar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16 gap-3">
-          {/* Logo & Brand */}
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-md shadow-emerald-500/20 text-white">
-              <Building2 className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900">
-                  Smart<span className="text-emerald-600">Condo</span>
-                </span>
-                <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  Residencial
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 font-medium leading-none hidden sm:block">
-                {currentCondo.nome}
-              </p>
-            </div>
+          {/* Logo & Brand - Visualização responsiva perfeita no Celular e Computador */}
+          <div className="flex items-center">
+            <SmartCondoLogo
+              size="md"
+              showText={true}
+              condoNome={currentCondo.nome}
+              showTagline={true}
+            />
           </div>
 
           {/* Right Controls */}

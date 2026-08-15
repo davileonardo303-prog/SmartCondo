@@ -2,11 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Default Deny
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
     // Helper functions
     function isSignedIn() {
       return request.auth != null;
@@ -19,26 +14,23 @@ service cloud.firestore {
       );
     }
 
-    function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128;
+    // Usuários do Sistema (SuperAdmin, Síndicos, Portaria)
+    match /usuariosSistema/{usuarioId} {
+      allow read, write: if true;
     }
 
-    // Condomínios
+    // Condomínios e todas as subcoleções
     match /condominios/{condominioId} {
-      allow get, list: if true; // Público para listagem de seleção no cadastro
-      allow create, update, delete: if isSuperAdmin();
+      allow read, write: if true;
 
       // Moradores
       match /moradores/{moradorId} {
-        allow read: if true;
-        allow create: if true; // Permite solicitação de primeiro acesso
-        allow update, delete: if isSignedIn() || isSuperAdmin();
+        allow read, write: if true;
       }
 
       // Bicicletas
       match /bikes/{bikeId} {
-        allow read: if true;
-        allow write: if isSignedIn() || isSuperAdmin();
+        allow read, write: if true;
       }
 
       // Encomendas
@@ -48,8 +40,7 @@ service cloud.firestore {
 
       // Áreas de Lazer
       match /areasLazer/{areaId} {
-        allow read: if true;
-        allow write: if isSignedIn() || isSuperAdmin();
+        allow read, write: if true;
       }
 
       // Reservas
@@ -59,8 +50,7 @@ service cloud.firestore {
 
       // Avisos
       match /avisos/{avisoId} {
-        allow read: if true;
-        allow write: if isSignedIn() || isSuperAdmin();
+        allow read, write: if true;
       }
 
       // Locações de Bicicletas
@@ -86,3 +76,4 @@ service cloud.firestore {
     }
   }
 }
+

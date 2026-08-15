@@ -68,7 +68,11 @@ export interface Condominio {
   uf: string;
   totalUnidades: number;
   statusAssinatura: 'ativo' | 'suspenso' | 'em_teste';
-  plano: 'Pro' | 'Enterprise' | 'Smart';
+  plano: 'Smart' | 'Plus' | 'Pro' | 'Enterprise';
+  valorMensalidade?: number;
+  diaVencimento?: number;
+  statusPagamento?: 'em_dia' | 'pendente' | 'vencido' | 'cortesia';
+  chavePix?: string;
   sindicoNome: string;
   sindicoEmail: string;
   regras: {
@@ -78,6 +82,27 @@ export interface Condominio {
     diasAntecedenciaReserva: number;
     taxaReservaSalao: number;
   };
+}
+
+export interface CobrancaCondominio {
+  id: string;
+  condominioId: string;
+  condominioNome: string;
+  sindicoNome: string;
+  sindicoEmail: string;
+  sindicoTelefone?: string;
+  mesReferencia: string; // Ex: "Agosto/2026"
+  plano: 'Smart' | 'Plus' | 'Pro' | 'Enterprise';
+  valor: number;
+  dataVencimento: string; // YYYY-MM-DD
+  status: 'pendente' | 'enviada' | 'paga' | 'cancelada';
+  chavePix: string;
+  codigoPixCopiaCola: string;
+  mensagem?: string;
+  observacoes?: string;
+  enviadoEm: number;
+  enviadoPor?: string;
+  notificacaoWhatsAppUrl?: string;
 }
 
 export interface Bicicleta {
