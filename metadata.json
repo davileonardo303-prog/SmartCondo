@@ -1,0 +1,6 @@
+{
+  "name": "SmartCondo",
+  "description": "Plataforma SaaS Multi-Tenant para gestão condominial e controle de mobilidade compartilhada com bicicletário em tempo real, encomendas, reservas e portaria.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

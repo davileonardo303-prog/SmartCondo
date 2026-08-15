@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'davileonardo303@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    // Condomínios
+    match /condominios/{condominioId} {
+      allow get, list: if true; // Público para listagem de seleção no cadastro
+      allow create, update, delete: if isSuperAdmin();
+
+      // Moradores
+      match /moradores/{moradorId} {
+        allow read: if true;
+        allow create: if true; // Permite solicitação de primeiro acesso
+        allow update, delete: if isSignedIn() || isSuperAdmin();
+      }
+
+      // Bicicletas
+      match /bikes/{bikeId} {
+        allow read: if true;
+        allow write: if isSignedIn() || isSuperAdmin();
+      }
+
+      // Encomendas
+      match /encomendas/{encomendaId} {
+        allow read, write: if true;
+      }
+
+      // Áreas de Lazer
+      match /areasLazer/{areaId} {
+        allow read: if true;
+        allow write: if isSignedIn() || isSuperAdmin();
+      }
+
+      // Reservas
+      match /reservas/{reservaId} {
+        allow read, write: if true;
+      }
+
+      // Avisos
+      match /avisos/{avisoId} {
+        allow read: if true;
+        allow write: if isSignedIn() || isSuperAdmin();
+      }
+
+      // Locações de Bicicletas
+      match /locacoes/{locacaoId} {
+        allow read, write: if true;
+      }
+
+      // Notificações
+      match /notificacoes/{notificacaoId} {
+        allow read, write: if true;
+      }
+    }
+
+    // Admins collection
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    // Test doc for connection health check
+    match /test/{testId} {
+      allow read, write: if true;
+    }
+  }
+}

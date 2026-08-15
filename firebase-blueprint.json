@@ -1,0 +1,221 @@
+{
+  "entities": {
+    "Condominio": {
+      "title": "Condominio",
+      "description": "Dados do condomínio residencial cadastrado no sistema SmartCondo",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nome": { "type": "string" },
+        "cnpj": { "type": "string" },
+        "endereco": { "type": "string" },
+        "cidade": { "type": "string" },
+        "uf": { "type": "string" },
+        "totalUnidades": { "type": "number" },
+        "statusAssinatura": { "type": "string", "enum": ["ativo", "bloqueado", "pendente"] },
+        "plano": { "type": "string" },
+        "sindicoNome": { "type": "string" },
+        "sindicoEmail": { "type": "string" },
+        "regras": {
+          "type": "object",
+          "properties": {
+            "limiteTempoBikeMinutos": { "type": "number" },
+            "limiteBikesPorMorador": { "type": "number" },
+            "horarioBicicletario": { "type": "string" },
+            "diasAntecedenciaReserva": { "type": "number" },
+            "taxaReservaSalao": { "type": "number" }
+          }
+        }
+      },
+      "required": ["id", "nome", "statusAssinatura"]
+    },
+    "Morador": {
+      "title": "Morador",
+      "description": "Cadastro e autorização de moradores do condomínio",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "condominioId": { "type": "string" },
+        "nome": { "type": "string" },
+        "email": { "type": "string" },
+        "telefone": { "type": "string" },
+        "unidade": {
+          "type": "object",
+          "properties": {
+            "bloco": { "type": "string" },
+            "apto": { "type": "string" }
+          },
+          "required": ["bloco", "apto"]
+        },
+        "statusAdimplencia": { "type": "string", "enum": ["em_dia", "inadimplente"] },
+        "statusCadastro": { "type": "string", "enum": ["ativo", "pendente_aprovacao", "recusado"] },
+        "solicitadoEm": { "type": "number" },
+        "aprovadoPor": { "type": "string" },
+        "aprovadoEm": { "type": "number" },
+        "authProvider": { "type": "string" }
+      },
+      "required": ["id", "condominioId", "nome", "email", "unidade", "statusCadastro"]
+    },
+    "Bicicleta": {
+      "title": "Bicicleta",
+      "description": "Bicicleta compartilhada do condomínio",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "condominioId": { "type": "string" },
+        "codigo": { "type": "string" },
+        "modelo": { "type": "string" },
+        "tipo": { "type": "string", "enum": ["e-bike", "urbana", "mountain"] },
+        "status": { "type": "string", "enum": ["disponivel", "em_uso", "manutencao"] },
+        "bateria": { "type": "number" },
+        "trancaAtualId": { "type": "string" },
+        "locacaoAtual": { "type": "object" }
+      },
+      "required": ["id", "condominioId", "codigo", "modelo", "tipo", "status"]
+    },
+    "Encomenda": {
+      "title": "Encomenda",
+      "description": "Registro de encomenda na portaria",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "condominioId": { "type": "string" },
+        "moradorId": { "type": "string" },
+        "unidade": {
+          "type": "object",
+          "properties": {
+            "bloco": { "type": "string" },
+            "apto": { "type": "string" }
+          },
+          "required": ["bloco", "apto"]
+        },
+        "transportadora": { "type": "string" },
+        "codigoRastreio": { "type": "string" },
+        "dataChegada": { "type": "number" },
+        "status": { "type": "string", "enum": ["aguardando_retirada", "retirada"] },
+        "codigoRetirada": { "type": "string" }
+      },
+      "required": ["id", "condominioId", "moradorId", "unidade", "status"]
+    },
+    "AreaLazer": {
+      "title": "AreaLazer",
+      "description": "Área de lazer e espaços compartilhados do condomínio",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "condominioId": { "type": "string" },
+        "nome": { "type": "string" },
+        "capacidadeMaxima": { "type": "number" },
+        "taxaReserva": { "type": "number" },
+        "horarioFuncionamento": { "type": "string" },
+        "status": { "type": "string", "enum": ["disponivel", "manutencao"] }
+      },
+      "required": ["id", "condominioId", "nome", "status"]
+    },
+    "Reserva": {
+      "title": "Reserva",
+      "description": "Reserva de espaço de lazer por morador",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "condominioId": { "type": "string" },
+        "areaId": { "type": "string" },
+        "moradorId": { "type": "string" },
+        "data": { "type": "string" },
+        "periodo": { "type": "string" },
+        "status": { "type": "string", "enum": ["confirmada", "cancelada", "pendente_pagamento"] }
+      },
+      "required": ["id", "condominioId", "areaId", "moradorId", "data", "status"]
+    },
+    "Aviso": {
+      "title": "Aviso",
+      "description": "Mural de comunicados oficiais do síndico para os moradores",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "condominioId": { "type": "string" },
+        "titulo": { "type": "string" },
+        "conteudo": { "type": "string" },
+        "categoria": { "type": "string", "enum": ["geral", "manutencao", "urgente", "evento"] },
+        "autor": { "type": "string" },
+        "data": { "type": "number" },
+        "fixado": { "type": "boolean" }
+      },
+      "required": ["id", "condominioId", "titulo", "conteudo", "categoria", "data"]
+    },
+    "HistoricoLocacao": {
+      "title": "HistoricoLocacao",
+      "description": "Histórico de uso do bicicletário",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "condominioId": { "type": "string" },
+        "bikeId": { "type": "string" },
+        "bikeCodigo": { "type": "string" },
+        "moradorId": { "type": "string" },
+        "moradorNome": { "type": "string" },
+        "moradorUnidade": { "type": "string" },
+        "inicio": { "type": "number" },
+        "fim": { "type": "number" },
+        "duracaoMinutos": { "type": "number" },
+        "custo": { "type": "number" },
+        "status": { "type": "string", "enum": ["em_andamento", "concluido", "atrasado"] }
+      },
+      "required": ["id", "condominioId", "bikeId", "moradorId", "inicio", "status"]
+    },
+    "Notificacao": {
+      "title": "Notificacao",
+      "description": "Notificação interna do condomínio",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "condominioId": { "type": "string" },
+        "paraMoradorId": { "type": "string" },
+        "titulo": { "type": "string" },
+        "mensagem": { "type": "string" },
+        "tipo": { "type": "string", "enum": ["bike", "encomenda", "reserva", "aviso", "sistema"] },
+        "timestamp": { "type": "number" },
+        "lida": { "type": "boolean" }
+      },
+      "required": ["id", "condominioId", "titulo", "mensagem", "tipo", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/condominios/{condominioId}": {
+      "schema": "Condominio",
+      "description": "Coleção de condomínios clientes do sistema"
+    },
+    "/condominios/{condominioId}/moradores/{moradorId}": {
+      "schema": "Morador",
+      "description": "Moradores cadastrados e em aprovação de cada condomínio"
+    },
+    "/condominios/{condominioId}/bikes/{bikeId}": {
+      "schema": "Bicicleta",
+      "description": "Frota de bicicletas inteligentes disponíveis no condomínio"
+    },
+    "/condominios/{condominioId}/encomendas/{encomendaId}": {
+      "schema": "Encomenda",
+      "description": "Encomendas recebidas na portaria"
+    },
+    "/condominios/{condominioId}/areasLazer/{areaId}": {
+      "schema": "AreaLazer",
+      "description": "Espaços de lazer e áreas comuns do condomínio"
+    },
+    "/condominios/{condominioId}/reservas/{reservaId}": {
+      "schema": "Reserva",
+      "description": "Agendamentos e reservas de áreas de lazer"
+    },
+    "/condominios/{condominioId}/avisos/{avisoId}": {
+      "schema": "Aviso",
+      "description": "Comunicados oficiais do mural"
+    },
+    "/condominios/{condominioId}/locacoes/{locacaoId}": {
+      "schema": "HistoricoLocacao",
+      "description": "Histórico de uso das bicicletas"
+    },
+    "/condominios/{condominioId}/notificacoes/{notificacaoId}": {
+      "schema": "Notificacao",
+      "description": "Notificações do condomínio e moradores"
+    }
+  }
+}
