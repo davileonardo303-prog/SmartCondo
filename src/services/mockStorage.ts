@@ -157,39 +157,63 @@ class MockCondoStore {
     if (this.isBootstrapping) return true;
     this.isBootstrapping = true;
     try {
-      // 1. Condomínios
+      // 1. Condomínios (Merge Local + Firestore)
       const condoSnap = await getDocs(collection(db, 'condominios'));
+      const firestoreCondos: Record<string, Condominio> = {};
       if (!condoSnap.empty) {
-        const loadedCondos: Condominio[] = [];
         condoSnap.forEach((docSnap) => {
           const data = docSnap.data() as Condominio;
-          loadedCondos.push({ ...data, id: docSnap.id });
+          firestoreCondos[docSnap.id] = { ...data, id: docSnap.id };
         });
-        this.condominios = loadedCondos;
-        for (const condo of loadedCondos) {
-          this.subscribeToCondoSubcollections(condo.id);
-          this.fetchCondoSubcollections(condo.id);
+      }
+
+      // Merge: preserve all local condos and upload any that are missing in Firestore
+      const mergedCondosMap = new Map<string, Condominio>();
+      // First add Firestore condos
+      Object.values(firestoreCondos).forEach((c) => mergedCondosMap.set(c.id, c));
+      // Then add local condos if not in Firestore, and push to Firestore
+      for (const localC of this.condominios) {
+        if (!mergedCondosMap.has(localC.id)) {
+          mergedCondosMap.set(localC.id, localC);
+          syncCondominioToFirestore(localC).catch(() => {});
         }
+      }
+      this.condominios = Array.from(mergedCondosMap.values());
+
+      for (const condo of this.condominios) {
+        this.subscribeToCondoSubcollections(condo.id);
+        this.fetchCondoSubcollections(condo.id);
       }
 
       // 2. Usuários do Sistema (SuperAdmin, Síndicos, Portaria)
       const userSnap = await getDocs(collection(db, 'usuariosSistema'));
+      const firestoreUsers: Record<string, UsuarioSistema> = {};
       if (!userSnap.empty) {
-        const loadedUsers: UsuarioSistema[] = [];
         userSnap.forEach((docSnap) => {
           const data = docSnap.data() as UsuarioSistema;
-          loadedUsers.push({ ...data, id: docSnap.id });
+          firestoreUsers[docSnap.id] = { ...data, id: docSnap.id };
         });
-
-        const hasSuper = loadedUsers.some(
-          (u) => u.email.toLowerCase() === 'davileonardo303@gmail.com'
-        );
-        if (!hasSuper) {
-          loadedUsers.unshift(INITIAL_USUARIOS_SISTEMA[0]);
-        }
-
-        this.usuariosSistema = loadedUsers;
       }
+
+      const mergedUsersMap = new Map<string, UsuarioSistema>();
+      Object.values(firestoreUsers).forEach((u) => mergedUsersMap.set(u.id, u));
+      for (const localU of this.usuariosSistema) {
+        if (!mergedUsersMap.has(localU.id)) {
+          mergedUsersMap.set(localU.id, localU);
+          syncUsuarioSistemaToFirestore(localU).catch(() => {});
+        }
+      }
+
+      const mergedUsersList = Array.from(mergedUsersMap.values());
+      const hasSuper = mergedUsersList.some(
+        (u) => u.email.toLowerCase() === 'davileonardo303@gmail.com'
+      );
+      if (!hasSuper) {
+        mergedUsersList.unshift(INITIAL_USUARIOS_SISTEMA[0]);
+        syncUsuarioSistemaToFirestore(INITIAL_USUARIOS_SISTEMA[0]).catch(() => {});
+      }
+
+      this.usuariosSistema = mergedUsersList;
 
       // 3. Planos Config
       const planosSnap = await getDocs(collection(db, 'planosConfig'));
@@ -197,6 +221,11 @@ class MockCondoStore {
         planosSnap.forEach((d) => {
           const key = d.id as PlanoTipo;
           this.planosConfig[key] = { ...(this.planosConfig[key] || {}), ...(d.data() as any) };
+        });
+      } else {
+        // Push initial plans to Firestore
+        Object.entries(this.planosConfig).forEach(([key, cfg]) => {
+          syncPlanoConfigToFirestore(key, cfg).catch(() => {});
         });
       }
 
@@ -218,6 +247,60 @@ class MockCondoStore {
       console.warn('Bootstrap Firestore error/warning:', err);
       this.isBootstrapping = false;
       return false;
+    }
+  }
+
+  public async sincronizarTudoComFirestore(): Promise<{ condominiosCount: number; sindicosCount: number }> {
+    try {
+      // 1. Sincroniza SuperAdmin e Síndicos
+      for (const u of this.usuariosSistema) {
+        await syncUsuarioSistemaToFirestore(u).catch(() => {});
+      }
+
+      // 2. Sincroniza Planos
+      for (const [key, cfg] of Object.entries(this.planosConfig)) {
+        await syncPlanoConfigToFirestore(key, cfg).catch(() => {});
+      }
+
+      // 3. Sincroniza Condomínios e subcoleções
+      for (const c of this.condominios) {
+        await syncCondominioToFirestore(c).catch(() => {});
+        // Subcoleções
+        const morList = this.moradores[c.id] || [];
+        for (const m of morList) {
+          await syncMoradorToFirestore(m).catch(() => {});
+        }
+        const bikeList = this.bikes[c.id] || [];
+        for (const b of bikeList) {
+          await syncBikeToFirestore(b).catch(() => {});
+        }
+        const areaList = this.areasLazer[c.id] || [];
+        for (const a of areaList) {
+          await syncAreaLazerToFirestore(a).catch(() => {});
+        }
+        const avisoList = this.avisos[c.id] || [];
+        for (const av of avisoList) {
+          await syncAvisoToFirestore(av).catch(() => {});
+        }
+        const encList = this.encomendas[c.id] || [];
+        for (const enc of encList) {
+          await syncEncomendaToFirestore(enc).catch(() => {});
+        }
+      }
+
+      // 4. Recarrega para validar integridade
+      await this.bootstrapFromFirestore();
+
+      return {
+        condominiosCount: this.condominios.length,
+        sindicosCount: this.usuariosSistema.filter((u) => u.role === 'sindico').length,
+      };
+    } catch (err) {
+      console.warn('Erro ao forçar sincronização total:', err);
+      return {
+        condominiosCount: this.condominios.length,
+        sindicosCount: this.usuariosSistema.filter((u) => u.role === 'sindico').length,
+      };
     }
   }
 
@@ -579,6 +662,20 @@ class MockCondoStore {
     return this.condominios.find((c) => c.id === id);
   }
 
+  public async addCondominioAsync(condo: Omit<Condominio, 'id'>): Promise<Condominio> {
+    const newCondo = this.addCondominio(condo);
+    try {
+      await syncCondominioToFirestore(newCondo);
+      const defaultArea = this.areasLazer[newCondo.id]?.[0];
+      if (defaultArea) {
+        await syncAreaLazerToFirestore(defaultArea);
+      }
+    } catch (err) {
+      console.warn('Erro ao salvar condomínio no Firestore:', err);
+    }
+    return newCondo;
+  }
+
   public addCondominio(condo: Omit<Condominio, 'id'>): Condominio {
     const newId = `condo_${Date.now()}`;
     const newCondo: Condominio = { ...condo, id: newId };
@@ -784,6 +881,26 @@ class MockCondoStore {
       error:
         'E-mail não cadastrado no banco de dados. Clique na aba "Criar Conta" para solicitar sua entrada no condomínio.',
     };
+  }
+
+  public async cadastrarSindicoAsync(dados: {
+    nome: string;
+    email: string;
+    senha: string;
+    condominioId: string;
+    telefone?: string;
+  }): Promise<UsuarioSistema> {
+    const newSindico = this.cadastrarSindico(dados);
+    try {
+      await syncUsuarioSistemaToFirestore(newSindico);
+      const condo = this.condominios.find((c) => c.id === dados.condominioId);
+      if (condo) {
+        await syncCondominioToFirestore(condo);
+      }
+    } catch (err) {
+      console.warn('Erro ao salvar síndico no Firestore:', err);
+    }
+    return newSindico;
   }
 
   public cadastrarSindico(dados: {
