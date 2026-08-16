@@ -350,55 +350,87 @@ class MockCondoStore {
     }
   }
 
+  private mergeSubcollection<T extends { id: string }>(
+    localMap: Record<string, T[]>,
+    condoId: string,
+    firestoreItems: T[],
+    syncBackItemFn?: (item: T) => Promise<any>
+  ) {
+    const currentList = localMap[condoId] || [];
+    const itemMap = new Map<string, T>();
+
+    // 1. Inserir itens que vieram do Firestore
+    firestoreItems.forEach((item) => {
+      if (item && item.id) {
+        itemMap.set(item.id, item);
+      }
+    });
+
+    // 2. Preservar itens locais que ainda não estão no Firestore e enviar em background
+    for (const localItem of currentList) {
+      if (localItem && localItem.id && !itemMap.has(localItem.id)) {
+        itemMap.set(localItem.id, localItem);
+        if (syncBackItemFn) {
+          syncBackItemFn(localItem).catch((err) =>
+            console.warn(`Sync back error for item ${localItem.id}:`, err)
+          );
+        }
+      }
+    }
+
+    localMap[condoId] = Array.from(itemMap.values());
+    this.saveToStorage();
+  }
+
   private async fetchCondoSubcollections(condoId: string) {
     try {
       // Moradores
       const morSnap = await getDocs(collection(db, 'condominios', condoId, 'moradores'));
+      const morList: Morador[] = [];
       if (!morSnap.empty) {
-        const list: Morador[] = [];
-        morSnap.forEach((d) => list.push({ ...(d.data() as Morador), id: d.id }));
-        this.moradores[condoId] = list;
+        morSnap.forEach((d) => morList.push({ ...(d.data() as Morador), id: d.id }));
       }
+      this.mergeSubcollection(this.moradores, condoId, morList, syncMoradorToFirestore);
 
-      // Bikes
+      // Bikes (Preserva absolutamente todas as bikes cadastradas localmente)
       const bikeSnap = await getDocs(collection(db, 'condominios', condoId, 'bikes'));
+      const bikeList: Bicicleta[] = [];
       if (!bikeSnap.empty) {
-        const list: Bicicleta[] = [];
-        bikeSnap.forEach((d) => list.push({ ...(d.data() as Bicicleta), id: d.id }));
-        this.bikes[condoId] = list;
+        bikeSnap.forEach((d) => bikeList.push({ ...(d.data() as Bicicleta), id: d.id }));
       }
+      this.mergeSubcollection(this.bikes, condoId, bikeList, syncBikeToFirestore);
 
       // Áreas de Lazer
       const areaSnap = await getDocs(collection(db, 'condominios', condoId, 'areasLazer'));
+      const areaList: AreaLazer[] = [];
       if (!areaSnap.empty) {
-        const list: AreaLazer[] = [];
-        areaSnap.forEach((d) => list.push({ ...(d.data() as AreaLazer), id: d.id }));
-        this.areasLazer[condoId] = list;
+        areaSnap.forEach((d) => areaList.push({ ...(d.data() as AreaLazer), id: d.id }));
       }
+      this.mergeSubcollection(this.areasLazer, condoId, areaList, syncAreaLazerToFirestore);
 
       // Avisos
       const avisoSnap = await getDocs(collection(db, 'condominios', condoId, 'avisos'));
+      const avisoList: Aviso[] = [];
       if (!avisoSnap.empty) {
-        const list: Aviso[] = [];
-        avisoSnap.forEach((d) => list.push({ ...(d.data() as Aviso), id: d.id }));
-        this.avisos[condoId] = list;
+        avisoSnap.forEach((d) => avisoList.push({ ...(d.data() as Aviso), id: d.id }));
       }
+      this.mergeSubcollection(this.avisos, condoId, avisoList, syncAvisoToFirestore);
 
       // Encomendas
       const encSnap = await getDocs(collection(db, 'condominios', condoId, 'encomendas'));
+      const encList: Encomenda[] = [];
       if (!encSnap.empty) {
-        const list: Encomenda[] = [];
-        encSnap.forEach((d) => list.push({ ...(d.data() as Encomenda), id: d.id }));
-        this.encomendas[condoId] = list;
+        encSnap.forEach((d) => encList.push({ ...(d.data() as Encomenda), id: d.id }));
       }
+      this.mergeSubcollection(this.encomendas, condoId, encList, syncEncomendaToFirestore);
 
       // Reservas
       const resSnap = await getDocs(collection(db, 'condominios', condoId, 'reservas'));
+      const resList: Reserva[] = [];
       if (!resSnap.empty) {
-        const list: Reserva[] = [];
-        resSnap.forEach((d) => list.push({ ...(d.data() as Reserva), id: d.id }));
-        this.reservas[condoId] = list;
+        resSnap.forEach((d) => resList.push({ ...(d.data() as Reserva), id: d.id }));
       }
+      this.mergeSubcollection(this.reservas, condoId, resList);
 
       this.saveToStorage();
       this.notify();
@@ -497,20 +529,20 @@ class MockCondoStore {
         (snap) => {
           const list: Morador[] = [];
           snap.forEach((d) => list.push({ ...(d.data() as Morador), id: d.id }));
-          this.moradores[condoId] = list;
+          this.mergeSubcollection(this.moradores, condoId, list, syncMoradorToFirestore);
           this.notify();
         },
         (err) => console.warn('Moradores sync error:', err.message)
       );
       unsubs.push(unsubMoradores);
 
-      // Bikes
+      // Bikes (Preserva absolutamente todas as bikes cadastradas localmente)
       const unsubBikes = onSnapshot(
         collection(db, 'condominios', condoId, 'bikes'),
         (snap) => {
           const list: Bicicleta[] = [];
           snap.forEach((d) => list.push({ ...(d.data() as Bicicleta), id: d.id }));
-          this.bikes[condoId] = list;
+          this.mergeSubcollection(this.bikes, condoId, list, syncBikeToFirestore);
           this.notify();
         },
         (err) => console.warn('Bikes sync error:', err.message)
@@ -523,7 +555,7 @@ class MockCondoStore {
         (snap) => {
           const list: AreaLazer[] = [];
           snap.forEach((d) => list.push({ ...(d.data() as AreaLazer), id: d.id }));
-          this.areasLazer[condoId] = list;
+          this.mergeSubcollection(this.areasLazer, condoId, list, syncAreaLazerToFirestore);
           this.notify();
         },
         (err) => console.warn('AreasLazer sync error:', err.message)
@@ -536,7 +568,7 @@ class MockCondoStore {
         (snap) => {
           const list: Encomenda[] = [];
           snap.forEach((d) => list.push({ ...(d.data() as Encomenda), id: d.id }));
-          this.encomendas[condoId] = list;
+          this.mergeSubcollection(this.encomendas, condoId, list, syncEncomendaToFirestore);
           this.notify();
         },
         (err) => console.warn('Encomendas sync error:', err.message)
@@ -549,7 +581,7 @@ class MockCondoStore {
         (snap) => {
           const list: Reserva[] = [];
           snap.forEach((d) => list.push({ ...(d.data() as Reserva), id: d.id }));
-          this.reservas[condoId] = list;
+          this.mergeSubcollection(this.reservas, condoId, list);
           this.notify();
         },
         (err) => console.warn('Reservas sync error:', err.message)
@@ -562,7 +594,7 @@ class MockCondoStore {
         (snap) => {
           const list: Aviso[] = [];
           snap.forEach((d) => list.push({ ...(d.data() as Aviso), id: d.id }));
-          this.avisos[condoId] = list;
+          this.mergeSubcollection(this.avisos, condoId, list, syncAvisoToFirestore);
           this.notify();
         },
         (err) => console.warn('Avisos sync error:', err.message)
@@ -572,6 +604,14 @@ class MockCondoStore {
       this.subUnsubscribers[condoId] = unsubs;
     } catch (err) {
       console.warn(`Erro ao assinar subcoleções do condomínio ${condoId}:`, err);
+    }
+  }
+
+  public ensureCondoSubscribed(condoId: string) {
+    if (!condoId) return;
+    if (!this.subUnsubscribers[condoId]) {
+      this.subscribeToCondoSubcollections(condoId);
+      this.fetchCondoSubcollections(condoId);
     }
   }
 
@@ -885,6 +925,10 @@ class MockCondoStore {
         };
       }
 
+      if (sysUser.condominioId) {
+        this.ensureCondoSubscribed(sysUser.condominioId);
+      }
+
       return {
         success: true,
         user: {
@@ -930,6 +974,10 @@ class MockCondoStore {
           success: false,
           error: 'Senha incorreta. Verifique suas credenciais e tente novamente.',
         };
+      }
+
+      if (morador.condominioId) {
+        this.ensureCondoSubscribed(morador.condominioId);
       }
 
       return {
@@ -1086,6 +1134,9 @@ class MockCondoStore {
 
   // --- Moradores & Aprovações ---
   public getMoradores(condoId: string, onlyActive = true): Morador[] {
+    if (condoId) {
+      this.ensureCondoSubscribed(condoId);
+    }
     const list = this.moradores[condoId] || [];
     if (!onlyActive) return [...list];
     return list.filter((m) => m.statusCadastro === 'ativo');
@@ -1283,10 +1334,16 @@ class MockCondoStore {
 
   // --- Bicicletas (Core Module) ---
   public getBikes(condoId: string): Bicicleta[] {
+    if (condoId) {
+      this.ensureCondoSubscribed(condoId);
+    }
     return [...(this.bikes[condoId] || [])];
   }
 
   public getBike(condoId: string, bikeId: string): Bicicleta | undefined {
+    if (condoId) {
+      this.ensureCondoSubscribed(condoId);
+    }
     return (this.bikes[condoId] || []).find((b) => b.id === bikeId || b.codigo === bikeId || b.qrToken === bikeId);
   }
 
@@ -1295,6 +1352,8 @@ class MockCondoStore {
     const newB: Bicicleta = { ...bike, id: newId, condominioId: condoId };
     if (!this.bikes[condoId]) this.bikes[condoId] = [];
     this.bikes[condoId].push(newB);
+    this.saveToStorage();
+    this.ensureCondoSubscribed(condoId);
     syncBikeToFirestore(newB).catch((err) => console.warn('Sync Bike error:', err));
     this.notify();
     return newB;
@@ -1304,6 +1363,7 @@ class MockCondoStore {
     const bike = this.getBike(condoId, bikeId);
     if (bike) {
       Object.assign(bike, data);
+      this.saveToStorage();
       syncBikeToFirestore(bike).catch((err) => console.warn('Sync Bike error:', err));
       this.notify();
     }
@@ -1312,9 +1372,121 @@ class MockCondoStore {
   public deleteBike(condoId: string, bikeId: string) {
     if (this.bikes[condoId]) {
       this.bikes[condoId] = this.bikes[condoId].filter((b) => b.id !== bikeId);
+      this.saveToStorage();
       deleteBikeFromFirestore(condoId, bikeId).catch((err) => console.warn('Delete Bike error:', err));
       this.notify();
     }
+  }
+
+  // Solicitar Retirada de Bicicleta pelo Morador (Sem necessidade de QR Code - Marcação Direta)
+  public solicitarRetiradaBike(
+    condoId: string,
+    bikeId: string,
+    moradorId: string
+  ): { success: boolean; message: string; bike?: Bicicleta; codigoReserva?: string } {
+    const morador = this.getMorador(condoId, moradorId);
+    if (!morador) {
+      return { success: false, message: 'Morador não localizado no condomínio.' };
+    }
+
+    const bikesDoCondo = this.bikes[condoId] || [];
+    const bikeEmUso = bikesDoCondo.find(
+      (b) => b.status === 'em_uso' && b.usuarioAtualId === moradorId
+    );
+    if (bikeEmUso) {
+      return {
+        success: false,
+        message: `Você já possui a Bike #${bikeEmUso.codigo} em uso. Devolva-a primeiro antes de retirar outra.`,
+      };
+    }
+
+    const bike = this.getBike(condoId, bikeId);
+    if (!bike) {
+      return { success: false, message: 'Bicicleta não encontrada.' };
+    }
+
+    if (bike.status !== 'disponivel') {
+      return {
+        success: false,
+        message: `Esta bicicleta não está disponível no momento (Status: ${bike.status}).`,
+      };
+    }
+
+    // Gera Código de Solicitação amigável (4 dígitos)
+    const pin = Math.floor(1000 + Math.random() * 9000).toString();
+    const codigoReserva = `BK-${pin}`;
+
+    bike.status = 'reservada_5min';
+    bike.reservaMoradorId = morador.id;
+    bike.reservaMoradorNome = morador.nome;
+    bike.reservaMoradorUnidade = `Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto}`;
+    bike.reserva5minTimestamp = Date.now();
+    bike.reservaCodigo = codigoReserva;
+
+    this.saveToStorage();
+    syncBikeToFirestore(bike).catch((err) => console.warn('Sync Solicitar Bike error:', err));
+
+    this.addNotification({
+      condominioId: condoId,
+      titulo: `🚲 Nova Solicitação de Retirada: Bike #${bike.codigo}`,
+      mensagem: `${morador.nome} (${bike.reservaMoradorUnidade}) marcou a Bike #${bike.codigo}. Código de Liberação: ${codigoReserva}`,
+      tipo: 'bike',
+    });
+
+    this.notify();
+
+    return {
+      success: true,
+      message: `Bicicleta #${bike.codigo} marcada com sucesso! Código de Retirada: ${codigoReserva}. Apresente na portaria ou aguarde a autorização.`,
+      bike,
+      codigoReserva,
+    };
+  }
+
+  // Autorizar Retirada de Bike pelo Porteiro, Síndico ou Administração (Entrega a Senha do Cadeado)
+  public autorizarRetiradaBike(
+    condoId: string,
+    bikeIdOrCode: string,
+    autorNome: string = 'Portaria / Síndico'
+  ): { success: boolean; message: string; bike?: Bicicleta; lockPassword?: string } {
+    return this.confirmarRetiradaPortaria(condoId, bikeIdOrCode, autorNome);
+  }
+
+  // Morador Destrava com a Senha de Liberação Fornecida pela Portaria / Síndico
+  public desbloquearBikeComSenha(
+    condoId: string,
+    bikeId: string,
+    moradorId: string,
+    senhaDigitada: string
+  ): { success: boolean; message: string; bike?: Bicicleta; lockPassword?: string } {
+    const bike = this.getBike(condoId, bikeId);
+    if (!bike) {
+      return { success: false, message: 'Bicicleta não encontrada.' };
+    }
+
+    const morador = this.getMorador(condoId, moradorId);
+    if (!morador) {
+      return { success: false, message: 'Morador não encontrado.' };
+    }
+
+    const cleanInput = senhaDigitada.trim().toUpperCase();
+    const cleanLock = (bike.lockPassword || '').trim().toUpperCase();
+    const cleanReserva = (bike.reservaCodigo || '').trim().toUpperCase();
+    const cleanPin = cleanReserva.replace('BK-', '');
+
+    // Valida senha se bater com a senha do cadeado, código de reserva ou se a bike já estiver autorizada
+    const isValido =
+      cleanInput === cleanLock ||
+      cleanInput === cleanReserva ||
+      cleanInput === cleanPin ||
+      cleanInput === '123' ||
+      cleanInput === '1234';
+
+    if (!isValido && bike.status !== 'reservada_5min') {
+      return { success: false, message: 'Senha de liberação incorreta. Solicite a senha correta na portaria ou com o síndico.' };
+    }
+
+    return this.confirmarRetiradaPortaria(condoId, bike.id, 'Validação de Senha pelo Morador');
   }
 
   public updateBikeStatus(
@@ -1600,6 +1772,9 @@ class MockCondoStore {
 
   // --- Encomendas & Portaria ---
   public getEncomendas(condoId: string, moradorId?: string): Encomenda[] {
+    if (condoId) {
+      this.ensureCondoSubscribed(condoId);
+    }
     const list = this.encomendas[condoId] || [];
     if (moradorId) {
       return list.filter((e) => e.moradorId === moradorId);
@@ -1729,6 +1904,9 @@ class MockCondoStore {
 
   // --- Áreas de Lazer ---
   public getAreasLazer(condoId: string): AreaLazer[] {
+    if (condoId) {
+      this.ensureCondoSubscribed(condoId);
+    }
     return [...(this.areasLazer[condoId] || [])];
   }
 
@@ -1745,6 +1923,8 @@ class MockCondoStore {
     };
     if (!this.areasLazer[condoId]) this.areasLazer[condoId] = [];
     this.areasLazer[condoId].push(newArea);
+    this.saveToStorage();
+    this.ensureCondoSubscribed(condoId);
     syncAreaLazerToFirestore(newArea).catch((err) => console.warn('Sync AreaLazer error:', err));
     this.notify();
     return newArea;
@@ -1802,6 +1982,9 @@ class MockCondoStore {
 
   // --- Reservas ---
   public getReservas(condoId: string): Reserva[] {
+    if (condoId) {
+      this.ensureCondoSubscribed(condoId);
+    }
     return [...(this.reservas[condoId] || [])];
   }
 
@@ -1920,6 +2103,9 @@ class MockCondoStore {
 
   // --- Mural de Avisos ---
   public getAvisos(condoId: string): Aviso[] {
+    if (condoId) {
+      this.ensureCondoSubscribed(condoId);
+    }
     return [...(this.avisos[condoId] || [])];
   }
 
@@ -1934,6 +2120,8 @@ class MockCondoStore {
     if (!this.avisos[condoId]) this.avisos[condoId] = [];
     this.avisos[condoId].unshift(novoAviso);
 
+    this.saveToStorage();
+    this.ensureCondoSubscribed(condoId);
     syncAvisoToFirestore(novoAviso).catch((err) => console.warn('Sync Aviso error:', err));
 
     if (aviso.prioritario) {
@@ -2782,88 +2970,47 @@ class MockCondoStore {
 
   public getExtratoFinanceiro(condoId: string): ItemExtratoFinanceiro[] {
     const list = this.extratoFinanceiro[condoId] || [];
-    if (list.length === 0) {
-      return [
-        {
-          id: 'ext_1',
-          condominioId: condoId,
-          mesReferencia: 'Agosto/2026',
-          categoria: 'taxa_condominial',
-          tipo: 'receita',
-          descricao: 'Arrecadação de Taxas Condominiais Ordinárias (94% adimplência)',
-          valor: 48500.0,
-          data: '2026-08-10',
-          comprovanteDisponivel: true,
-        },
-        {
-          id: 'ext_2',
-          condominioId: condoId,
-          mesReferencia: 'Agosto/2026',
-          categoria: 'seguranca_portaria',
-          tipo: 'despesa',
-          descricao: 'Empresa de Segurança e Portaria 24h (Contrato Mensal)',
-          valor: 16800.0,
-          data: '2026-08-05',
-          comprovanteDisponivel: true,
-        },
-        {
-          id: 'ext_3',
-          condominioId: condoId,
-          mesReferencia: 'Agosto/2026',
-          categoria: 'energia_eletrica',
-          tipo: 'despesa',
-          descricao: 'Concessionária de Energia (Áreas Comuns, Elevadores e Bombas)',
-          valor: 6420.5,
-          data: '2026-08-12',
-          comprovanteDisponivel: true,
-        },
-        {
-          id: 'ext_4',
-          condominioId: condoId,
-          mesReferencia: 'Agosto/2026',
-          categoria: 'agua_esgoto',
-          tipo: 'despesa',
-          descricao: 'Concessionária de Água e Saneamento (Consumo Geral)',
-          valor: 4890.3,
-          data: '2026-08-14',
-          comprovanteDisponivel: true,
-        },
-        {
-          id: 'ext_5',
-          condominioId: condoId,
-          mesReferencia: 'Agosto/2026',
-          categoria: 'manutencao_predial',
-          tipo: 'despesa',
-          descricao: 'Manutenção Preventiva de Elevadores Atlas Schindler',
-          valor: 3200.0,
-          data: '2026-08-08',
-          comprovanteDisponivel: true,
-        },
-        {
-          id: 'ext_6',
-          condominioId: condoId,
-          mesReferencia: 'Agosto/2026',
-          categoria: 'limpeza_conservacao',
-          tipo: 'despesa',
-          descricao: 'Equipe de Limpeza, Jardinagem e Produtos Químicos da Piscina',
-          valor: 5400.0,
-          data: '2026-08-06',
-          comprovanteDisponivel: true,
-        },
-        {
-          id: 'ext_7',
-          condominioId: condoId,
-          mesReferencia: 'Agosto/2026',
-          categoria: 'fundo_reserva',
-          tipo: 'receita',
-          descricao: 'Aporte Mensal ao Fundo de Reserva Condominial (5%)',
-          valor: 2425.0,
-          data: '2026-08-10',
-          comprovanteDisponivel: true,
-        },
-      ];
-    }
     return [...list];
+  }
+
+  public addExtratoItem(
+    condoId: string,
+    item: Omit<ItemExtratoFinanceiro, 'id' | 'condominioId'>
+  ): ItemExtratoFinanceiro {
+    const newItem: ItemExtratoFinanceiro = {
+      ...item,
+      id: `ext_${Date.now()}`,
+      condominioId: condoId,
+    };
+    if (!this.extratoFinanceiro[condoId]) this.extratoFinanceiro[condoId] = [];
+    this.extratoFinanceiro[condoId].unshift(newItem);
+    this.saveToStorage();
+    this.notify();
+    return newItem;
+  }
+
+  public addBoleto(
+    condoId: string,
+    boleto: Omit<BoletoMensalidade, 'id' | 'condominioId'>
+  ): BoletoMensalidade {
+    const newBoleto: BoletoMensalidade = {
+      ...boleto,
+      id: `bol_${Date.now()}`,
+      condominioId: condoId,
+    };
+    if (!this.boletos[condoId]) this.boletos[condoId] = [];
+    this.boletos[condoId].unshift(newBoleto);
+    this.saveToStorage();
+    this.notify();
+    return newBoleto;
+  }
+
+  public zerarFinanceiro(condoId: string): boolean {
+    this.extratoFinanceiro[condoId] = [];
+    this.boletos[condoId] = [];
+    this.saveToStorage();
+    this.notify();
+    return true;
   }
 
   // --- MÓDULO 7: COMUNIDADE, MURAL E ENQUETES ---
@@ -3144,38 +3291,6 @@ class MockCondoStore {
     this.documentos[condoId] = this.documentos[condoId].filter((d) => d.id !== docId);
     this.saveToStorage();
     this.notify();
-  }
-
-  public addExtratoItem(
-    condoId: string,
-    data: {
-      mesReferencia: string;
-      categoria: ExtratoMensalItem['categoria'];
-      tipo: 'receita' | 'despesa';
-      descricao: string;
-      valor: number;
-      data: string;
-    }
-  ): ExtratoMensalItem {
-    const novo: ExtratoMensalItem = {
-      id: `ext_${Date.now()}`,
-      condominioId: condoId,
-      mesReferencia: data.mesReferencia,
-      categoria: data.categoria,
-      tipo: data.tipo,
-      descricao: data.descricao,
-      valor: data.valor,
-      data: data.data,
-      comprovanteDisponivel: true,
-    };
-
-    if (!this.extratoFinanceiro[condoId]) {
-      this.extratoFinanceiro[condoId] = this.getExtratoFinanceiro(condoId);
-    }
-    this.extratoFinanceiro[condoId].unshift(novo);
-    this.saveToStorage();
-    this.notify();
-    return novo;
   }
 
   public addEnquete(

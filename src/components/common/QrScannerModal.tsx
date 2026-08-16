@@ -33,7 +33,7 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
     onDirectCheckout(manualCode.trim().toUpperCase());
   };
 
-  const availableBikesList = availableBikes.filter((b) => b.status === 'disponivel');
+  const availableBikesList = (availableBikes || []).filter((b) => b.status === 'disponivel');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">

@@ -80,6 +80,7 @@ import { condoStore } from '../../services/mockStorage';
 import { QrScannerModal } from '../common/QrScannerModal';
 import { BikeLockModal } from '../common/BikeLockModal';
 import { BikeReturnModal } from '../common/BikeReturnModal';
+import { BikeSelectionModal } from '../common/BikeSelectionModal';
 import confetti from 'canvas-confetti';
 
 interface MoradorDashboardProps {
@@ -122,6 +123,7 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
   const [isLockModalOpen, setIsLockModalOpen] = useState(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [selectedBikeForLock, setSelectedBikeForLock] = useState<Bicicleta | null>(null);
+  const [selectedBikeForManualModal, setSelectedBikeForManualModal] = useState<Bicicleta | null>(null);
   const [currentLockPassword, setCurrentLockPassword] = useState('');
   const [bikeForReturn, setBikeForReturn] = useState<Bicicleta | null>(null);
 
@@ -1062,7 +1064,7 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
       {/* ==================================================================== */}
       {activeTab === 'bicicletario' && (
         <div className="space-y-6">
-          {/* Informações das Regras de 5 Minutos */}
+          {/* Informações das Regras de Retirada */}
           <div className="bg-emerald-50 border border-emerald-200 p-5 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
@@ -1070,21 +1072,39 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
               </div>
               <div>
                 <h3 className="text-sm font-black text-emerald-950">
-                  Sistema de Mobilidade Compartilhada Novolar
+                  Mobilidade & Bicicletas Compartilhadas Novolar
                 </h3>
                 <p className="text-xs text-emerald-800 mt-0.5">
-                  ⏱️ <strong>Tolerância de 5 Minutos:</strong> Ao reservar pelo app, você tem 5 minutos exatos para retirar a bicicleta no totem da portaria. Após esse tempo, a reserva é cancelada automaticamente para liberar aos vizinhos.
+                  ⏱️ <strong>Retirada com Senha da Portaria / Síndico:</strong> Selecione e marque a bicicleta desejada. O porteiro ou síndico fornecerá a senha do cadeado para você destravar e aproveitar o passeio.
                 </p>
               </div>
             </div>
 
-            <button
-              onClick={() => setIsQrModalOpen(true)}
-              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition whitespace-nowrap flex items-center justify-center gap-2"
-            >
-              <QrCode className="w-4 h-4" />
-              <span>Desbloquear via QR Code</span>
-            </button>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                onClick={() => {
+                  const bikeDisponivel = bikes.find((b) => b.status === 'disponivel');
+                  if (bikeDisponivel) {
+                    setSelectedBikeForManualModal(bikeDisponivel);
+                  } else {
+                    setAlertMessage({ type: 'warning', text: 'Nenhuma bicicleta disponível no totem no momento.' });
+                  }
+                }}
+                className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition whitespace-nowrap flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <KeyRound className="w-4 h-4" />
+                <span>Marcar Bike & Pegar Senha</span>
+              </button>
+
+              <button
+                onClick={() => setIsQrModalOpen(true)}
+                className="px-3.5 py-2.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-extrabold text-xs transition whitespace-nowrap flex items-center justify-center gap-1.5 cursor-pointer"
+                title="Desbloqueio alternativo via QR Code"
+              >
+                <QrCode className="w-4 h-4 text-emerald-800" />
+                <span className="hidden md:inline">Ler QR Code</span>
+              </button>
+            </div>
           </div>
 
           {/* Grid de Bicicletas do Condomínio */}
@@ -1183,25 +1203,26 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
                   <div className="p-4 bg-slate-50/70 border-t border-slate-200 flex items-center gap-2">
                     {bike.status === 'disponivel' && !activeBikeInUse && !bikeReservadaMorador && (
                       <button
-                        onClick={() => handleReservar5Min(bike.id)}
-                        className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow transition active:scale-98 flex items-center justify-center gap-1.5"
+                        onClick={() => setSelectedBikeForManualModal(bike)}
+                        className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow transition active:scale-98 flex items-center justify-center gap-1.5 cursor-pointer"
                       >
-                        <Clock className="w-3.5 h-3.5" />
-                        <span>Reservar por 5 Minutos</span>
+                        <KeyRound className="w-3.5 h-3.5" />
+                        <span>Marcar & Retirar Bike</span>
                       </button>
                     )}
 
                     {isReservedByMe && (
                       <div className="flex items-center gap-2 w-full">
                         <button
-                          onClick={() => handleConfirmarRetirada(bike)}
-                          className="flex-1 py-2.5 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow transition"
+                          onClick={() => setSelectedBikeForManualModal(bike)}
+                          className="flex-1 py-2.5 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow transition cursor-pointer flex items-center justify-center gap-1"
                         >
-                          Destravar Agora
+                          <LockOpen className="w-3.5 h-3.5" />
+                          <span>Digitar Senha / Destravar</span>
                         </button>
                         <button
                           onClick={() => handleCancelarReserva5Min(bike.id)}
-                          className="py-2.5 px-3 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-xs transition"
+                          className="py-2.5 px-3 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-xs transition cursor-pointer"
                         >
                           Cancelar
                         </button>
@@ -1214,9 +1235,9 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
                           setBikeForReturn(bike);
                           setIsReturnModalOpen(true);
                         }}
-                        className="w-full py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow transition"
+                        className="w-full py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow transition cursor-pointer"
                       >
-                        Devolver com Checklist
+                        Devolver com Vistoria Fotográfica
                       </button>
                     )}
 
@@ -2305,6 +2326,24 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal: Marcar Bicicleta & Destravar com Senha sem QR Code */}
+      <BikeSelectionModal
+        isOpen={!!selectedBikeForManualModal}
+        onClose={() => setSelectedBikeForManualModal(null)}
+        bike={selectedBikeForManualModal}
+        condoId={condominio.id}
+        morador={morador}
+        onSuccessUnlock={(unlockedBike, lockPassword) => {
+          setSelectedBikeForLock(unlockedBike);
+          setCurrentLockPassword(lockPassword);
+          setIsLockModalOpen(true);
+          setAlertMessage({
+            type: 'success',
+            text: `Bicicleta #${unlockedBike.codigo} destravada com sucesso! Bom passeio!`,
+          });
+        }}
+      />
     </div>
   );
 };

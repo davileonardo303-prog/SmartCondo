@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Building2,
   Bike,
@@ -176,18 +176,44 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
   const [novoDocDescricao, setNovoDocDescricao] = useState('');
   const [novoDocTamanho, setNovoDocTamanho] = useState('2.4 MB');
 
+  // Sincroniza formulário de configurações quando o condomínio for alterado ou carregado
+  useEffect(() => {
+    if (condominio) {
+      setConfigNome(condominio.nome || '');
+      setConfigEndereco(condominio.endereco || '');
+      setConfigCidade(condominio.cidade || '');
+      setConfigUf(condominio.uf || 'RJ');
+      setConfigUnidades(condominio.totalUnidades || 0);
+      setConfigCnpj(condominio.cnpj || '');
+      setConfigSindicoNome(condominio.sindicoNome || '');
+      setConfigSindicoEmail(condominio.sindicoEmail || '');
+      setConfigLimiteTempoBike(condominio.regras?.limiteTempoBikeMinutos || 180);
+      setConfigLimiteBikesMorador(condominio.regras?.limiteBikesPorMorador || 1);
+      setConfigHorarioBicicletario(condominio.regras?.horarioBicicletario || '06:00 às 22:00');
+      setConfigTaxaSalao(condominio.regras?.taxaReservaSalao || 150);
+      setConfigDiasAntecedencia(condominio.regras?.diasAntecedenciaReserva || 30);
+    }
+  }, [condominio]);
+
   const [feedbackMsg, setFeedbackMsg] = useState('');
 
-  const moradoresPendentes = condoStore.getMoradoresPendentes(condominio.id);
-  const ocorrencias = condoStore.getOcorrencias(condominio.id);
-  const extratoFinanceiro = condoStore.getExtratoFinanceiro(condominio.id);
-  const boletosCondominio = condoStore.getBoletos(condominio.id);
-  const enquetes = condoStore.getEnquetes(condominio.id);
-  const muralPosts = condoStore.getMuralPosts(condominio.id);
-  const sugestoes = condoStore.getSugestoes(condominio.id);
-  const documentos = condoStore.getDocumentos(condominio.id);
-  const adimplentesCount = moradores.filter((m) => m.statusAdimplencia === 'em_dia').length;
-  const inadimplentesCount = moradores.filter((m) => m.statusAdimplencia === 'com_pendencia').length;
+  const condoId = condominio?.id || 'condo_park_avenue';
+  const safeMoradores = moradores || [];
+  const safeBikes = bikes || [];
+  const safeAreasLazer = areasLazer || [];
+  const safeReservas = reservas || [];
+  const safeAvisos = avisos || [];
+
+  const moradoresPendentes = condoStore.getMoradoresPendentes(condoId);
+  const ocorrencias = condoStore.getOcorrencias(condoId);
+  const extratoFinanceiro = condoStore.getExtratoFinanceiro(condoId);
+  const boletosCondominio = condoStore.getBoletos(condoId);
+  const enquetes = condoStore.getEnquetes(condoId);
+  const muralPosts = condoStore.getMuralPosts(condoId);
+  const sugestoes = condoStore.getSugestoes(condoId);
+  const documentos = condoStore.getDocumentos(condoId);
+  const adimplentesCount = safeMoradores.filter((m) => m.statusAdimplencia === 'em_dia').length;
+  const inadimplentesCount = safeMoradores.filter((m) => m.statusAdimplencia === 'com_pendencia').length;
 
   const showNotification = (msg: string) => {
     setFeedbackMsg(msg);
@@ -282,7 +308,7 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
     const pass = newBikeLockPassword.trim() || Math.floor(1000 + Math.random() * 9000).toString();
     const qr = `QR-${condominio.id.toUpperCase()}-${newBikeCodigo.toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`;
 
-    condoStore.addBike(condominio.id, {
+    const bikeData: any = {
       codigo: newBikeCodigo.toUpperCase(),
       modelo: newBikeModelo,
       tipo: newBikeTipo,
@@ -292,8 +318,12 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
       lockPassword: pass,
       localizacaoAtual: 'Bicicletário Principal',
       ultimaRevisao: new Date().toLocaleDateString('pt-BR'),
-      nivelBateria: newBikeTipo === 'e-bike' ? 100 : undefined,
-    });
+    };
+    if (newBikeTipo === 'e-bike') {
+      bikeData.nivelBateria = 100;
+    }
+
+    condoStore.addBike(condominio.id, bikeData);
 
     setNewBikeCodigo('');
     setNewBikeModelo('');
@@ -2058,62 +2088,88 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
                   Lançamentos visíveis no aplicativo de todos os condôminos para máxima transparência.
                 </p>
               </div>
-              <button
-                onClick={() => setShowAddExtratoModal(true)}
-                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition active:scale-98 cursor-pointer flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Novo Lançamento Financeiro</span>
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => {
+                    if (confirm('Tem certeza que deseja zerar todos os lançamentos do financeiro deste condomínio?')) {
+                      condoStore.zerarFinanceiro(condominio.id);
+                      showNotification('Módulo financeiro zerado com sucesso!');
+                    }
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs shadow-sm transition active:scale-98 cursor-pointer flex items-center gap-1.5"
+                  title="Zera lançamentos de balancete e boletos do condomínio"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Zerar Financeiro</span>
+                </button>
+
+                <button
+                  onClick={() => setShowAddExtratoModal(true)}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition active:scale-98 cursor-pointer flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Novo Lançamento Financeiro</span>
+                </button>
+              </div>
             </div>
 
             {/* Tabela de Lançamentos */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-100 text-slate-500 font-bold text-[11px]">
-                    <th className="pb-3">Data</th>
-                    <th className="pb-3">Descrição da Despesa / Receita</th>
-                    <th className="pb-3">Categoria</th>
-                    <th className="pb-3">Tipo</th>
-                    <th className="pb-3 text-right">Valor (R$)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {extratoFinanceiro.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50 transition">
-                      <td className="py-3 text-slate-500 font-medium">
-                        {item.data.split('-').reverse().slice(0, 2).join('/')}
-                      </td>
-                      <td className="py-3 font-semibold text-slate-800">{item.descricao}</td>
-                      <td className="py-3">
-                        <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold capitalize">
-                          {item.categoria.replace('_', ' ')}
-                        </span>
-                      </td>
-                      <td className="py-3">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            item.tipo === 'receita'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-rose-100 text-rose-800'
+            {extratoFinanceiro.length === 0 ? (
+              <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                <FileSpreadsheet className="w-10 h-10 text-slate-400 mx-auto mb-2" />
+                <h4 className="font-bold text-sm text-slate-800">Nenhum lançamento financeiro registrado</h4>
+                <p className="text-xs text-slate-500 mt-1">
+                  O módulo financeiro está limpo e zerado. Adicione novos lançamentos de receitas e despesas quando desejar.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-slate-500 font-bold text-[11px]">
+                      <th className="pb-3">Data</th>
+                      <th className="pb-3">Descrição da Despesa / Receita</th>
+                      <th className="pb-3">Categoria</th>
+                      <th className="pb-3">Tipo</th>
+                      <th className="pb-3 text-right">Valor (R$)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {extratoFinanceiro.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50 transition">
+                        <td className="py-3 text-slate-500 font-medium">
+                          {item.data.split('-').reverse().slice(0, 2).join('/')}
+                        </td>
+                        <td className="py-3 font-semibold text-slate-800">{item.descricao}</td>
+                        <td className="py-3">
+                          <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold capitalize">
+                            {item.categoria.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="py-3">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              item.tipo === 'receita'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-rose-100 text-rose-800'
+                            }`}
+                          >
+                            {item.tipo === 'receita' ? 'Receita (+)' : 'Despesa (-)'}
+                          </span>
+                        </td>
+                        <td
+                          className={`py-3 text-right font-bold ${
+                            item.tipo === 'receita' ? 'text-emerald-600' : 'text-slate-900'
                           }`}
                         >
-                          {item.tipo === 'receita' ? 'Receita (+)' : 'Despesa (-)'}
-                        </span>
-                      </td>
-                      <td
-                        className={`py-3 text-right font-bold ${
-                          item.tipo === 'receita' ? 'text-emerald-600' : 'text-slate-900'
-                        }`}
-                      >
-                        {item.tipo === 'receita' ? '+' : '-'} R$ {item.valor.toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                          {item.tipo === 'receita' ? '+' : '-'} R$ {item.valor.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* Gestão de Boletos das Unidades */}
