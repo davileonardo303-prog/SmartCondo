@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <rect width="192" height="192" rx="42" fill="#090d16"/>
+  <circle cx="96" cy="96" r="76" fill="#064e3b"/>
+  <!-- Buildings -->
+  <path d="M40 148H152" stroke="#10b981" stroke-width="6" stroke-linecap="round"/>
+  <path d="M52 148V76L96 48V148H52Z" fill="#10b981"/>
+  <path d="M96 148V36L140 64V148H96Z" fill="#34d399"/>
+  <!-- Windows -->
+  <rect x="64" y="88" width="10" height="12" rx="2" fill="#ffffff" opacity="0.85"/>
+  <rect x="78" y="88" width="10" height="12" rx="2" fill="#ffffff" opacity="0.85"/>
+  <rect x="64" y="108" width="10" height="12" rx="2" fill="#ffffff" opacity="0.85"/>
+  <rect x="78" y="108" width="10" height="12" rx="2" fill="#ffffff" opacity="0.85"/>
+  <rect x="108" y="76" width="10" height="12" rx="2" fill="#090d16" opacity="0.7"/>
+  <rect x="122" y="76" width="10" height="12" rx="2" fill="#090d16" opacity="0.7"/>
+  <rect x="108" y="98" width="10" height="12" rx="2" fill="#090d16" opacity="0.7"/>
+  <rect x="122" y="98" width="10" height="12" rx="2" fill="#090d16" opacity="0.7"/>
+  <!-- Gold Door/Accent -->
+  <path d="M88 148V130C88 125.58 91.58 122 96 122C100.42 122 104 125.58 104 130V148" fill="#090d16" stroke="#fbbf24" stroke-width="4"/>
+</svg>

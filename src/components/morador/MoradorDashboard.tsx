@@ -28,6 +28,34 @@ import {
   Flame,
   Waves,
   Dumbbell,
+  Shield,
+  Video,
+  Camera,
+  DollarSign,
+  Receipt,
+  CreditCard,
+  MessageSquare,
+  Vote,
+  ThumbsUp,
+  MessageCircle,
+  Send,
+  Plus,
+  Trash2,
+  X,
+  Share2,
+  Download,
+  Search,
+  ExternalLink,
+  Users,
+  Car,
+  Dog,
+  Eye,
+  ArrowRight,
+  TrendingUp,
+  PieChart,
+  RefreshCw,
+  BellRing,
+  KeyRound,
 } from 'lucide-react';
 import {
   Condominio,
@@ -38,6 +66,15 @@ import {
   Reserva,
   Aviso,
   HistoricoLocacao,
+  VisitanteLiberado,
+  CameraAreaComum,
+  Ocorrencia,
+  BoletoMensalidade,
+  ItemExtratoFinanceiro,
+  MuralPost,
+  EnqueteCondominio,
+  SugestaoMorador,
+  DocumentoCondominio,
 } from '../../types';
 import { condoStore } from '../../services/mockStorage';
 import { QrScannerModal } from '../common/QrScannerModal';
@@ -66,26 +103,134 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
   avisos,
   historicoLocacoes,
 }) => {
-  const [activeTab, setActiveTab] = useState<'bicicletario' | 'encomendas' | 'lazer' | 'avisos' | 'unidade'>('bicicletario');
+  // Navigation Tabs (Todos os 8 módulos do SmartCondo)
+  const [activeTab, setActiveTab] = useState<
+    | 'inicio'
+    | 'bicicletario'
+    | 'lazer'
+    | 'seguranca'
+    | 'encomendas'
+    | 'ocorrencias'
+    | 'financeiro'
+    | 'mural'
+    | 'documentos'
+    | 'unidade'
+  >('inicio');
+
+  // Modais do Bicicletário
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [isLockModalOpen, setIsLockModalOpen] = useState(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [selectedBikeForLock, setSelectedBikeForLock] = useState<Bicicleta | null>(null);
   const [currentLockPassword, setCurrentLockPassword] = useState('');
   const [bikeForReturn, setBikeForReturn] = useState<Bicicleta | null>(null);
-  const [alertMessage, setAlertMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
 
-  // New Reservation Form State
+  // Mensagens e Alertas
+  const [alertMessage, setAlertMessage] = useState<{ type: 'error' | 'success' | 'warning'; text: string } | null>(null);
+
+  // State: Reserva de Áreas de Lazer
   const [reservaAreaId, setReservaAreaId] = useState('');
   const [reservaData, setReservaData] = useState('');
   const [reservaPeriodo, setReservaPeriodo] = useState<'manha' | 'tarde' | 'noite' | 'dia_inteiro'>('noite');
   const [reservaTermoAceito, setReservaTermoAceito] = useState(false);
   const [reservaObs, setReservaObs] = useState('');
 
-  // Active bike used by current morador
-  const activeBikeInUse = bikes.find((b) => b.status === 'em_uso' && b.usuarioAtualId === morador.id);
+  // State: Novo Visitante
+  const [isNovoVisitanteModalOpen, setIsNovoVisitanteModalOpen] = useState(false);
+  const [visNome, setVisNome] = useState('');
+  const [visDoc, setVisDoc] = useState('');
+  const [visPlaca, setVisPlaca] = useState('');
+  const [visTipo, setVisTipo] = useState<'visitante' | 'prestador' | 'entrega'>('visitante');
+  const [visEmpresa, setVisEmpresa] = useState('');
+  const [visData, setVisData] = useState(new Date().toISOString().split('T')[0]);
+  const [visPeriodo, setVisPeriodo] = useState('Dia Inteiro');
+  const [visObs, setVisObs] = useState('');
+  const [visitanteCriadoRecente, setVisitanteCriadoRecente] = useState<VisitanteLiberado | null>(null);
 
-  // Timer for active ride
+  // State: Nova Ocorrência
+  const [isNovaOcorrenciaModalOpen, setIsNovaOcorrenciaModalOpen] = useState(false);
+  const [ocorrTitulo, setOcorrTitulo] = useState('');
+  const [ocorrDescricao, setOcorrDescricao] = useState('');
+  const [ocorrCategoria, setOcorrCategoria] = useState<Ocorrencia['categoria']>('manutencao');
+  const [ocorrPrioridade, setOcorrPrioridade] = useState<Ocorrencia['prioridade']>('media');
+
+  // State: Novo Post no Mural
+  const [isNovoPostModalOpen, setIsNovoPostModalOpen] = useState(false);
+  const [postTipo, setPostTipo] = useState<MuralPost['tipo']>('troca_venda');
+  const [postTitulo, setPostTitulo] = useState('');
+  const [postConteudo, setPostConteudo] = useState('');
+  const [postValor, setPostValor] = useState('');
+  const [postContato, setPostContato] = useState(morador.telefone);
+  const [comentarioTexto, setComentarioTexto] = useState<{ [postId: string]: string }>({});
+
+  // State: Nova Sugestão
+  const [isNovaSugestaoModalOpen, setIsNovaSugestaoModalOpen] = useState(false);
+  const [sugTitulo, setSugTitulo] = useState('');
+  const [sugMensagem, setSugMensagem] = useState('');
+
+  // Estado das Câmeras selecionadas para tela cheia / visualização
+  const [cameraAtiva, setCameraAtiva] = useState<CameraAreaComum | null>(null);
+
+  // Filtro de avisos
+  const [filtroAvisoCat, setFiltroAvisoCat] = useState<string>('todos');
+
+  // Copiado feedback
+  const [copiadoKey, setCopiadoKey] = useState<string | null>(null);
+
+  // Dados reativos carregados do store
+  const visitantes = condoStore.getVisitantes(condominio.id, morador.id);
+  const cameras = condoStore.getCameras(condominio.id);
+  const ocorrencias = condoStore.getOcorrencias(condominio.id, morador.id);
+  const boletos = condoStore.getBoletos(condominio.id, morador.id);
+  const extrato = condoStore.getExtratoFinanceiro(condominio.id);
+  const muralPosts = condoStore.getMuralPosts(condominio.id);
+  const enquetes = condoStore.getEnquetes(condominio.id);
+  const sugestoes = condoStore.getSugestoes(condominio.id);
+  const documentos = condoStore.getDocumentos(condominio.id);
+
+  // --------------------------------------------------------------------------
+  // TIMER DE 5 MINUTOS DA RESERVA DE BICICLETA (NOVOLAR)
+  // --------------------------------------------------------------------------
+  // Localiza se o morador possui uma bicicleta reservada no momento
+  const bikeReservadaMorador = bikes.find(
+    (b) => b.status === 'reservada_5min' && b.reservaMoradorId === morador.id
+  );
+
+  // Localiza se o morador possui uma bicicleta atualmente em andamento (em uso)
+  const activeBikeInUse = bikes.find(
+    (b) => b.status === 'em_uso' && b.usuarioAtualId === morador.id
+  );
+
+  // Contagem regressiva em segundos do prazo de 5 minutos (300 segundos)
+  const [segundosRestantes5Min, setSegundosRestantes5Min] = useState<number>(300);
+
+  useEffect(() => {
+    if (!bikeReservadaMorador || !bikeReservadaMorador.reserva5minTimestamp) {
+      setSegundosRestantes5Min(300);
+      return;
+    }
+
+    const updateCountdown = () => {
+      const LIMITE_MS = 5 * 60 * 1000;
+      const decorrido = Date.now() - bikeReservadaMorador.reserva5minTimestamp!;
+      const restanteMs = Math.max(0, LIMITE_MS - decorrido);
+      const segRestantes = Math.ceil(restanteMs / 1000);
+      setSegundosRestantes5Min(segRestantes);
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [bikeReservadaMorador]);
+
+  // Formata MM:SS
+  const formatCountdown = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  // Timer para passeio em andamento (em minutos)
   const [elapsedMinutes, setElapsedMinutes] = useState(0);
   useEffect(() => {
     if (!activeBikeInUse || !activeBikeInUse.inicioUsoTimestamp) {
@@ -100,6 +245,39 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
     const interval = setInterval(updateTimer, 15000);
     return () => clearInterval(interval);
   }, [activeBikeInUse]);
+
+  // Ações do Bicicletário
+  const handleReservar5Min = (bikeId: string) => {
+    const res = condoStore.reservarBike5Min(condominio.id, bikeId, morador.id);
+    if (res.success) {
+      setAlertMessage({ type: 'success', text: res.message });
+      confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+    } else {
+      setAlertMessage({ type: 'error', text: res.message });
+    }
+  };
+
+  const handleCancelarReserva5Min = (bikeId: string) => {
+    const res = condoStore.cancelarReserva5Min(condominio.id, bikeId, 'Reserva cancelada voluntariamente pelo morador.');
+    if (res.success) {
+      setAlertMessage({ type: 'warning', text: res.message });
+    } else {
+      setAlertMessage({ type: 'error', text: res.message });
+    }
+  };
+
+  const handleConfirmarRetirada = (bike: Bicicleta) => {
+    const res = condoStore.confirmarRetiradaPortaria(condominio.id, bike.id, 'Morador via App');
+    if (res.success && res.bike) {
+      setSelectedBikeForLock(res.bike);
+      setCurrentLockPassword(res.lockPassword || res.bike.lockPassword);
+      setIsLockModalOpen(true);
+      setAlertMessage({ type: 'success', text: res.message });
+      confetti({ particleCount: 80, spread: 80, origin: { y: 0.5 } });
+    } else {
+      setAlertMessage({ type: 'error', text: res.message });
+    }
+  };
 
   const handleScanCheckout = (bikeCodeOrToken: string) => {
     setIsQrModalOpen(false);
@@ -123,17 +301,23 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
     pneusOk: boolean;
     quadroOk: boolean;
     observacoes: string;
+    fotoVistoriaDevolucaoUrl?: string;
+    detalhesDefeito?: string;
   }) => {
     if (!bikeForReturn) return;
-    const result = condoStore.checkinBike(condominio.id, bikeForReturn.id, morador.id, data);
+    const result = condoStore.checkinBike(condominio.id, bikeForReturn.id, morador.id, {
+      ...data,
+      vistoriaOperador: `${morador.nome} (Autoatendimento)`,
+    });
     setIsReturnModalOpen(false);
     setBikeForReturn(null);
     setAlertMessage({
-      type: result.emManutencao ? 'error' : 'success',
+      type: result.emManutencao ? 'warning' : 'success',
       text: result.message,
     });
   };
 
+  // Criação de Reserva de Lazer
   const handleCreateReserva = (e: React.FormEvent) => {
     e.preventDefault();
     if (!reservaAreaId || !reservaData) {
@@ -166,112 +350,279 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
     }
   };
 
+  // Criação de Visitante
+  const handleCriarVisitante = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!visNome.trim()) {
+      setAlertMessage({ type: 'error', text: 'Informe o nome do visitante ou prestador.' });
+      return;
+    }
+
+    try {
+      const novo = condoStore.addVisitante(condominio.id, {
+        moradorId: morador.id,
+        nomeVisitante: visNome.trim(),
+        documento: visDoc.trim(),
+        placaVeiculo: visPlaca.trim(),
+        tipo: visTipo,
+        empresa: visEmpresa.trim(),
+        dataVisita: visData,
+        periodoPermitido: visPeriodo,
+        observacoes: visObs.trim(),
+      });
+
+      setVisitanteCriadoRecente(novo);
+      setVisNome('');
+      setVisDoc('');
+      setVisPlaca('');
+      setVisEmpresa('');
+      setVisObs('');
+      setAlertMessage({ type: 'success', text: `Autorização para ${novo.nomeVisitante} gerada com sucesso!` });
+      confetti({ particleCount: 60, spread: 70 });
+    } catch (err: any) {
+      setAlertMessage({ type: 'error', text: err.message || 'Erro ao criar autorização.' });
+    }
+  };
+
+  // Criação de Ocorrência
+  const handleCriarOcorrencia = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ocorrTitulo.trim() || !ocorrDescricao.trim()) {
+      setAlertMessage({ type: 'error', text: 'Preencha o título e o relato da ocorrência.' });
+      return;
+    }
+
+    try {
+      condoStore.addOcorrencia(condominio.id, {
+        moradorId: morador.id,
+        titulo: ocorrTitulo.trim(),
+        descricao: ocorrDescricao.trim(),
+        categoria: ocorrCategoria,
+        prioridade: ocorrPrioridade,
+      });
+
+      setIsNovaOcorrenciaModalOpen(false);
+      setOcorrTitulo('');
+      setOcorrDescricao('');
+      setAlertMessage({ type: 'success', text: 'Ocorrência enviada à administração e registrada com sucesso!' });
+      confetti({ particleCount: 50, spread: 60 });
+    } catch (err: any) {
+      setAlertMessage({ type: 'error', text: err.message || 'Erro ao registrar ocorrência.' });
+    }
+  };
+
+  // Criação de Post no Mural
+  const handleCriarPostMural = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!postTitulo.trim() || !postConteudo.trim()) {
+      setAlertMessage({ type: 'error', text: 'Preencha o título e o conteúdo do anúncio.' });
+      return;
+    }
+
+    try {
+      condoStore.addMuralPost(condominio.id, {
+        autorId: morador.id,
+        tipo: postTipo,
+        titulo: postTitulo.trim(),
+        conteudo: postConteudo.trim(),
+        valor: postValor ? parseFloat(postValor) : undefined,
+        contatoTelefone: postContato.trim(),
+      });
+
+      setIsNovoPostModalOpen(false);
+      setPostTitulo('');
+      setPostConteudo('');
+      setPostValor('');
+      setAlertMessage({ type: 'success', text: 'Publicação realizada no mural da comunidade!' });
+      confetti({ particleCount: 50, spread: 60 });
+    } catch (err: any) {
+      setAlertMessage({ type: 'error', text: err.message || 'Erro ao publicar no mural.' });
+    }
+  };
+
+  // Comentar no Mural
+  const handleComentarPost = (postId: string) => {
+    const texto = comentarioTexto[postId];
+    if (!texto || !texto.trim()) return;
+
+    condoStore.addComentarioMural(condominio.id, postId, {
+      autorNome: morador.nome,
+      autorUnidade: `Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto}`,
+      texto: texto.trim(),
+    });
+
+    setComentarioTexto((prev) => ({ ...prev, [postId]: '' }));
+  };
+
+  // Votar em Enquete
+  const handleVotarEnquete = (enqueteId: string, opcaoId: string) => {
+    const res = condoStore.votarEnquete(condominio.id, enqueteId, opcaoId, morador.id);
+    if (res) {
+      setAlertMessage({ type: 'success', text: 'Voto computado com sucesso na enquete!' });
+      confetti({ particleCount: 40, spread: 50 });
+    }
+  };
+
+  // Enviar Sugestão
+  const handleEnviarSugestao = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sugTitulo.trim() || !sugMensagem.trim()) return;
+
+    condoStore.addSugestao(condominio.id, {
+      moradorId: morador.id,
+      titulo: sugTitulo.trim(),
+      mensagem: sugMensagem.trim(),
+    });
+
+    setIsNovaSugestaoModalOpen(false);
+    setSugTitulo('');
+    setSugMensagem('');
+    setAlertMessage({ type: 'success', text: 'Sua sugestão foi enviada diretamente ao síndico!' });
+  };
+
+  // Copiar para clipboard
+  const handleCopiarTexto = (texto: string, key: string) => {
+    navigator.clipboard.writeText(texto);
+    setCopiadoKey(key);
+    setTimeout(() => setCopiadoKey(null), 2500);
+  };
+
+  // Totais e contadores
   const pendingPackages = encomendas.filter((e) => e.status === 'na_portaria');
   const deliveredPackages = encomendas.filter((e) => e.status === 'entregue');
   const myReservations = reservas.filter((r) => r.moradorId === morador.id);
-
   const availableBikesCount = bikes.filter((b) => b.status === 'disponivel').length;
   const inUseBikesCount = bikes.filter((b) => b.status === 'em_uso').length;
-  const maintenanceBikesCount = bikes.filter((b) => b.status === 'manutencao').length;
+  const avisoDestaque = avisos.find((a) => a.prioritario) || avisos[0];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-      {/* Alertas de Notificação do Sistema */}
+      {/* Alerta de Feedback Superior */}
       {alertMessage && (
         <div
-          className={`p-4 rounded-xl flex items-center justify-between text-sm shadow-sm border transition-all ${
+          className={`p-4 rounded-2xl flex items-center justify-between text-sm shadow-sm border transition-all ${
             alertMessage.type === 'success'
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-              : 'bg-rose-50 border-rose-200 text-rose-800'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              : alertMessage.type === 'warning'
+              ? 'bg-amber-50 border-amber-200 text-amber-900'
+              : 'bg-rose-50 border-rose-200 text-rose-900'
           }`}
         >
           <div className="flex items-center gap-3">
             {alertMessage.type === 'success' ? (
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : alertMessage.type === 'warning' ? (
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
             ) : (
               <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
             )}
-            <span className="font-medium">{alertMessage.text}</span>
+            <span className="font-semibold">{alertMessage.text}</span>
           </div>
           <button
             onClick={() => setAlertMessage(null)}
-            className="text-xs font-semibold underline hover:opacity-75 ml-4"
+            className="text-xs font-bold underline hover:opacity-75 ml-4"
           >
             Fechar
           </button>
         </div>
       )}
 
-      {/* Cartão de Boas-Vindas Elegante */}
-      <div className="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-              Espaço do Morador
-            </span>
-            <span className="text-xs text-slate-500 font-medium">{condominio.nome}</span>
+      {/* ==================================================================== */}
+      {/* DESTAQUE PRINCIPAL: CONTADOR DE 5 MINUTOS DA RESERVA DE BIKE        */}
+      {/* ==================================================================== */}
+      {bikeReservadaMorador && (
+        <div className="p-6 rounded-3xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white shadow-xl shadow-amber-500/20 border border-amber-300 relative overflow-hidden animate-pulse-slow">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="bg-white/20 backdrop-blur-md text-white text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 animate-spin" />
+                  Reserva em Andamento • Prazo de 5 Minutos
+                </span>
+                <span className="bg-amber-900/40 text-amber-100 text-xs font-bold px-2.5 py-1 rounded-full">
+                  Totem Portaria
+                </span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
+                Bike #{bikeReservadaMorador.codigo} — {bikeReservadaMorador.modelo}
+              </h2>
+              <p className="text-sm text-amber-100 font-medium max-w-xl">
+                Apresente o código na portaria ou digite no totem para destravar. Se não for retirada em 5 minutos, a reserva será liberada automaticamente para outro morador.
+              </p>
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                <div className="bg-white text-slate-900 px-3.5 py-1.5 rounded-xl font-black text-sm shadow-sm flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-amber-600" />
+                  Código de Retirada: <span className="text-amber-700 tracking-wider font-mono">{bikeReservadaMorador.reservaCodigo || 'BK-5MIN'}</span>
+                </div>
+                <div className="bg-white/15 backdrop-blur-md text-white px-3 py-1.5 rounded-xl font-semibold text-xs flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-amber-200" />
+                  Senha do Cadeado: {bikeReservadaMorador.lockPassword}
+                </div>
+              </div>
+            </div>
+
+            {/* Contador Regressivo Gigante */}
+            <div className="flex flex-col items-center justify-center bg-white text-slate-900 p-5 rounded-2xl shadow-lg shrink-0 w-full sm:w-auto min-w-[220px]">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">
+                Tempo Restante
+              </span>
+              <div className="text-4xl sm:text-5xl font-black font-mono tracking-tight text-amber-600">
+                {formatCountdown(segundosRestantes5Min)}
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-2 mt-2 overflow-hidden">
+                <div
+                  className="bg-amber-500 h-full transition-all duration-1000"
+                  style={{ width: `${Math.max(0, Math.min(100, (segundosRestantes5Min / 300) * 100))}%` }}
+                ></div>
+              </div>
+              <div className="flex items-center gap-2 mt-4 w-full">
+                <button
+                  onClick={() => handleConfirmarRetirada(bikeReservadaMorador)}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-3 rounded-xl transition shadow"
+                >
+                  Destravar Cadeado
+                </button>
+                <button
+                  onClick={() => handleCancelarReserva5Min(bikeReservadaMorador.id)}
+                  className="bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-xs py-2 px-3 rounded-xl transition"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Olá, {morador.nome}
-          </h1>
-          <p className="text-sm text-slate-600 mt-1">
-            Sua unidade: <strong>Bloco {morador.unidade.bloco}</strong> • Apartamento{' '}
-            <strong>{morador.unidade.apto}</strong>
-          </p>
         </div>
+      )}
 
-        {/* Ação Rápida em Destaque */}
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          {!activeBikeInUse ? (
-            <button
-              onClick={() => setIsQrModalOpen(true)}
-              className="w-full md:w-auto flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md shadow-emerald-600/20 transition active:scale-98"
-            >
-              <QrCode className="w-4 h-4" />
-              <span>Desbloquear Bicicleta</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => {
-                setBikeForReturn(activeBikeInUse);
-                setIsReturnModalOpen(true);
-              }}
-              className="w-full md:w-auto flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm shadow-md shadow-amber-600/20 transition active:scale-98"
-            >
-              <Bike className="w-4 h-4" />
-              <span>Devolver Bike #{activeBikeInUse.codigo}</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Banner de Viagem Ativa (Quando o morador está com uma bike em uso) */}
+      {/* ==================================================================== */}
+      {/* BANNER DE PASSEIO ATIVO (EM USO)                                     */}
+      {/* ==================================================================== */}
       {activeBikeInUse && (
-        <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="p-6 rounded-3xl bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-xl shadow-emerald-600/20 border border-emerald-400 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
-              <Bike className="w-6 h-6 animate-pulse" />
+            <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md text-white flex items-center justify-center shadow-inner">
+              <Bike className="w-8 h-8 animate-bounce" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider bg-emerald-600 text-white px-2 py-0.5 rounded-full">
-                  Passeio em Andamento
+                <span className="text-[11px] font-black uppercase tracking-wider bg-white text-emerald-900 px-2.5 py-0.5 rounded-full">
+                  Pedalada em Andamento
                 </span>
-                <span className="text-sm font-bold text-slate-900">
+                <span className="text-sm font-bold text-emerald-100">
                   Bike #{activeBikeInUse.codigo}
                 </span>
               </div>
-              <p className="text-sm font-semibold text-slate-800 mt-0.5">
+              <h3 className="text-xl font-black mt-1">
                 {activeBikeInUse.modelo} ({activeBikeInUse.tipo})
-              </p>
-              <div className="flex items-center gap-4 text-xs text-slate-600 mt-1">
-                <span className="flex items-center gap-1.5 font-medium text-emerald-800">
-                  <Clock className="w-3.5 h-3.5 text-emerald-600" />
-                  Tempo de uso: ~{elapsedMinutes} min (Limite: {condominio.regras.limiteTempoBikeMinutos} min)
+              </h3>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-emerald-100 mt-1">
+                <span className="flex items-center gap-1.5 font-bold bg-emerald-800/60 px-2.5 py-1 rounded-lg">
+                  <Clock className="w-3.5 h-3.5 text-emerald-300" />
+                  Tempo de Uso: ~{elapsedMinutes} min (Limite: {condominio.regras.limiteTempoBikeMinutos} min)
                 </span>
-                <span className="flex items-center gap-1.5 font-semibold text-slate-800 bg-white px-2 py-0.5 rounded border border-emerald-200">
-                  <Lock className="w-3.5 h-3.5 text-emerald-600" />
-                  Senha do Cadeado: {activeBikeInUse.lockPassword}
+                <span className="flex items-center gap-1.5 font-bold bg-white text-slate-900 px-2.5 py-1 rounded-lg">
+                  <LockOpen className="w-3.5 h-3.5 text-emerald-600" />
+                  Cadeado: {activeBikeInUse.lockPassword}
                 </span>
               </div>
             </div>
@@ -282,729 +633,1217 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
               setBikeForReturn(activeBikeInUse);
               setIsReturnModalOpen(true);
             }}
-            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow transition"
+            className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-white hover:bg-slate-100 text-emerald-900 font-extrabold text-sm shadow-lg transition active:scale-98"
           >
             Finalizar Viagem & Devolver
           </button>
         </div>
       )}
 
-      {/* Abas de Navegação Elegantes */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
+      {/* ==================================================================== */}
+      {/* CABEÇALHO DO MORADOR COM DADOS DA UNIDADE                            */}
+      {/* ==================================================================== */}
+      <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-100 border border-emerald-200 text-emerald-800 flex items-center justify-center font-black text-xl shadow-sm">
+            {morador.nome.substring(0, 2).toUpperCase()}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                Morador Ativo
+              </span>
+              <span className="text-xs text-slate-500 font-medium">{condominio.nome}</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+              Olá, {morador.nome}
+            </h1>
+            <p className="text-sm text-slate-600 mt-0.5">
+              Unidade: <strong className="text-slate-900">Bloco {morador.unidade.bloco}</strong> • Apartamento{' '}
+              <strong className="text-slate-900">{morador.unidade.apto}</strong>
+            </p>
+          </div>
+        </div>
+
+        {/* Botão de Contato com Portaria e Síndico via WhatsApp */}
+        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+          <a
+            href={`https://api.whatsapp.com/send?phone=5521999999999&text=Ol%C3%A1%20Portaria,%20aqui%20%C3%A9%20o%20morador%20${encodeURIComponent(
+              morador.nome
+            )}%20do%20Bloco%20${morador.unidade.bloco}%20Apto%20${morador.unidade.apto}.`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs transition"
+          >
+            <Phone className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Falar com Portaria</span>
+          </a>
+
+          {!activeBikeInUse && !bikeReservadaMorador && (
+            <button
+              onClick={() => setIsQrModalOpen(true)}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition active:scale-98"
+            >
+              <QrCode className="w-4 h-4" />
+              <span>Escanear QR Totem</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ==================================================================== */}
+      {/* BARRA DE NAVEGAÇÃO ENTRE OS 8 MÓDULOS (SCROLL HORIZONTAL RESPONSIVO) */}
+      {/* ==================================================================== */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto no-scrollbar">
+        <button
+          onClick={() => setActiveTab('inicio')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
+            activeTab === 'inicio'
+              ? 'bg-slate-900 text-white shadow'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Home className="w-4 h-4" />
+          <span>Início</span>
+        </button>
+
         <button
           onClick={() => setActiveTab('bicicletario')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
             activeTab === 'bicicletario'
-              ? 'bg-emerald-600 text-white shadow-sm'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
           <Bike className="w-4 h-4" />
-          <span>Bicicletário</span>
-          <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
-            activeTab === 'bicicletario' ? 'bg-emerald-800 text-emerald-100' : 'bg-slate-200 text-slate-700'
-          }`}>
-            {availableBikesCount}
+          <span>Bicicletas (5 min)</span>
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+              activeTab === 'bicicletario'
+                ? 'bg-emerald-800 text-emerald-100'
+                : 'bg-emerald-100 text-emerald-800'
+            }`}
+          >
+            {availableBikesCount} livres
           </span>
         </button>
 
         <button
-          onClick={() => setActiveTab('encomendas')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap ${
-            activeTab === 'encomendas'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Package className="w-4 h-4" />
-          <span>Minhas Encomendas</span>
-          {pendingPackages.length > 0 && (
-            <span className="text-xs bg-amber-500 text-white font-bold px-2 py-0.5 rounded-full animate-pulse">
-              {pendingPackages.length}
-            </span>
-          )}
-        </button>
-
-        <button
           onClick={() => setActiveTab('lazer')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
             activeTab === 'lazer'
-              ? 'bg-emerald-600 text-white shadow-sm'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
           <Calendar className="w-4 h-4" />
-          <span>Espaços & Lazer</span>
+          <span>Reservas & Lazer</span>
           {myReservations.length > 0 && (
-            <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
-              activeTab === 'lazer' ? 'bg-emerald-800 text-emerald-100' : 'bg-slate-200 text-slate-700'
-            }`}>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-black bg-white text-emerald-800">
               {myReservations.length}
             </span>
           )}
         </button>
 
         <button
-          onClick={() => setActiveTab('avisos')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap ${
-            activeTab === 'avisos'
-              ? 'bg-emerald-600 text-white shadow-sm'
+          onClick={() => setActiveTab('seguranca')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
+            activeTab === 'seguranca'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
-          <AlertCircle className="w-4 h-4" />
-          <span>Comunicados</span>
-          {avisos.filter((a) => a.prioritario).length > 0 && (
-            <span className="text-xs bg-rose-600 text-white font-bold px-2 py-0.5 rounded-full">
-              Urgente
+          <Users className="w-4 h-4" />
+          <span>Visitantes & Convidados</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('encomendas')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
+            activeTab === 'encomendas'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Package className="w-4 h-4" />
+          <span>Encomendas</span>
+          {pendingPackages.length > 0 && (
+            <span className="text-[10px] bg-amber-500 text-white font-black px-2 py-0.5 rounded-full animate-bounce">
+              {pendingPackages.length}
             </span>
           )}
         </button>
 
         <button
-          onClick={() => setActiveTab('unidade')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap ${
-            activeTab === 'unidade'
-              ? 'bg-emerald-600 text-white shadow-sm'
+          onClick={() => setActiveTab('ocorrencias')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
+            activeTab === 'ocorrencias'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
-          <Home className="w-4 h-4" />
-          <span>Minha Unidade</span>
+          <AlertCircle className="w-4 h-4" />
+          <span>Ocorrências</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('financeiro')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
+            activeTab === 'financeiro'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <DollarSign className="w-4 h-4" />
+          <span>Financeiro</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('mural')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
+            activeTab === 'mural'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <MessageSquare className="w-4 h-4" />
+          <span>Comunidade</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('documentos')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
+            activeTab === 'documentos'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <FileText className="w-4 h-4" />
+          <span>Documentos</span>
         </button>
       </div>
 
-      {/* ABA 1: BICICLETÁRIO COMPARTILHADO */}
-      {activeTab === 'bicicletario' && (
+      {/* ==================================================================== */}
+      {/* MÓDULO 1: TELA INICIAL (DASHBOARD EXECUTIVO DO MORADOR)              */}
+      {/* ==================================================================== */}
+      {activeTab === 'inicio' && (
         <div className="space-y-6">
-          {/* Cartões de Resumo Rápido */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white border border-slate-200/80 p-4 sm:p-5 rounded-2xl shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  Disponíveis no Totem
-                </span>
-                <span className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                  <Check className="w-4 h-4" />
-                </span>
-              </div>
-              <div className="text-3xl font-extrabold text-slate-900">{availableBikesCount}</div>
-              <p className="text-xs text-slate-500 mt-1">Prontas para retirada com QR Code</p>
-            </div>
-
-            <div className="bg-white border border-slate-200/80 p-4 sm:p-5 rounded-2xl shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  Em Uso por Vizinhos
-                </span>
-                <span className="w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center">
-                  <Clock className="w-4 h-4" />
-                </span>
-              </div>
-              <div className="text-3xl font-extrabold text-slate-900">{inUseBikesCount}</div>
-              <p className="text-xs text-slate-500 mt-1">Circulando no momento</p>
-            </div>
-
-            <div className="bg-white border border-slate-200/80 p-4 sm:p-5 rounded-2xl shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  Em Revisão Preventiva
-                </span>
-                <span className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center">
-                  <ShieldCheck className="w-4 h-4" />
-                </span>
-              </div>
-              <div className="text-3xl font-extrabold text-slate-900">{maintenanceBikesCount}</div>
-              <p className="text-xs text-slate-500 mt-1">Garantia de segurança e revisão</p>
-            </div>
-          </div>
-
-          {/* Grid de Bicicletas com visual moderno */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">Frota de Bicicletas do Condomínio</h2>
-                <p className="text-xs text-slate-500">Escolha uma bicicleta disponível e aponte a câmera para o QR Code</p>
+          {/* Card de Aviso Destaque (Aviso mais importante do dia) */}
+          {avisoDestaque && (
+            <div className="p-5 rounded-3xl bg-slate-900 text-white shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 mt-0.5">
+                  <BellRing className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-amber-500/30 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-md">
+                      Aviso Destaque
+                    </span>
+                    <span className="text-xs text-slate-400">Publicado por {avisoDestaque.autor}</span>
+                  </div>
+                  <h3 className="text-base sm:text-lg font-bold text-white mt-1">
+                    {avisoDestaque.titulo}
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-300 line-clamp-2 mt-0.5">
+                    {avisoDestaque.mensagem}
+                  </p>
+                </div>
               </div>
               <button
-                onClick={() => setIsQrModalOpen(true)}
-                className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold text-xs hover:bg-emerald-100 transition"
+                onClick={() => setActiveTab('mural')}
+                className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 shrink-0"
               >
-                <QrCode className="w-4 h-4 text-emerald-600" />
-                <span>Escanear QR Code</span>
+                Ver todos avisos <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
+          )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {bikes.map((bike) => {
-                const isAvailable = bike.status === 'disponivel';
-                const isInUse = bike.status === 'em_uso';
-                const isMaintenance = bike.status === 'manutencao';
-                const isMyBike = isInUse && bike.usuarioAtualId === morador.id;
+          {/* Cards Rápidos de Acesso em 1 Clique */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 1. Bicicletas Compartilhadas (Novolar) */}
+            <div
+              onClick={() => setActiveTab('bicicletario')}
+              className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-emerald-500 hover:shadow-md transition cursor-pointer group"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:scale-110 transition">
+                  <Bike className="w-5 h-5" />
+                </div>
+                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                  {availableBikesCount} livres
+                </span>
+              </div>
+              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-emerald-700 transition">
+                Bicicletas (5 min)
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Reserve em 1 clique com tolerância de 5 min para retirada no totem.
+              </p>
+            </div>
 
-                return (
-                  <div
-                    key={bike.id}
-                    className={`p-5 rounded-2xl border transition-all flex flex-col justify-between ${
-                      isMyBike
-                        ? 'bg-emerald-50/50 border-emerald-300 shadow-md ring-2 ring-emerald-500/20'
-                        : isAvailable
-                        ? 'bg-white border-slate-200/90 shadow-sm hover:shadow-md hover:border-slate-300'
-                        : isInUse
-                        ? 'bg-slate-50/80 border-slate-200 opacity-90'
-                        : 'bg-rose-50/30 border-rose-200/60 opacity-80'
-                    }`}
-                  >
-                    <div>
-                      {/* Topo do Card */}
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-xs px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 border border-slate-200">
-                            #{bike.codigo}
-                          </span>
-                          <span className="text-xs font-semibold text-slate-600 capitalize">
-                            {bike.tipo === 'e-bike' ? '⚡ Elétrica' : bike.tipo}
-                          </span>
-                        </div>
+            {/* 2. Contador de Entregas */}
+            <div
+              onClick={() => setActiveTab('encomendas')}
+              className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-amber-500 hover:shadow-md transition cursor-pointer group"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center group-hover:scale-110 transition">
+                  <Package className="w-5 h-5" />
+                </div>
+                {pendingPackages.length > 0 ? (
+                  <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-500 text-white animate-pulse">
+                    {pendingPackages.length} na portaria
+                  </span>
+                ) : (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                    Tudo entregue
+                  </span>
+                )}
+              </div>
+              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-amber-700 transition">
+                {pendingPackages.length > 0
+                  ? `Você tem ${pendingPackages.length} pacote${pendingPackages.length > 1 ? 's' : ''} esperando!`
+                  : 'Minhas Encomendas'}
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                {pendingPackages.length > 0
+                  ? 'Veja o código PIN de 6 dígitos para retirada na portaria.'
+                  : 'Histórico de entregas e notificações em tempo real.'}
+              </p>
+            </div>
 
-                        <span
-                          className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
-                            isAvailable
-                              ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                              : isInUse
-                              ? 'bg-amber-100 text-amber-800 border-amber-200'
-                              : 'bg-rose-100 text-rose-800 border-rose-200'
-                          }`}
-                        >
-                          {isAvailable ? 'Disponível' : isInUse ? 'Em Uso' : 'Em Revisão'}
-                        </span>
-                      </div>
+            {/* 3. Reservas de Áreas Comuns */}
+            <div
+              onClick={() => setActiveTab('lazer')}
+              className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition cursor-pointer group"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center group-hover:scale-110 transition">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                  {areasLazer.length} espaços
+                </span>
+              </div>
+              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-blue-700 transition">
+                Áreas de Lazer
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Churrasqueira, Salão de Festas, Quadra e Piscina com confirmação imediata.
+              </p>
+            </div>
 
-                      {/* Modelo e Informações */}
-                      <h3 className="font-bold text-base text-slate-900">{bike.modelo}</h3>
-
-                      {/* Bateria se for elétrica */}
-                      {bike.nivelBateria !== undefined && (
-                        <div className="mt-2 flex items-center gap-1.5 text-xs text-teal-700 font-semibold bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-100 w-fit">
-                          <BatteryCharging className="w-4 h-4 text-teal-600" />
-                          <span>Bateria: {bike.nivelBateria}% (Autonomia ~35 km)</span>
-                        </div>
-                      )}
-
-                      {/* Localização e Status */}
-                      <div className="mt-3 text-xs text-slate-600 space-y-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="truncate">{bike.localizacaoAtual}</span>
-                        </div>
-
-                        {isInUse && (
-                          <div className="text-amber-800 text-xs font-medium">
-                            {isMyBike ? (
-                              <strong className="text-emerald-700">✓ Em passeio com você</strong>
-                            ) : (
-                              <span>Retirada por {bike.usuarioAtualNome || 'Morador'}</span>
-                            )}
-                          </div>
-                        )}
-
-                        {isMaintenance && bike.avariasAtuais && bike.avariasAtuais.length > 0 && (
-                          <div className="mt-2 p-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-800">
-                            Motivo da revisão: {bike.avariasAtuais.join(', ')}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Botão de Ação */}
-                    <div className="mt-5 pt-3 border-t border-slate-100">
-                      {isAvailable ? (
-                        <button
-                          onClick={() => handleScanCheckout(bike.codigo)}
-                          className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow transition active:scale-98"
-                        >
-                          <QrCode className="w-4 h-4" />
-                          <span>Desbloquear Esta Bike</span>
-                        </button>
-                      ) : isMyBike ? (
-                        <button
-                          onClick={() => {
-                            setBikeForReturn(bike);
-                            setIsReturnModalOpen(true);
-                          }}
-                          className="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow transition active:scale-98"
-                        >
-                          <Bike className="w-4 h-4" />
-                          <span>Devolver & Checklist</span>
-                        </button>
-                      ) : (
-                        <button
-                          disabled
-                          className="w-full py-2.5 px-4 rounded-xl bg-slate-100 text-slate-400 font-semibold text-xs cursor-not-allowed text-center"
-                        >
-                          {isMaintenance ? 'Em Revisão Técnica' : 'Ocupada no Momento'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+            {/* 4. Ocorrências e Problemas */}
+            <div
+              onClick={() => setActiveTab('ocorrencias')}
+              className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-rose-500 hover:shadow-md transition cursor-pointer group"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-700 flex items-center justify-center group-hover:scale-110 transition">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">
+                  {ocorrencias.length} chamados
+                </span>
+              </div>
+              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-rose-700 transition">
+                Ocorrências
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Registre reparos, barulho ou limpeza com fotos e acompanhe a resposta do síndico.
+              </p>
             </div>
           </div>
 
-          {/* Histórico Recente de Passeios */}
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 sm:p-6 shadow-sm">
-            <h3 className="font-bold text-sm text-slate-900 mb-3 flex items-center gap-2">
+          {/* Seção Secundária: Câmeras ao Vivo & Boleto Rápido */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Boleto Condominial Rápido */}
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-emerald-600" />
+                  <h3 className="font-extrabold text-slate-900">Boleto Condominial</h3>
+                </div>
+                <span className="text-xs font-black uppercase text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  Em Dia
+                </span>
+              </div>
+
+              {boletos[0] ? (
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-500">Mês Referência:</span>
+                    <strong className="text-slate-900">{boletos[0].mesReferencia}</strong>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-500">Vencimento:</span>
+                    <strong className="text-slate-900">{boletos[0].dataVencimento}</strong>
+                  </div>
+                  <div className="flex justify-between items-center text-base pt-2 border-t border-slate-200">
+                    <span className="font-semibold text-slate-700">Valor Total:</span>
+                    <strong className="text-emerald-700 text-lg font-black">
+                      R$ {boletos[0].valor.toFixed(2)}
+                    </strong>
+                  </div>
+
+                  {boletos[0].pixCopiaCola && (
+                    <button
+                      onClick={() => handleCopiarTexto(boletos[0].pixCopiaCola!, 'pix_home')}
+                      className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>{copiadoKey === 'pix_home' ? 'Código PIX Copiado!' : 'Copiar Chave PIX'}</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500">Nenhum boleto pendente.</p>
+              )}
+            </div>
+
+            {/* Visitantes e Convidados Rápidos */}
+            <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-emerald-600" />
+                  <h3 className="font-extrabold text-slate-900">Visitantes & Prestadores Autorizados</h3>
+                </div>
+                <button
+                  onClick={() => setIsNovoVisitanteModalOpen(true)}
+                  className="text-xs font-bold text-emerald-600 hover:underline flex items-center gap-1"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Liberar Novo</span>
+                </button>
+              </div>
+
+              {visitantes.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {visitantes.slice(0, 2).map((vis) => (
+                    <div
+                      key={vis.id}
+                      className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                          {vis.tipo}
+                        </span>
+                        <span className="text-[11px] font-mono font-bold bg-white px-2 py-0.5 rounded border border-slate-200">
+                          {vis.codigoAcesso}
+                        </span>
+                      </div>
+                      <div className="font-extrabold text-slate-900 text-xs">{vis.nomeVisitante}</div>
+                      <div className="text-[10px] text-slate-500">
+                        {vis.dataVisita} • {vis.periodoPermitido}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-5 rounded-2xl bg-slate-50 border border-dashed border-slate-200 text-center space-y-2">
+                  <p className="text-xs text-slate-500">Nenhum visitante liberado hoje.</p>
+                  <button
+                    onClick={() => setIsNovoVisitanteModalOpen(true)}
+                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Liberar Visita / Prestador</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* MÓDULO 4.1: BICICLETÁRIO COMPARTILHADO (NOVOLAR - PRIORIDADE MÁXIMA)  */}
+      {/* ==================================================================== */}
+      {activeTab === 'bicicletario' && (
+        <div className="space-y-6">
+          {/* Informações das Regras de 5 Minutos */}
+          <div className="bg-emerald-50 border border-emerald-200 p-5 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                <Bike className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-emerald-950">
+                  Sistema de Mobilidade Compartilhada Novolar
+                </h3>
+                <p className="text-xs text-emerald-800 mt-0.5">
+                  ⏱️ <strong>Tolerância de 5 Minutos:</strong> Ao reservar pelo app, você tem 5 minutos exatos para retirar a bicicleta no totem da portaria. Após esse tempo, a reserva é cancelada automaticamente para liberar aos vizinhos.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setIsQrModalOpen(true)}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition whitespace-nowrap flex items-center justify-center gap-2"
+            >
+              <QrCode className="w-4 h-4" />
+              <span>Desbloquear via QR Code</span>
+            </button>
+          </div>
+
+          {/* Grid de Bicicletas do Condomínio */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {bikes.map((bike) => {
+              const isReservedByMe =
+                bike.status === 'reservada_5min' && bike.reservaMoradorId === morador.id;
+              const isUsedByMe =
+                bike.status === 'em_uso' && bike.usuarioAtualId === morador.id;
+
+              return (
+                <div
+                  key={bike.id}
+                  className={`bg-white rounded-3xl border transition shadow-sm overflow-hidden flex flex-col justify-between ${
+                    isReservedByMe
+                      ? 'border-amber-400 ring-2 ring-amber-400'
+                      : isUsedByMe
+                      ? 'border-emerald-500 ring-2 ring-emerald-500'
+                      : bike.status === 'disponivel'
+                      ? 'border-slate-200 hover:border-emerald-400 hover:shadow-md'
+                      : 'border-slate-200 opacity-90'
+                  }`}
+                >
+                  <div className="p-5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black px-3 py-1 rounded-xl bg-slate-900 text-white">
+                        Bike #{bike.codigo}
+                      </span>
+
+                      {bike.status === 'disponivel' ? (
+                        <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5" /> Disponível
+                        </span>
+                      ) : bike.status === 'reservada_5min' ? (
+                        <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5" />
+                          {isReservedByMe ? 'Sua Reserva (5min)' : 'Reservada'}
+                        </span>
+                      ) : bike.status === 'em_uso' ? (
+                        <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                          {isUsedByMe ? 'Com Você' : 'Em Uso'}
+                        </span>
+                      ) : (
+                        <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800">
+                          Manutenção
+                        </span>
+                      )}
+                    </div>
+
+                    <div>
+                      <h4 className="text-lg font-extrabold text-slate-900">{bike.modelo}</h4>
+                      <p className="text-xs text-slate-500 font-medium capitalize">
+                        Categoria: {bike.tipo}
+                      </p>
+                    </div>
+
+                    {/* Detalhes de Bateria se for E-Bike */}
+                    {bike.tipo === 'e-bike' && bike.nivelBateria !== undefined && (
+                      <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                        <BatteryCharging className="w-4 h-4 text-emerald-600" />
+                        <span>Bateria Elétrica: {bike.nivelBateria}%</span>
+                      </div>
+                    )}
+
+                    {/* Localização Atual */}
+                    <div className="text-xs text-slate-600 flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="truncate">{bike.localizacaoAtual || 'Totem Central Novolar'}</span>
+                    </div>
+
+                    {/* Status da Reserva / Uso */}
+                    {bike.status === 'reservada_5min' && (
+                      <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1">
+                        <div className="font-bold flex items-center justify-between">
+                          <span>Aguardando Retirada:</span>
+                          <span className="font-mono font-black text-amber-700">
+                            {isReservedByMe ? formatCountdown(segundosRestantes5Min) : '5 min máx'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-amber-800">
+                          {isReservedByMe
+                            ? `Apresente o código ${bike.reservaCodigo || 'BK-5MIN'} na portaria para liberar.`
+                            : `Reservada por morador do ${bike.reservaMoradorUnidade || 'condomínio'}.`}
+                        </p>
+                      </div>
+                    )}
+
+                    {bike.status === 'em_uso' && (
+                      <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
+                        <span>Em trânsito com morador ({bike.usuarioAtualUnidade || 'Residente'}).</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Botões de Ação do Card */}
+                  <div className="p-4 bg-slate-50/70 border-t border-slate-200 flex items-center gap-2">
+                    {bike.status === 'disponivel' && !activeBikeInUse && !bikeReservadaMorador && (
+                      <button
+                        onClick={() => handleReservar5Min(bike.id)}
+                        className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow transition active:scale-98 flex items-center justify-center gap-1.5"
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>Reservar por 5 Minutos</span>
+                      </button>
+                    )}
+
+                    {isReservedByMe && (
+                      <div className="flex items-center gap-2 w-full">
+                        <button
+                          onClick={() => handleConfirmarRetirada(bike)}
+                          className="flex-1 py-2.5 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow transition"
+                        >
+                          Destravar Agora
+                        </button>
+                        <button
+                          onClick={() => handleCancelarReserva5Min(bike.id)}
+                          className="py-2.5 px-3 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-xs transition"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    )}
+
+                    {isUsedByMe && (
+                      <button
+                        onClick={() => {
+                          setBikeForReturn(bike);
+                          setIsReturnModalOpen(true);
+                        }}
+                        className="w-full py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow transition"
+                      >
+                        Devolver com Checklist
+                      </button>
+                    )}
+
+                    {bike.status === 'manutencao' && (
+                      <span className="w-full text-center text-xs font-semibold text-rose-600 py-1">
+                        Indisponível (Em Revisão Técnica)
+                      </span>
+                    )}
+
+                    {bike.status !== 'disponivel' && !isReservedByMe && !isUsedByMe && bike.status !== 'manutencao' && (
+                      <span className="w-full text-center text-xs font-semibold text-slate-500 py-1">
+                        Indisponível no momento
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Histórico Recente de Locações do Morador */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
               <Clock className="w-4 h-4 text-emerald-600" />
-              Histórico Recente de Uso do Bicicletário
+              <span>Seu Histórico de Viagens & Vistorias</span>
             </h3>
 
-            {historicoLocacoes.length === 0 ? (
-              <p className="text-xs text-slate-500">Nenhum passeio registrado recentemente.</p>
-            ) : (
-              <div className="divide-y divide-slate-100 text-xs">
-                {historicoLocacoes.slice(0, 5).map((h) => (
-                  <div key={h.id} className="py-3 flex items-center justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <strong className="text-slate-900 font-bold">Bike #{h.bikeCodigo}</strong>
-                        <span className="text-slate-600">• {h.moradorNome} ({h.moradorUnidade})</span>
+            {historicoLocacoes.filter((h) => h.moradorId === morador.id).length > 0 ? (
+              <div className="divide-y divide-slate-100">
+                {historicoLocacoes
+                  .filter((h) => h.moradorId === morador.id)
+                  .map((hist) => (
+                    <div key={hist.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                      <div className="flex items-start gap-3">
+                        {hist.fotoVistoriaDevolucaoUrl && (
+                          <img
+                            src={hist.fotoVistoriaDevolucaoUrl}
+                            alt="Vistoria"
+                            className="w-14 h-14 rounded-xl object-cover border border-slate-200 shrink-0"
+                          />
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <strong className="text-slate-900 font-extrabold text-sm">
+                              Bike #{hist.bikeCodigo}
+                            </strong>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                hist.vistoriaStatus === 'com_defeito'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : 'bg-emerald-100 text-emerald-800'
+                              }`}
+                            >
+                              {hist.vistoriaStatus === 'com_defeito' ? '⚠️ Avaria Registrada' : '✓ 100% Aprovada'}
+                            </span>
+                          </div>
+                          <p className="text-slate-500 text-[11px] mt-0.5">
+                            Retirada: {new Date(hist.retiradaEm).toLocaleString('pt-BR')} • {hist.localDevolucao || 'Totem Principal'}
+                          </p>
+                          {hist.detalhesDefeito && (
+                            <p className="text-rose-700 text-[11px] font-bold mt-1">
+                              Nota de vistoria: {hist.detalhesDefeito}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-slate-500 text-xs mt-0.5">
-                        {h.localDevolucao || 'Totem Principal'} •{' '}
-                        {new Date(h.retiradaEm).toLocaleDateString('pt-BR')} às{' '}
-                        {new Date(h.retiradaEm).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      <div className="text-right shrink-0">
+                        <span className="px-2.5 py-1 rounded-xl bg-slate-100 text-slate-700 font-bold text-[11px]">
+                          Devolvida no Totem
+                        </span>
                       </div>
                     </div>
-
-                    <div>
-                      {h.avariasReportadas && h.avariasReportadas.length > 0 ? (
-                        <span className="text-xs font-semibold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200">
-                          Avaria: {h.avariasReportadas[0]}
-                        </span>
-                      ) : (
-                        <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                          Devolvida 100% OK
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  ))}
               </div>
+            ) : (
+              <p className="text-xs text-slate-500">Nenhuma viagem registrada ainda.</p>
             )}
           </div>
         </div>
       )}
 
-      {/* ABA 2: MINHAS ENCOMENDAS */}
-      {activeTab === 'encomendas' && (
-        <div className="space-y-6">
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                  <Package className="w-5 h-5 text-amber-600" />
-                  Encomendas Aguardando Retirada na Portaria
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Dirija-se à portaria e informe o seu <strong>Código de Resgate</strong> para retirar o pacote com segurança.
-                </p>
-              </div>
-            </div>
-
-            {pendingPackages.length === 0 ? (
-              <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-3">
-                  <Check className="w-6 h-6" />
-                </div>
-                <p className="text-sm font-bold text-slate-800">Você não tem encomendas pendentes</p>
-                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                  Assim que a transportadora entregar um pacote para sua unidade na portaria, você receberá uma notificação com o código de 6 dígitos.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {pendingPackages.map((enc) => (
-                  <div
-                    key={enc.id}
-                    className="p-5 rounded-2xl bg-amber-50/40 border border-amber-200 shadow-sm flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-                          Disponível na Portaria
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          Chegou às {new Date(enc.recebidoEm).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
-                      </div>
-
-                      <h3 className="text-base font-bold text-slate-900">{enc.transportadora}</h3>
-                      <p className="text-xs text-slate-600 mt-1">
-                        Código de Rastreio: <strong className="text-slate-800">{enc.codigoRastreio}</strong>
-                      </p>
-                      {enc.observacao && (
-                        <p className="text-xs text-slate-600 mt-2 bg-white p-2.5 rounded-xl border border-amber-100">
-                          Anotação da Portaria: {enc.observacao}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Destaque do Código de Resgate de 6 Dígitos */}
-                    <div className="mt-4 p-4 rounded-xl bg-white border border-amber-300 text-center shadow-sm">
-                      <span className="text-xs font-bold text-amber-800 uppercase tracking-wider block mb-1">
-                        Código de Resgate na Portaria
-                      </span>
-                      <div className="text-3xl font-extrabold tracking-widest text-slate-900 font-mono">
-                        {enc.codigoResgate}
-                      </div>
-                      <span className="text-[11px] text-slate-500 mt-1 block">
-                        Apresente este número ao porteiro de plantão
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Histórico de Encomendas Entregues */}
-          {deliveredPackages.length > 0 && (
-            <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm">
-              <h3 className="font-bold text-sm text-slate-900 mb-3 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                Histórico de Encomendas Retiradas
-              </h3>
-              <div className="divide-y divide-slate-100 text-xs">
-                {deliveredPackages.map((enc) => (
-                  <div key={enc.id} className="py-3 flex items-center justify-between gap-3">
-                    <div>
-                      <div className="font-bold text-slate-800">{enc.transportadora}</div>
-                      <div className="text-slate-500 text-xs mt-0.5">
-                        Rastreio: {enc.codigoRastreio} • Atendido por: {enc.recebidoPor}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-xs font-semibold bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full border border-emerald-200">
-                        Entregue
-                      </span>
-                      <div className="text-[11px] text-slate-400 mt-1">
-                        {enc.entregueEm ? new Date(enc.entregueEm).toLocaleDateString('pt-BR') : ''}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ABA 3: ESPAÇOS E LAZER */}
+      {/* ==================================================================== */}
+      {/* MÓDULO 4.2: RESERVAS DE ÁREAS COMUNS (CHURRASQUEIRA, SALÃO, ETC.)   */}
+      {/* ==================================================================== */}
       {activeTab === 'lazer' && (
         <div className="space-y-6">
-          {/* Status Operacional dos Espaços Comuns */}
-          <div>
-            <div className="mb-4">
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-emerald-600" />
-                Status Operacional das Áreas Comuns
-              </h2>
-              <p className="text-xs text-slate-500">Acompanhe em tempo real as condições de uso, piscinas, academia e sauna</p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {areasLazer.map((area) => {
-                const isOpen = area.status === 'aberto';
-                const isCleaning = area.status === 'limpeza';
-                const isMaintenance = area.status === 'manutencao';
-                const isWeather = area.status === 'fechado_clima';
-
-                return (
-                  <div
-                    key={area.id}
-                    className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-sm flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="font-bold text-sm text-slate-900">{area.nome}</span>
-                        <span
-                          className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
-                            isOpen
-                              ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                              : isCleaning
-                              ? 'bg-blue-100 text-blue-800 border-blue-200'
-                              : isWeather
-                              ? 'bg-amber-100 text-amber-800 border-amber-200'
-                              : 'bg-rose-100 text-rose-800 border-rose-200'
-                          }`}
-                        >
-                          {isOpen
-                            ? 'Livre / Aberto'
-                            : isCleaning
-                            ? 'Em Limpeza'
-                            : isWeather
-                            ? 'Clima Chuvoso'
-                            : 'Em Manutenção'}
-                        </span>
-                      </div>
-
-                      <p className="text-xs text-slate-600 leading-relaxed mt-1">{area.aviso}</p>
-
-                      {area.previsaoReabertura && (
-                        <div className="mt-2 text-xs font-semibold text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200">
-                          Previsão de Liberação: <strong>{area.previsaoReabertura}</strong>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500 flex items-center justify-between">
-                      <span>Capacidade: <strong>{area.capacidade} pessoas</strong></span>
-                      <span>{area.horarioFuncionamento}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Módulo de Agendamento e Reservas */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Formulário de Reserva */}
-            <div className="lg:col-span-6 bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 mb-1">
-                <Calendar className="w-4 h-4 text-emerald-600" />
-                Agendar Salão de Festas ou Espaço Gourmet
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Formulário de Reserva Rápida */}
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+              <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-emerald-600" />
+                <span>Nova Reserva de Espaço</span>
               </h3>
-              <p className="text-xs text-slate-500 mb-4">
-                Selecione o espaço e confirme seu termo de responsabilidade digital.
-              </p>
 
-              <form onSubmit={handleCreateReserva} className="space-y-4 text-xs">
+              <form onSubmit={handleCreateReserva} className="space-y-3.5">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Espaço Desejado:
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Espaço Desejado
                   </label>
                   <select
                     value={reservaAreaId}
                     onChange={(e) => setReservaAreaId(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                     required
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
                   >
-                    <option value="">Selecione o espaço para o evento...</option>
+                    <option value="">Selecione uma área...</option>
                     {areasLazer
                       .filter((a) => a.permiteReserva)
                       .map((area) => (
                         <option key={area.id} value={area.id}>
-                          {area.nome} (Taxa de Limpeza: R$ {area.taxaReserva},00)
+                          {area.nome} {area.taxaReserva > 0 ? `(Taxa: R$ ${area.taxaReserva})` : '(Gratuito)'}
                         </option>
                       ))}
                   </select>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">
-                      Data do Evento:
-                    </label>
-                    <input
-                      type="date"
-                      value={reservaData}
-                      onChange={(e) => setReservaData(e.target.value)}
-                      required
-                      min={new Date().toISOString().split('T')[0]}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">
-                      Período / Turno:
-                    </label>
-                    <select
-                      value={reservaPeriodo}
-                      onChange={(e) => setReservaPeriodo(e.target.value as any)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
-                    >
-                      <option value="noite">Noite (18:00 às 02:00)</option>
-                      <option value="tarde">Tarde (12:00 às 18:00)</option>
-                      <option value="manha">Manhã (08:00 às 12:00)</option>
-                      <option value="dia_inteiro">Dia Inteiro</option>
-                    </select>
-                  </div>
-                </div>
-
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Finalidade / Motivo (Opcional):
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Data da Reserva
                   </label>
                   <input
-                    type="text"
-                    placeholder="Ex: Almoço em família, aniversário..."
-                    value={reservaObs}
-                    onChange={(e) => setReservaObs(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+                    type="date"
+                    value={reservaData}
+                    min={new Date().toISOString().split('T')[0]}
+                    onChange={(e) => setReservaData(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    required
                   />
                 </div>
 
-                {/* Termo de Responsabilidade */}
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                  <div className="flex items-start gap-2.5">
-                    <input
-                      type="checkbox"
-                      id="termoAceite"
-                      checked={reservaTermoAceito}
-                      onChange={(e) => setReservaTermoAceito(e.target.checked)}
-                      className="mt-0.5 accent-emerald-600 w-4 h-4 rounded cursor-pointer"
-                    />
-                    <label htmlFor="termoAceite" className="text-slate-600 text-xs leading-relaxed cursor-pointer">
-                      Declaro que estou ciente do regimento interno, respeito ao limite de som após as 22h e responsabilidade civil e patrimonial no {condominio.nome}.
-                    </label>
-                  </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Turno / Horário</label>
+                  <select
+                    value={reservaPeriodo}
+                    onChange={(e: any) => setReservaPeriodo(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  >
+                    <option value="manha">Manhã (08:00 às 13:00)</option>
+                    <option value="tarde">Tarde (13:00 às 18:00)</option>
+                    <option value="noite">Noite (18:00 às 23:00)</option>
+                    <option value="dia_inteiro">Dia Inteiro (09:00 às 22:00)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Observações (opcional)</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Aniversário em família"
+                    value={reservaObs}
+                    onChange={(e) => setReservaObs(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="termoReserva"
+                    checked={reservaTermoAceito}
+                    onChange={(e) => setReservaTermoAceito(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    required
+                  />
+                  <label htmlFor="termoReserva" className="text-[11px] text-slate-600">
+                    Li e concordo com o regulamento de limpeza e silêncio.
+                  </label>
                 </div>
 
                 <button
                   type="submit"
-                  disabled={!reservaTermoAceito}
-                  className={`w-full py-3 px-4 rounded-xl font-bold text-xs transition shadow ${
-                    reservaTermoAceito
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20 active:scale-98'
-                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                  }`}
+                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition active:scale-98"
                 >
-                  Confirmar Reserva do Espaço
+                  Confirmar Reserva
                 </button>
               </form>
             </div>
 
-            {/* Minhas Reservas & Agenda do Condomínio */}
-            <div className="lg:col-span-6 space-y-4">
-              <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm">
-                <h3 className="font-bold text-sm text-slate-900 mb-3 flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-emerald-600" />
-                  Minhas Reservas Agendadas
-                </h3>
+            {/* Lista das Áreas Comuns do Condomínio */}
+            <div className="lg:col-span-2 space-y-4">
+              <h3 className="font-extrabold text-slate-900 text-base">
+                Espaços Disponíveis no Condomínio
+              </h3>
 
-                {myReservations.length === 0 ? (
-                  <p className="text-xs text-slate-500 py-3">Você não possui reservas agendadas no momento.</p>
-                ) : (
-                  <div className="space-y-2.5">
-                    {myReservations.map((r) => (
-                      <div
-                        key={r.id}
-                        className="p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-200 flex items-center justify-between text-xs"
-                      >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {areasLazer.map((area) => (
+                  <div key={area.id} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                        {area.tipo.replace('_', ' ')}
+                      </span>
+                      <span className="text-xs font-bold text-slate-500">
+                        Capacidade: {area.capacidade} pessoas
+                      </span>
+                    </div>
+
+                    <h4 className="text-base font-extrabold text-slate-900">{area.nome}</h4>
+                    <p className="text-xs text-slate-600">{area.aviso || 'Espaço equipado e climatizado.'}</p>
+
+                    <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100">
+                      <span>Horário: {area.horarioFuncionamento}</span>
+                      <strong className="text-emerald-700 font-black">
+                        {area.taxaReserva > 0 ? `Taxa: R$ ${area.taxaReserva}` : 'Gratuito'}
+                      </strong>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Minhas Reservas Agendadas */}
+              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3 mt-6">
+                <h4 className="font-extrabold text-slate-900 text-sm">Suas Próximas Reservas</h4>
+                {myReservations.length > 0 ? (
+                  <div className="divide-y divide-slate-100">
+                    {myReservations.map((res) => (
+                      <div key={res.id} className="py-3 flex items-center justify-between text-xs">
                         <div>
-                          <div className="font-bold text-slate-900">{r.espaco}</div>
-                          <div className="text-emerald-800 text-xs font-semibold mt-0.5">
-                            Data: {new Date(r.data + 'T00:00:00').toLocaleDateString('pt-BR')} • Turno: {r.periodo}
-                          </div>
-                          {r.observacoes && (
-                            <div className="text-slate-500 text-[11px] mt-0.5">Obs: {r.observacoes}</div>
-                          )}
+                          <strong className="text-slate-900">{res.espaco}</strong>
+                          <p className="text-slate-500">
+                            Data: {res.data} • Turno: {res.periodo}
+                          </p>
                         </div>
-
-                        <button
-                          onClick={() => {
-                            if (confirm('Deseja cancelar esta reserva?')) {
-                              condoStore.cancelarReserva(condominio.id, r.id);
-                            }
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold border border-rose-200 transition"
-                        >
-                          Cancelar
-                        </button>
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
+                          Confirmada
+                        </span>
                       </div>
                     ))}
                   </div>
+                ) : (
+                  <p className="text-xs text-slate-500">Você não possui reservas agendadas.</p>
                 )}
-              </div>
-
-              {/* Quadro de Ocupação Transparente */}
-              <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm">
-                <h3 className="font-bold text-sm text-slate-900 mb-2 flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-amber-600" />
-                  Quadro de Datas Reservadas no Condomínio
-                </h3>
-                <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 text-xs">
-                  {reservas.filter((r) => r.status === 'confirmada').length === 0 ? (
-                    <p className="text-slate-500 text-xs py-2">Todas as datas livres no momento.</p>
-                  ) : (
-                    reservas
-                      .filter((r) => r.status === 'confirmada')
-                      .map((r) => (
-                        <div key={r.id} className="py-2.5 flex items-center justify-between">
-                          <div>
-                            <span className="font-bold text-slate-800">{r.espaco}</span>
-                            <span className="text-slate-500 text-xs block">
-                              Data: <strong>{new Date(r.data + 'T00:00:00').toLocaleDateString('pt-BR')}</strong> ({r.periodo})
-                            </span>
-                          </div>
-                          <span className="text-xs font-semibold bg-slate-100 text-slate-700 px-2.5 py-1 rounded-full">
-                            Reservado (Bloco {r.unidade.bloco})
-                          </span>
-                        </div>
-                      ))
-                  )}
-                </div>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ABA 4: MURAL DE COMUNICADOS */}
-      {activeTab === 'avisos' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between mb-2">
+      {/* ==================================================================== */}
+      {/* MÓDULO 3: VISITANTES, PRESTADORES E CONVIDADOS                      */}
+      {/* ==================================================================== */}
+      {activeTab === 'seguranca' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-emerald-600" />
-                Mural de Avisos & Comunicados da Administração
-              </h2>
-              <p className="text-xs text-slate-500">Notificações oficiais do síndico, manutenções programadas e assembleias</p>
+              <h3 className="text-xl font-extrabold text-slate-900">Visitantes & Convidados</h3>
+              <p className="text-xs text-slate-500">Libere visitas com QR Code e acompanhe a entrada e saída de prestadores e convidados.</p>
+            </div>
+
+            <button
+              onClick={() => setIsNovoVisitanteModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 flex items-center gap-2 transition self-start sm:self-auto cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Liberar Visitante / Prestador</span>
+            </button>
+          </div>
+
+          {/* Lista de Visitantes e Prestadores Autorizados */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <h4 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+              <Users className="w-5 h-5 text-emerald-600" />
+              <span>Autorizações de Acesso Criadas</span>
+            </h4>
+
+            {visitantes.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {visitantes.map((vis) => (
+                  <div
+                    key={vis.id}
+                    className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full">
+                        {vis.tipo}
+                      </span>
+                      <span
+                        className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                          vis.status === 'pendente'
+                            ? 'bg-amber-100 text-amber-900'
+                            : vis.status === 'dentro'
+                            ? 'bg-blue-100 text-blue-900'
+                            : 'bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {vis.status === 'pendente'
+                          ? 'Aguardando Chegada'
+                          : vis.status === 'dentro'
+                          ? 'No Condomínio'
+                          : 'Finalizado'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <h5 className="font-extrabold text-slate-900 text-base">{vis.nomeVisitante}</h5>
+                      {vis.empresa && <p className="text-xs text-slate-600 font-semibold">{vis.empresa}</p>}
+                      <p className="text-xs text-slate-500 mt-1">
+                        Data: <strong>{vis.dataVisita}</strong> • Período: {vis.periodoPermitido}
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] text-slate-400 uppercase font-bold">Código Portaria</span>
+                        <div className="font-mono font-black text-sm text-slate-900">{vis.codigoAcesso}</div>
+                      </div>
+
+                      <a
+                        href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
+                          `Olá ${vis.nomeVisitante}! Seu acesso ao condomínio ${condominio.nome} foi liberado pela unidade Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto}. Código de entrada: *${vis.codigoAcesso}*.`
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                        <span>Enviar WhatsApp</span>
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">Nenhum visitante liberado no momento.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* MÓDULO 5: OCORRÊNCIAS E PROBLEMAS                                   */}
+      {/* ==================================================================== */}
+      {activeTab === 'ocorrencias' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-xl font-extrabold text-slate-900">Ocorrências & Chamados</h3>
+              <p className="text-xs text-slate-500">Abra chamados para a administração e acompanhe o status em tempo real.</p>
+            </div>
+
+            <button
+              onClick={() => setIsNovaOcorrenciaModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-md shadow-rose-600/20 flex items-center gap-2 transition"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Abrir Nova Ocorrência</span>
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {ocorrencias.length > 0 ? (
+              ocorrencias.map((ocorr) => (
+                <div
+                  key={ocorr.id}
+                  className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black uppercase tracking-wider text-rose-800 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200">
+                        {ocorr.categoria}
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        Criado em {new Date(ocorr.criadoEm).toLocaleDateString('pt-BR')}
+                      </span>
+                    </div>
+
+                    <span
+                      className={`text-xs font-black px-3 py-1 rounded-full uppercase ${
+                        ocorr.status === 'resolvido'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : ocorr.status === 'em_andamento'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {ocorr.status.replace('_', ' ')}
+                    </span>
+                  </div>
+
+                  <div>
+                    <h4 className="text-lg font-extrabold text-slate-900">{ocorr.titulo}</h4>
+                    <p className="text-xs sm:text-sm text-slate-600 mt-1">{ocorr.descricao}</p>
+                  </div>
+
+                  {ocorr.respostaSindico && (
+                    <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs space-y-1">
+                      <div className="flex items-center gap-2 font-bold text-emerald-900">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span>Resposta da Administração ({ocorr.respondidoPor || 'Síndico'}):</span>
+                      </div>
+                      <p className="text-emerald-800 font-medium">{ocorr.respostaSindico}</p>
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 text-slate-500 space-y-2">
+                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+                <h4 className="text-base font-bold text-slate-800">Nenhum chamado aberto</h4>
+                <p className="text-xs">Tudo tranquilo! Caso encontre qualquer problema no condomínio, abra uma ocorrência.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* MÓDULO 6: FINANCEIRO E TRANSPARÊNCIA                                */}
+      {/* ==================================================================== */}
+      {activeTab === 'financeiro' && (
+        <div className="space-y-6">
+          <div>
+            <h3 className="text-xl font-extrabold text-slate-900">Financeiro & Transparência</h3>
+            <p className="text-xs text-slate-500">2ª via de boletos com PIX Copia-e-Cola e prestação de contas mensal.</p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Boletos */}
+            <div className="space-y-4">
+              <h4 className="font-extrabold text-slate-900 text-base">Boletos da Sua Unidade</h4>
+              {boletos.map((bol) => (
+                <div key={bol.id} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900 text-sm">{bol.mesReferencia}</span>
+                    <span
+                      className={`text-xs font-black px-2.5 py-0.5 rounded-full ${
+                        bol.status === 'pago' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {bol.status === 'pago' ? 'Quitado' : 'A Vencer'}
+                    </span>
+                  </div>
+
+                  <div className="text-2xl font-black text-slate-900">
+                    R$ {bol.valor.toFixed(2)}
+                  </div>
+                  <p className="text-xs text-slate-500">Vencimento: {bol.dataVencimento}</p>
+
+                  {bol.status !== 'pago' && bol.pixCopiaCola && (
+                    <button
+                      onClick={() => handleCopiarTexto(bol.pixCopiaCola!, bol.id)}
+                      className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow transition"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>{copiadoKey === bol.id ? 'PIX Copiado!' : 'Pagar via PIX Copia e Cola'}</span>
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Balancete e Extrato Financeiro Transparente */}
+            <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-extrabold text-slate-900 text-base">Prestação de Contas</h4>
+                  <p className="text-xs text-slate-500">Extrato discriminado das receitas e despesas das áreas comuns.</p>
+                </div>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+                  Agosto / 2026
+                </span>
+              </div>
+
+              <div className="divide-y divide-slate-100">
+                {extrato.map((item) => (
+                  <div key={item.id} className="py-3 flex items-center justify-between text-xs">
+                    <div>
+                      <strong className="text-slate-900">{item.descricao}</strong>
+                      <div className="text-slate-400 capitalize">
+                        {item.categoria.replace('_', ' ')} • {item.data}
+                      </div>
+                    </div>
+
+                    <strong
+                      className={`text-sm font-black ${
+                        item.tipo === 'receita' ? 'text-emerald-700' : 'text-rose-600'
+                      }`}
+                    >
+                      {item.tipo === 'receita' ? '+' : '-'} R$ {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* MÓDULO 7: COMUNIDADE, MURAL, ENQUETES E SUGESTÕES                  */}
+      {/* ==================================================================== */}
+      {activeTab === 'mural' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-xl font-extrabold text-slate-900">Mural & Comunidade</h3>
+              <p className="text-xs text-slate-500">Trocas, classificados, enquetes condominiais e canal com a administração.</p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsNovaSugestaoModalOpen(true)}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition"
+              >
+                Enviar Sugestão
+              </button>
+              <button
+                onClick={() => setIsNovoPostModalOpen(true)}
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 flex items-center gap-2 transition"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Publicar Anúncio</span>
+              </button>
             </div>
           </div>
 
-          <div className="space-y-3">
-            {avisos.map((aviso) => (
-              <div
-                key={aviso.id}
-                className={`p-5 rounded-2xl border transition-all ${
-                  aviso.prioritario
-                    ? 'bg-rose-50/40 border-l-4 border-l-rose-500 border-slate-200 shadow-sm'
-                    : 'bg-white border-l-4 border-l-emerald-600 border-slate-200 shadow-sm'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2">
-                    {aviso.prioritario && (
-                      <span className="text-xs font-bold bg-rose-600 text-white px-2.5 py-0.5 rounded-full">
-                        Importante
+          {/* Enquetes Ativas */}
+          {enquetes.length > 0 && (
+            <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-lg space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Vote className="w-5 h-5 text-amber-400" />
+                  <h4 className="font-extrabold text-base">Enquete Condominial Oficial</h4>
+                </div>
+                <span className="text-xs text-amber-300 font-bold bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-500/30">
+                  {enquetes[0].totalVotos} votos registrados
+                </span>
+              </div>
+
+              <div>
+                <h5 className="text-lg font-bold text-white">{enquetes[0].titulo}</h5>
+                <p className="text-xs text-slate-300 mt-1">{enquetes[0].descricao}</p>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                {enquetes[0].opcoes.map((opcao) => {
+                  const percent =
+                    enquetes[0].totalVotos > 0
+                      ? Math.round((opcao.votosCount / enquetes[0].totalVotos) * 100)
+                      : 0;
+                  const voted = opcao.votantesIds.includes(morador.id);
+
+                  return (
+                    <button
+                      key={opcao.id}
+                      onClick={() => handleVotarEnquete(enquetes[0].id, opcao.id)}
+                      className={`w-full p-3.5 rounded-2xl border text-left flex items-center justify-between text-xs transition ${
+                        voted
+                          ? 'bg-emerald-600/40 border-emerald-400 font-bold'
+                          : 'bg-white/10 hover:bg-white/15 border-white/20'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{opcao.texto}</span>
+                        {voted && (
+                          <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full">
+                            Seu Voto
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-mono font-bold text-slate-200">
+                        {opcao.votosCount} votos ({percent}%)
                       </span>
-                    )}
-                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                      {aviso.categoria}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Posts do Mural */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {muralPosts.map((post) => (
+              <div key={post.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-3 flex flex-col justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                      {post.tipo.replace('_', ' ')}
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      {new Date(post.criadoEm).toLocaleDateString('pt-BR')}
                     </span>
                   </div>
-                  <span className="text-xs text-slate-500">
-                    Publicado em {new Date(aviso.criadoEm).toLocaleDateString('pt-BR')}
-                  </span>
+
+                  <h4 className="text-base font-extrabold text-slate-900">{post.titulo}</h4>
+                  <p className="text-xs sm:text-sm text-slate-600">{post.conteudo}</p>
+
+                  {post.valor && (
+                    <div className="text-emerald-700 font-black text-base">
+                      R$ {post.valor.toFixed(2)}
+                    </div>
+                  )}
+
+                  <div className="text-xs text-slate-500 font-semibold pt-1">
+                    Anunciado por: {post.autorNome} ({post.autorUnidade})
+                  </div>
                 </div>
 
-                <h3 className="text-base font-bold text-slate-900">{aviso.titulo}</h3>
-                <p className="text-xs text-slate-700 mt-1.5 leading-relaxed">
-                  {aviso.mensagem}
-                </p>
+                {/* Ações e Contato */}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <button
+                    onClick={() => condoStore.curtirMuralPost(condominio.id, post.id, morador.id)}
+                    className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-emerald-600 transition"
+                  >
+                    <ThumbsUp
+                      className={`w-4 h-4 ${
+                        post.curtidas.includes(morador.id) ? 'fill-emerald-600 text-emerald-600' : ''
+                      }`}
+                    />
+                    <span>{post.curtidas.length} Curtidas</span>
+                  </button>
 
-                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                  <span>
-                    Autor: <strong className="text-slate-800">{aviso.autor}</strong> ({aviso.autorCargo})
-                  </span>
-                  {aviso.expiraEm && <span>Válido até: {aviso.expiraEm}</span>}
+                  {post.contatoTelefone && (
+                    <a
+                      href={`https://api.whatsapp.com/send?phone=55${post.contatoTelefone.replace(
+                        /\D/g,
+                        ''
+                      )}&text=Ol%C3%A1%20${encodeURIComponent(post.autorNome)},%20vi%20seu%20an%C3%BAncio%20"${encodeURIComponent(
+                        post.titulo
+                      )}"%20no%20SmartCondo!`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      <span>Conversar</span>
+                    </a>
+                  )}
                 </div>
               </div>
             ))}
@@ -1012,115 +1851,460 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
         </div>
       )}
 
-      {/* ABA 5: MINHA UNIDADE & CONVENIÊNCIA */}
-      {activeTab === 'unidade' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Dados da Unidade e Morador */}
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
-            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <User className="w-5 h-5 text-emerald-600" />
-              Cadastro da Unidade Residencial
-            </h3>
-
-            <div className="space-y-3 text-xs">
-              <div className="flex justify-between py-2 border-b border-slate-100">
-                <span className="text-slate-500">Titular da Unidade:</span>
-                <strong className="text-slate-900 font-bold">{morador.nome}</strong>
-              </div>
-              <div className="flex justify-between py-2 border-b border-slate-100">
-                <span className="text-slate-500">Bloco e Apartamento:</span>
-                <strong className="text-slate-900 font-bold">Bloco {morador.unidade.bloco} - Apto {morador.unidade.apto}</strong>
-              </div>
-              <div className="flex justify-between py-2 border-b border-slate-100">
-                <span className="text-slate-500">E-mail:</span>
-                <span className="text-slate-800 font-medium">{morador.email}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-slate-100">
-                <span className="text-slate-500">Telefone / WhatsApp:</span>
-                <span className="text-slate-800 font-medium">{morador.telefone}</span>
-              </div>
-              <div className="flex justify-between py-2 items-center">
-                <span className="text-slate-500">Situação Cadastral:</span>
-                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                  {morador.statusAdimplencia === 'em_dia' ? 'Adimplente / Liberado' : 'Com Pendência'}
-                </span>
-              </div>
-            </div>
+      {/* ==================================================================== */}
+      {/* MÓDULO 8: DOCUMENTOS E INFORMAÇÕES DO CONDOMÍNIO                     */}
+      {/* ==================================================================== */}
+      {activeTab === 'documentos' && (
+        <div className="space-y-6">
+          <div>
+            <h3 className="text-xl font-extrabold text-slate-900">Documentos Oficiais</h3>
+            <p className="text-xs text-slate-500">Regulamentos, atas, convenções e laudos de vistoria para download e consulta.</p>
           </div>
 
-          {/* Regras e Contatos Rápidos */}
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
-            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Phone className="w-5 h-5 text-emerald-600" />
-              Canais de Atendimento & Normas
-            </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {documentos.map((doc) => (
+              <div key={doc.id} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3 flex flex-col justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                      {doc.categoria}
+                    </span>
+                    <span className="text-xs text-slate-400">{doc.tamanho}</span>
+                  </div>
 
-            <div className="space-y-3 text-xs">
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                <div>
-                  <strong className="text-slate-900 block font-bold">Portaria Principal</strong>
-                  <span className="text-slate-500">Ramal interno 1001 (24 Horas)</span>
+                  <h4 className="text-base font-extrabold text-slate-900">{doc.titulo}</h4>
+                  <p className="text-xs text-slate-600">{doc.descricao}</p>
                 </div>
-                <span className="text-xs font-bold text-emerald-700 bg-white px-2 py-1 rounded border border-slate-200">
-                  Online
-                </span>
-              </div>
 
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                <div>
-                  <strong className="text-slate-900 block font-bold">Administração / Síndico</strong>
-                  <span className="text-slate-500">{condominio.sindicoNome}</span>
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span>Publicado: {doc.dataPublicacao}</span>
+                  <a
+                    href="#download"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      alert(`Download simulado do arquivo PDF: ${doc.titulo}`);
+                    }}
+                    className="flex items-center gap-1.5 font-bold text-emerald-600 hover:underline"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Visualizar PDF</span>
+                  </a>
                 </div>
-                <span className="text-xs text-slate-600">
-                  Seg a Sex, 09h às 18h
-                </span>
               </div>
-
-              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-                <strong className="text-emerald-900 block font-bold mb-1">Regras do Bicicletário:</strong>
-                <ul className="list-disc list-inside text-emerald-800 space-y-0.5 text-xs">
-                  <li>Tempo máximo de uso contínuo: {condominio.regras.limiteTempoBikeMinutos} minutos.</li>
-                  <li>Horário de funcionamento do totem: {condominio.regras.horarioBicicletario}.</li>
-                  <li>Devolução obrigatória com travamento no cadeado e checklist.</li>
-                </ul>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* MODAIS INTERATIVOS */}
+      {/* ==================================================================== */}
+      {/* MÓDULO 2: ENCOMENDAS & PACOTES                                       */}
+      {/* ==================================================================== */}
+      {activeTab === 'encomendas' && (
+        <div className="space-y-6">
+          <div>
+            <h3 className="text-xl font-extrabold text-slate-900">Suas Encomendas</h3>
+            <p className="text-xs text-slate-500">Acompanhe pacotes recebidos pela portaria e apresente o PIN de resgate.</p>
+          </div>
+
+          <div className="space-y-4">
+            {encomendas.length > 0 ? (
+              encomendas.map((enc) => (
+                <div
+                  key={enc.id}
+                  className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Package className="w-5 h-5 text-amber-600" />
+                      <span className="font-extrabold text-slate-900 text-base">{enc.transportadora}</span>
+                    </div>
+
+                    <span
+                      className={`text-xs font-black px-3 py-1 rounded-full ${
+                        enc.status === 'na_portaria'
+                          ? 'bg-amber-500 text-white animate-pulse'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}
+                    >
+                      {enc.status === 'na_portaria' ? 'Aguardando Retirada' : 'Entregue'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-600">
+                    <div>Código de Rastreio: <strong className="text-slate-900">{enc.codigoRastreio || 'N/A'}</strong></div>
+                    <div>Recebido por: <strong className="text-slate-900">{enc.recebidoPor}</strong></div>
+                    <div>Data de Entrada: <strong className="text-slate-900">{new Date(enc.recebidoEm).toLocaleString('pt-BR')}</strong></div>
+                    {enc.observacao && <div>Nota: <strong className="text-slate-900">{enc.observacao}</strong></div>}
+                  </div>
+
+                  {enc.status === 'na_portaria' && (
+                    <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-amber-900">PIN de Resgate na Portaria</span>
+                        <div className="text-2xl font-mono font-black text-amber-800 tracking-wider">
+                          {enc.codigoResgate}
+                        </div>
+                      </div>
+                      <span className="text-xs text-amber-800 font-semibold max-w-xs text-right">
+                        Informe este código ao porteiro para retirar seu pacote.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 text-slate-500 space-y-2">
+                <Package className="w-8 h-8 text-slate-400 mx-auto" />
+                <h4 className="text-base font-bold text-slate-800">Nenhuma encomenda registrada</h4>
+                <p className="text-xs">Você será notificado imediatamente assim que um pacote chegar na portaria.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* MODAIS (QR Scanner, Desbloqueio, Devolução, Visitante, Ocorrência)  */}
+      {/* ==================================================================== */}
       <QrScannerModal
         isOpen={isQrModalOpen}
         onClose={() => setIsQrModalOpen(false)}
-        availableBikes={bikes}
-        currentMorador={morador}
-        onScanSuccess={(bike, lockPass) => {
-          setSelectedBikeForLock(bike);
-          setCurrentLockPassword(lockPass);
-          setIsLockModalOpen(true);
-        }}
-        onScanError={(msg) => setAlertMessage({ type: 'error', text: msg })}
-        onDirectCheckout={handleScanCheckout}
+        onScanSuccess={handleScanCheckout}
       />
 
-      <BikeLockModal
-        isOpen={isLockModalOpen}
-        onClose={() => setIsLockModalOpen(false)}
-        bike={selectedBikeForLock}
-        lockPassword={currentLockPassword}
-      />
+      {selectedBikeForLock && (
+        <BikeLockModal
+          isOpen={isLockModalOpen}
+          onClose={() => {
+            setIsLockModalOpen(false);
+            setSelectedBikeForLock(null);
+          }}
+          bike={selectedBikeForLock}
+          lockPassword={currentLockPassword}
+        />
+      )}
 
-      <BikeReturnModal
-        isOpen={isReturnModalOpen}
-        onClose={() => {
-          setIsReturnModalOpen(false);
-          setBikeForReturn(null);
-        }}
-        bike={bikeForReturn}
-        currentMorador={morador}
-        onSubmitReturn={handleReturnSubmit}
-      />
+      {bikeForReturn && (
+        <BikeReturnModal
+          isOpen={isReturnModalOpen}
+          onClose={() => {
+            setIsReturnModalOpen(false);
+            setBikeForReturn(null);
+          }}
+          bike={bikeForReturn}
+          onSubmit={handleReturnSubmit}
+        />
+      )}
+
+      {/* Modal: Novo Visitante */}
+      {isNovoVisitanteModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="font-black text-lg text-slate-900">Liberar Visitante / Prestador</h3>
+              <button
+                onClick={() => setIsNovoVisitanteModalOpen(false)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCriarVisitante} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Nome Completo</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Carlos Eduardo"
+                  value={visNome}
+                  onChange={(e) => setVisNome(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Tipo</label>
+                  <select
+                    value={visTipo}
+                    onChange={(e: any) => setVisTipo(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  >
+                    <option value="visitante">Visitante / Amigo</option>
+                    <option value="prestador">Prestador de Serviço</option>
+                    <option value="entrega">Entrega / Delivery</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Placa do Carro (opcional)</label>
+                  <input
+                    type="text"
+                    placeholder="ABC-1234"
+                    value={visPlaca}
+                    onChange={(e) => setVisPlaca(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Empresa / Descrição (se prestador)</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Técnico de Internet Claro"
+                  value={visEmpresa}
+                  onChange={(e) => setVisEmpresa(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Data</label>
+                  <input
+                    type="date"
+                    value={visData}
+                    onChange={(e) => setVisData(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Período</label>
+                  <select
+                    value={visPeriodo}
+                    onChange={(e) => setVisPeriodo(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  >
+                    <option value="Dia Inteiro">Dia Inteiro</option>
+                    <option value="Manhã (08h às 12h)">Manhã (08h às 12h)</option>
+                    <option value="Tarde (12h às 18h)">Tarde (12h às 18h)</option>
+                    <option value="Noite (18h às 23h)">Noite (18h às 23h)</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition"
+              >
+                Gerar Autorização & Código
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Nova Ocorrência */}
+      {isNovaOcorrenciaModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="font-black text-lg text-slate-900">Registrar Ocorrência</h3>
+              <button
+                onClick={() => setIsNovaOcorrenciaModalOpen(false)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCriarOcorrencia} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Título do Chamado</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Vazamento no corredor do 3º andar"
+                  value={ocorrTitulo}
+                  onChange={(e) => setOcorrTitulo(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Categoria</label>
+                  <select
+                    value={ocorrCategoria}
+                    onChange={(e: any) => setOcorrCategoria(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                  >
+                    <option value="manutencao">Manutenção Predial</option>
+                    <option value="barulho">Barulho / Silêncio</option>
+                    <option value="limpeza">Limpeza & Conservação</option>
+                    <option value="pets">Animais / Pets</option>
+                    <option value="seguranca">Segurança / Portaria</option>
+                    <option value="outros">Outros</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Prioridade</label>
+                  <select
+                    value={ocorrPrioridade}
+                    onChange={(e: any) => setOcorrPrioridade(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                  >
+                    <option value="baixa">Baixa</option>
+                    <option value="media">Média</option>
+                    <option value="alta">Alta</option>
+                    <option value="urgente">Urgente</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Descrição Detalhada</label>
+                <textarea
+                  rows={4}
+                  placeholder="Relate o ocorrido com clareza..."
+                  value={ocorrDescricao}
+                  onChange={(e) => setOcorrDescricao(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-md shadow-rose-600/20 transition"
+              >
+                Enviar Ocorrência à Administração
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Novo Post no Mural */}
+      {isNovoPostModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="font-black text-lg text-slate-900">Novo Anúncio no Mural</h3>
+              <button
+                onClick={() => setIsNovoPostModalOpen(false)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCriarPostMural} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Categoria do Post</label>
+                <select
+                  value={postTipo}
+                  onChange={(e: any) => setPostTipo(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                >
+                  <option value="troca_venda">Classificados / Venda</option>
+                  <option value="doacao">Doação</option>
+                  <option value="perdi_achei">Achados & Perdidos</option>
+                  <option value="servicos">Serviços de Morador</option>
+                  <option value="geral">Recado Geral</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Título</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Vendo bicicleta infantil aro 16"
+                  value={postTitulo}
+                  onChange={(e) => setPostTitulo(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Valor (R$, opcional)</label>
+                <input
+                  type="number"
+                  placeholder="Ex: 120"
+                  value={postValor}
+                  onChange={(e) => setPostValor(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Descrição</label>
+                <textarea
+                  rows={3}
+                  placeholder="Descreva seu item ou serviço..."
+                  value={postConteudo}
+                  onChange={(e) => setPostConteudo(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition"
+              >
+                Publicar no Mural
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Enviar Sugestão ao Síndico */}
+      {isNovaSugestaoModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="font-black text-lg text-slate-900">Sugestão para a Administração</h3>
+              <button
+                onClick={() => setIsNovaSugestaoModalOpen(false)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEnviarSugestao} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Assunto</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Melhoria na iluminação do bicicletário"
+                  value={sugTitulo}
+                  onChange={(e) => setSugTitulo(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Sua Mensagem</label>
+                <textarea
+                  rows={4}
+                  placeholder="Escreva sua ideia ou sugestão de melhoria..."
+                  value={sugMensagem}
+                  onChange={(e) => setSugMensagem(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition"
+              >
+                Enviar ao Síndico
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

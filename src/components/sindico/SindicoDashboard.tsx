@@ -22,6 +22,16 @@ import {
   Save,
   MapPin,
   FileText,
+  DollarSign,
+  Vote,
+  MessageCircle,
+  Download,
+  ThumbsUp,
+  Wrench,
+  HelpCircle,
+  Copy,
+  Receipt,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   Condominio,
@@ -32,6 +42,13 @@ import {
   Aviso,
   AreaStatus,
   NoticeCategory,
+  Ocorrencia,
+  BoletoMensalidade,
+  ExtratoMensalItem,
+  MuralPost,
+  EnqueteCondominio,
+  SugestaoMorador,
+  DocumentoCondominio,
 } from '../../types';
 import { condoStore } from '../../services/mockStorage';
 import { WhatsAppBroadcastPanel } from './WhatsAppBroadcastPanel';
@@ -55,7 +72,18 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
   avisos,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'moradores' | 'frota' | 'lazer' | 'reservas' | 'avisos' | 'whatsapp' | 'aprovacoes' | 'configuracoes'
+    | 'moradores'
+    | 'frota'
+    | 'lazer'
+    | 'reservas'
+    | 'ocorrencias'
+    | 'financeiro'
+    | 'comunidade'
+    | 'documentos'
+    | 'avisos'
+    | 'whatsapp'
+    | 'aprovacoes'
+    | 'configuracoes'
   >('moradores');
 
   // Filtro de Moradores
@@ -120,9 +148,44 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
   const [configTaxaSalao, setConfigTaxaSalao] = useState(condominio.regras?.taxaReservaSalao || 150);
   const [configDiasAntecedencia, setConfigDiasAntecedencia] = useState(condominio.regras?.diasAntecedenciaReserva || 30);
 
+  // Estados de Ocorrências
+  const [ocorrenciaFiltroStatus, setOcorrenciaFiltroStatus] = useState<'todas' | 'aberto' | 'em_andamento' | 'resolvido'>('todas');
+  const [selectedOcorrencia, setSelectedOcorrencia] = useState<Ocorrencia | null>(null);
+  const [respostaOcorrenciaTexto, setRespostaOcorrenciaTexto] = useState('');
+  const [respostaOcorrenciaStatus, setRespostaOcorrenciaStatus] = useState<'em_andamento' | 'resolvido'>('resolvido');
+
+  // Estados de Financeiro
+  const [showAddExtratoModal, setShowAddExtratoModal] = useState(false);
+  const [novoExtratoDescricao, setNovoExtratoDescricao] = useState('');
+  const [novoExtratoTipo, setNovoExtratoTipo] = useState<'receita' | 'despesa'>('despesa');
+  const [novoExtratoCategoria, setNovoExtratoCategoria] = useState<ExtratoMensalItem['categoria']>('manutencao_predial');
+  const [novoExtratoValor, setNovoExtratoValor] = useState<number>(1500);
+  const [novoExtratoData, setNovoExtratoData] = useState(new Date().toISOString().split('T')[0]);
+
+  // Estados de Comunidade & Enquetes
+  const [showAddEnqueteModal, setShowAddEnqueteModal] = useState(false);
+  const [novaEnqueteTitulo, setNovaEnqueteTitulo] = useState('');
+  const [novaEnqueteDescricao, setNovaEnqueteDescricao] = useState('');
+  const [novaEnqueteOpcoes, setNovaEnqueteOpcoes] = useState<string[]>(['Sim, sou a favor', 'Não, sou contra']);
+  const [novaEnqueteNovaOpcao, setNovaEnqueteNovaOpcao] = useState('');
+
+  // Estados de Documentos
+  const [showAddDocModal, setShowAddDocModal] = useState(false);
+  const [novoDocTitulo, setNovoDocTitulo] = useState('');
+  const [novoDocCategoria, setNovoDocCategoria] = useState<DocumentoCondominio['categoria']>('regulamento');
+  const [novoDocDescricao, setNovoDocDescricao] = useState('');
+  const [novoDocTamanho, setNovoDocTamanho] = useState('2.4 MB');
+
   const [feedbackMsg, setFeedbackMsg] = useState('');
 
   const moradoresPendentes = condoStore.getMoradoresPendentes(condominio.id);
+  const ocorrencias = condoStore.getOcorrencias(condominio.id);
+  const extratoFinanceiro = condoStore.getExtratoFinanceiro(condominio.id);
+  const boletosCondominio = condoStore.getBoletos(condominio.id);
+  const enquetes = condoStore.getEnquetes(condominio.id);
+  const muralPosts = condoStore.getMuralPosts(condominio.id);
+  const sugestoes = condoStore.getSugestoes(condominio.id);
+  const documentos = condoStore.getDocumentos(condominio.id);
   const adimplentesCount = moradores.filter((m) => m.statusAdimplencia === 'em_dia').length;
   const inadimplentesCount = moradores.filter((m) => m.statusAdimplencia === 'com_pendencia').length;
 
@@ -375,6 +438,125 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
     showNotification('Informações e regras do condomínio atualizadas com sucesso!');
   };
 
+  // Handlers de Ocorrências
+  const handleResponderOcorrencia = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOcorrencia) return;
+
+    condoStore.responderOcorrencia(
+      condominio.id,
+      selectedOcorrencia.id,
+      respostaOcorrenciaTexto,
+      respostaOcorrenciaStatus,
+      condominio.sindicoNome
+    );
+
+    confetti({ particleCount: 40, spread: 50 });
+    showNotification(`Chamado #${selectedOcorrencia.id.slice(-4)} atualizado com sucesso!`);
+    setSelectedOcorrencia(null);
+    setRespostaOcorrenciaTexto('');
+  };
+
+  // Handlers Financeiros
+  const handleAddExtratoItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novoExtratoDescricao || novoExtratoValor <= 0) {
+      alert('Preencha a descrição e um valor válido.');
+      return;
+    }
+
+    condoStore.addExtratoItem(condominio.id, {
+      mesReferencia: 'Agosto/2026',
+      descricao: novoExtratoDescricao,
+      tipo: novoExtratoTipo,
+      categoria: novoExtratoCategoria,
+      valor: Number(novoExtratoValor),
+      data: novoExtratoData,
+    });
+
+    confetti({ particleCount: 40, spread: 50 });
+    showNotification('Lançamento financeiro registrado com sucesso no balancete!');
+    setShowAddExtratoModal(false);
+    setNovoExtratoDescricao('');
+    setNovoExtratoValor(1500);
+  };
+
+  const handleToggleBoletoPago = (boletoId: string) => {
+    condoStore.marcarBoletoComoPago(condominio.id, boletoId);
+    showNotification('Status do boleto alterado para PAGO com sucesso!');
+  };
+
+  // Handlers de Enquetes
+  const handleAddEnquete = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novaEnqueteTitulo || novaEnqueteOpcoes.length < 2) {
+      alert('A enquete precisa de um título e no mínimo 2 opções de resposta.');
+      return;
+    }
+
+    condoStore.addEnquete(condominio.id, {
+      titulo: novaEnqueteTitulo,
+      descricao: novaEnqueteDescricao,
+      opcoesTextos: novaEnqueteOpcoes,
+    });
+
+    confetti({ particleCount: 50, spread: 60 });
+    showNotification('Enquete criada e aberta para votação de todos os moradores!');
+    setShowAddEnqueteModal(false);
+    setNovaEnqueteTitulo('');
+    setNovaEnqueteDescricao('');
+    setNovaEnqueteOpcoes(['Sim, sou a favor', 'Não, sou contra']);
+  };
+
+  const handleFinalizarEnquete = (enqueteId: string) => {
+    if (confirm('Deseja encerrar esta enquete? Novos votos não serão mais aceitos.')) {
+      condoStore.finalizarEnquete(condominio.id, enqueteId);
+      showNotification('Enquete finalizada com sucesso.');
+    }
+  };
+
+  // Handlers de Documentos
+  const handleAddDocumento = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novoDocTitulo || !novoDocDescricao) {
+      alert('Preencha o título e a descrição do documento.');
+      return;
+    }
+
+    condoStore.addDocumento(condominio.id, {
+      titulo: novoDocTitulo,
+      categoria: novoDocCategoria,
+      descricao: novoDocDescricao,
+      tamanho: novoDocTamanho,
+      tipoArquivo: 'pdf',
+    });
+
+    confetti({ particleCount: 40, spread: 50 });
+    showNotification('Documento publicado e disponibilizado para consulta dos moradores!');
+    setShowAddDocModal(false);
+    setNovoDocTitulo('');
+    setNovoDocDescricao('');
+  };
+
+  const handleDeleteDocumento = (docId: string) => {
+    if (confirm('Deseja excluir este documento da biblioteca oficial?')) {
+      condoStore.deleteDocumento(condominio.id, docId);
+      showNotification('Documento excluído.');
+    }
+  };
+
+  const handleDeleteMuralPost = (postId: string) => {
+    if (confirm('Deseja remover esta publicação do mural comunitário?')) {
+      condoStore.deleteMuralPost(condominio.id, postId);
+      showNotification('Publicação moderada e removida do mural.');
+    }
+  };
+
+  const handleUpdateSugestaoStatus = (sugId: string, status: SugestaoMorador['status']) => {
+    condoStore.updateSugestaoStatus(condominio.id, sugId, status);
+    showNotification('Status da sugestão atualizado.');
+  };
+
   // Filtragem de Moradores
   const filteredMoradores = moradores.filter((m) => {
     const matchesSearch =
@@ -523,6 +705,59 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
         >
           <Calendar className="w-4 h-4" />
           <span>Agenda & Reservas ({reservas.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('ocorrencias')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap relative cursor-pointer ${
+            activeTab === 'ocorrencias'
+              ? 'bg-amber-600 text-white shadow-sm'
+              : 'text-amber-700 bg-amber-50 hover:bg-amber-100 hover:text-amber-900 border border-amber-200/80'
+          }`}
+        >
+          <Wrench className="w-4 h-4" />
+          <span>Ocorrências & Chamados ({ocorrencias.length})</span>
+          {ocorrencias.filter((o) => o.status === 'aberto').length > 0 && (
+            <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full">
+              {ocorrencias.filter((o) => o.status === 'aberto').length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('financeiro')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
+            activeTab === 'financeiro'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <DollarSign className="w-4 h-4" />
+          <span>Financeiro & Prestação</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('comunidade')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
+            activeTab === 'comunidade'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Vote className="w-4 h-4" />
+          <span>Comunidade & Enquetes ({enquetes.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('documentos')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
+            activeTab === 'documentos'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <FileText className="w-4 h-4" />
+          <span>Documentos ({documentos.length})</span>
         </button>
 
         <button
@@ -1629,6 +1864,582 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
       )}
 
       {/* ========================================================================= */}
+      {/* ABA: OCORRÊNCIAS & CHAMADOS DOS MORADORES */}
+      {/* ========================================================================= */}
+      {activeTab === 'ocorrencias' && (
+        <div className="space-y-6">
+          {/* Header com Filtros */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Wrench className="w-5 h-5 text-amber-600" />
+                <span>Gestão de Chamados & Ocorrências dos Moradores</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Acompanhe reclamações de barulho, vazamentos, manutenções e responda diretamente aos moradores.
+              </p>
+            </div>
+
+            {/* Filtro por Status */}
+            <div className="flex items-center gap-2">
+              {(['todas', 'aberto', 'em_andamento', 'resolvido'] as const).map((st) => (
+                <button
+                  key={st}
+                  onClick={() => setOcorrenciaFiltroStatus(st)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition capitalize cursor-pointer ${
+                    ocorrenciaFiltroStatus === st
+                      ? 'bg-amber-600 text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {st === 'todas' ? 'Todas' : st.replace('_', ' ')}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Lista de Chamados */}
+          {ocorrencias.length === 0 ? (
+            <div className="bg-white p-12 rounded-2xl border border-slate-200/80 text-center">
+              <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+              <h4 className="font-bold text-slate-800 text-sm">Nenhuma ocorrência registrada</h4>
+              <p className="text-xs text-slate-500">Tudo calmo no condomínio! Não há chamados em aberto no momento.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {ocorrencias
+                .filter((oc) => ocorrenciaFiltroStatus === 'todas' || oc.status === ocorrenciaFiltroStatus)
+                .map((oc) => (
+                  <div
+                    key={oc.id}
+                    className={`bg-white rounded-2xl border p-5 transition flex flex-col justify-between shadow-sm ${
+                      oc.status === 'aberto'
+                        ? 'border-amber-200 hover:border-amber-400'
+                        : oc.status === 'em_andamento'
+                        ? 'border-blue-200 hover:border-blue-400'
+                        : 'border-slate-200 opacity-90'
+                    }`}
+                  >
+                    <div>
+                      {/* Top Bar da Ocorrência */}
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                              oc.status === 'aberto'
+                                ? 'bg-amber-100 text-amber-800'
+                                : oc.status === 'em_andamento'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}
+                          >
+                            {oc.status === 'aberto'
+                              ? '⏳ Aberto'
+                              : oc.status === 'em_andamento'
+                              ? '⚙️ Em Análise'
+                              : '✅ Resolvido'}
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full capitalize">
+                            {oc.categoria.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-700 font-medium">
+                          {new Date(oc.criadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                        </span>
+                      </div>
+
+                      {/* Título & Detalhes */}
+                      <h4 className="font-bold text-slate-900 text-sm mb-1">{oc.titulo}</h4>
+                      <p className="text-xs text-slate-600 mb-3 whitespace-pre-wrap">{oc.descricao}</p>
+
+                      {/* Informações do Solicitante */}
+                      <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-[11px] text-slate-600 flex items-center justify-between mb-3">
+                        <div>
+                          <strong>{oc.moradorNome}</strong> • {oc.unidade ? `Bloco ${oc.unidade.bloco} - Apto ${oc.unidade.apto}` : 'Unidade'}
+                        </div>
+                        {oc.local && <span className="text-slate-500">Local: {oc.local}</span>}
+                      </div>
+
+                      {/* Resposta do Síndico se houver */}
+                      {oc.respostaSindico && (
+                        <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-3 mb-3 text-xs">
+                          <div className="text-[10px] font-bold text-indigo-900 mb-1 flex items-center gap-1">
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>Resposta Oficial da Administração:</span>
+                          </div>
+                          <p className="text-indigo-950 font-medium">{oc.respostaSindico}</p>
+                          {oc.respondidoEm && (
+                            <div className="text-[9px] text-indigo-600 mt-1">
+                              Respondido em {new Date(oc.respondidoEm).toLocaleDateString('pt-BR')} por {oc.respondidoPor || 'Síndico'}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Ações */}
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedOcorrencia(oc);
+                          setRespostaOcorrenciaTexto(oc.respostaSindico || '');
+                          setRespostaOcorrenciaStatus(oc.status === 'resolvido' ? 'resolvido' : 'em_andamento');
+                        }}
+                        className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition active:scale-98 cursor-pointer flex items-center gap-1.5"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>{oc.respostaSindico ? 'Atualizar Resposta' : 'Responder ao Morador'}</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ABA: FINANCEIRO & PRESTAÇÃO DE CONTAS */}
+      {/* ========================================================================= */}
+      {activeTab === 'financeiro' && (
+        <div className="space-y-6">
+          {/* Card Resumo Financeiro */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+              <div className="text-xs font-bold text-slate-500 mb-1">Total de Receitas (Mês Atual)</div>
+              <div className="text-2xl font-black text-emerald-600">
+                R${' '}
+                {extratoFinanceiro
+                  .filter((e) => e.tipo === 'receita')
+                  .reduce((acc, curr) => acc + curr.valor, 0)
+                  .toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </div>
+              <div className="text-[11px] text-emerald-700 mt-1">Taxas condominiais e aportes</div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+              <div className="text-xs font-bold text-slate-500 mb-1">Total de Despesas Operacionais</div>
+              <div className="text-2xl font-black text-rose-600">
+                R${' '}
+                {extratoFinanceiro
+                  .filter((e) => e.tipo === 'despesa')
+                  .reduce((acc, curr) => acc + curr.valor, 0)
+                  .toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </div>
+              <div className="text-[11px] text-rose-700 mt-1">Portaria, manutenção, água e energia</div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+              <div className="text-xs font-bold text-slate-500 mb-1">Saldo Líquido / Fundo de Reserva</div>
+              <div className="text-2xl font-black text-indigo-600">
+                R${' '}
+                {(
+                  extratoFinanceiro
+                    .filter((e) => e.tipo === 'receita')
+                    .reduce((acc, curr) => acc + curr.valor, 0) -
+                  extratoFinanceiro
+                    .filter((e) => e.tipo === 'despesa')
+                    .reduce((acc, curr) => acc + curr.valor, 0)
+                ).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </div>
+              <div className="text-[11px] text-indigo-700 mt-1">Superávit em conta bancária</div>
+            </div>
+          </div>
+
+          {/* Balancete Transparente & Ações */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <FileSpreadsheet className="w-5 h-5 text-indigo-600" />
+                  <span>Balancete Mensal Transparente (Agosto/2026)</span>
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Lançamentos visíveis no aplicativo de todos os condôminos para máxima transparência.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAddExtratoModal(true)}
+                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition active:scale-98 cursor-pointer flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Novo Lançamento Financeiro</span>
+              </button>
+            </div>
+
+            {/* Tabela de Lançamentos */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100 text-slate-500 font-bold text-[11px]">
+                    <th className="pb-3">Data</th>
+                    <th className="pb-3">Descrição da Despesa / Receita</th>
+                    <th className="pb-3">Categoria</th>
+                    <th className="pb-3">Tipo</th>
+                    <th className="pb-3 text-right">Valor (R$)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {extratoFinanceiro.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50 transition">
+                      <td className="py-3 text-slate-500 font-medium">
+                        {item.data.split('-').reverse().slice(0, 2).join('/')}
+                      </td>
+                      <td className="py-3 font-semibold text-slate-800">{item.descricao}</td>
+                      <td className="py-3">
+                        <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold capitalize">
+                          {item.categoria.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="py-3">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            item.tipo === 'receita'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-rose-100 text-rose-800'
+                          }`}
+                        >
+                          {item.tipo === 'receita' ? 'Receita (+)' : 'Despesa (-)'}
+                        </span>
+                      </td>
+                      <td
+                        className={`py-3 text-right font-bold ${
+                          item.tipo === 'receita' ? 'text-emerald-600' : 'text-slate-900'
+                        }`}
+                      >
+                        {item.tipo === 'receita' ? '+' : '-'} R$ {item.valor.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Gestão de Boletos das Unidades */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Receipt className="w-5 h-5 text-indigo-600" />
+                  <span>Boletos & Cobranças das Unidades ({boletosCondominio.length})</span>
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Monitore quem já quitou a taxa condominial ou baixe pagamentos efetuados.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {boletosCondominio.map((bol) => (
+                <div
+                  key={bol.id}
+                  className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-xs text-slate-900">{bol.moradorNome}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                          bol.status === 'pago'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {bol.status === 'pago' ? '✅ Quitado' : '⏳ Pendente'}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      Unidade: Bloco {bol.unidade.bloco} - Apto {bol.unidade.apto}
+                    </div>
+                    <div className="text-[11px] text-slate-500">Vencimento: {bol.dataVencimento}</div>
+                    <div className="text-base font-black text-slate-900 mt-2">
+                      R$ {bol.valor.toFixed(2)}
+                    </div>
+                  </div>
+
+                  <div className="pt-3 mt-3 border-t border-slate-200/60 flex items-center justify-end gap-2">
+                    {bol.status !== 'pago' && (
+                      <button
+                        onClick={() => handleToggleBoletoPago(bol.id)}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-sm transition active:scale-98 cursor-pointer flex items-center gap-1"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Confirmar Pagamento</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ABA: COMUNIDADE, MURAL & ENQUETES */}
+      {/* ========================================================================= */}
+      {activeTab === 'comunidade' && (
+        <div className="space-y-6">
+          {/* Seção 1: Enquetes Oficiais */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Vote className="w-5 h-5 text-indigo-600" />
+                  <span>Enquetes & Votações do Condomínio ({enquetes.length})</span>
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Consulte a opinião dos moradores sobre reformas, horários e regulamentos.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAddEnqueteModal(true)}
+                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition active:scale-98 cursor-pointer flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Criar Nova Enquete</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {enquetes.map((enq) => (
+                <div
+                  key={enq.id}
+                  className="bg-slate-50 p-5 rounded-2xl border border-slate-200 flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                          enq.finalizada
+                            ? 'bg-slate-200 text-slate-700'
+                            : 'bg-emerald-100 text-emerald-800'
+                        }`}
+                      >
+                        {enq.finalizada ? '🔒 Finalizada' : '🟢 Votação Aberta'}
+                      </span>
+                      <span className="text-[11px] font-bold text-slate-500">
+                        {enq.totalVotos} votos registrados
+                      </span>
+                    </div>
+                    <h4 className="font-bold text-slate-900 text-sm mb-1">{enq.titulo}</h4>
+                    <p className="text-xs text-slate-600 mb-3">{enq.descricao}</p>
+
+                    {/* Resultados Parciais */}
+                    <div className="space-y-2 mb-3">
+                      {enq.opcoes.map((op) => {
+                        const pct =
+                          enq.totalVotos > 0
+                            ? Math.round((op.votosCount / enq.totalVotos) * 100)
+                            : 0;
+                        return (
+                          <div key={op.id} className="bg-white p-2.5 rounded-xl border border-slate-200">
+                            <div className="flex justify-between text-xs font-bold text-slate-800 mb-1">
+                              <span>{op.texto}</span>
+                              <span>
+                                {op.votosCount} votos ({pct}%)
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                              <div
+                                className="bg-indigo-600 h-full rounded-full transition-all duration-500"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {!enq.finalizada && (
+                    <div className="pt-2 border-t border-slate-200 flex justify-end">
+                      <button
+                        onClick={() => handleFinalizarEnquete(enq.id)}
+                        className="text-xs font-bold text-rose-600 hover:text-rose-800 transition cursor-pointer"
+                      >
+                        Encerrar Votação
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Seção 2: Moderação do Mural Comunitário */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+            <div className="pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <MessageCircle className="w-5 h-5 text-indigo-600" />
+                <span>Mural & Classificados dos Moradores ({muralPosts.length})</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Visualize e modere os anúncios de desapegos, prestação de serviços e comunicados comunitários.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {muralPosts.map((post) => (
+                <div
+                  key={post.id}
+                  className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 capitalize">
+                        {post.tipo}
+                      </span>
+                      <span className="text-[10px] text-slate-700 font-medium">
+                        {new Date(post.criadoEm).toLocaleDateString('pt-BR')}
+                      </span>
+                    </div>
+                    <h4 className="font-bold text-slate-900 text-xs mb-1">{post.titulo}</h4>
+                    <p className="text-xs text-slate-600 mb-2">{post.conteudo}</p>
+                    <div className="text-[11px] text-slate-500">
+                      Por: <strong>{post.autorNome}</strong> ({post.autorUnidade})
+                    </div>
+                  </div>
+
+                  <div className="pt-3 mt-3 border-t border-slate-200 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-700 font-bold">
+                      ❤️ {post.curtidas.length} curtidas • 💬 {post.comentarios.length} comentários
+                    </span>
+                    <button
+                      onClick={() => handleDeleteMuralPost(post.id)}
+                      className="text-rose-600 hover:text-rose-800 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Remover</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Seção 3: Caixa de Sugestões dos Moradores */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+            <div className="pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <HelpCircle className="w-5 h-5 text-indigo-600" />
+                <span>Caixa de Sugestões & Elogios ({sugestoes.length})</span>
+              </h3>
+              <p className="text-xs text-slate-500">Ideias e melhorias enviadas pelos condôminos.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {sugestoes.map((sug) => (
+                <div
+                  key={sug.id}
+                  className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-xs text-slate-900">{sug.titulo}</span>
+                      <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full capitalize">
+                        {sug.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 mb-2">{sug.mensagem}</p>
+                    <div className="text-[11px] text-slate-500">
+                      Enviado por: <strong>{sug.moradorNome}</strong> ({sug.unidade})
+                    </div>
+                  </div>
+
+                  <div className="pt-3 mt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => handleUpdateSugestaoStatus(sug.id, 'em_analise')}
+                      className="px-2.5 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-bold transition cursor-pointer"
+                    >
+                      Em Análise
+                    </button>
+                    <button
+                      onClick={() => handleUpdateSugestaoStatus(sug.id, 'atendida')}
+                      className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold transition cursor-pointer"
+                    >
+                      Atendida
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ABA: CENTRAL DE DOCUMENTOS OFICIAIS */}
+      {/* ========================================================================= */}
+      {activeTab === 'documentos' && (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-indigo-600" />
+                <span>Biblioteca de Documentos & Normas Oficiais ({documentos.length})</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Regulamentos internos, atas de assembleias, laudos prediais e convenção disponíveis para todos os moradores.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowAddDocModal(true)}
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition active:scale-98 cursor-pointer flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Publicar Novo Documento</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {documentos.map((doc) => (
+              <div
+                key={doc.id}
+                className="bg-slate-50 p-5 rounded-2xl border border-slate-200 flex flex-col justify-between hover:border-indigo-300 transition"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="p-2.5 rounded-xl bg-indigo-100 text-indigo-700">
+                      <FileText className="w-5 h-5" />
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-600 bg-white px-2 py-0.5 rounded-full border border-slate-200 capitalize">
+                      {doc.categoria}
+                    </span>
+                  </div>
+
+                  <h4 className="font-bold text-slate-900 text-xs mb-1 line-clamp-2">{doc.titulo}</h4>
+                  <p className="text-[11px] text-slate-500 mb-3 line-clamp-3">{doc.descricao}</p>
+
+                  <div className="text-[10px] text-slate-700 font-medium">
+                    Tamanho: {doc.tamanho} • Publicado em: {doc.dataPublicacao}
+                  </div>
+                </div>
+
+                <div className="pt-3 mt-3 border-t border-slate-200 flex items-center justify-between">
+                  <button
+                    onClick={() => showNotification(`Download iniciado: ${doc.titulo}`)}
+                    className="text-indigo-600 hover:text-indigo-800 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Visualizar</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteDocumento(doc.id)}
+                    className="text-rose-600 hover:text-rose-800 text-xs font-bold transition cursor-pointer"
+                  >
+                    Excluir
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* MODAL: CADASTRAR NOVO MORADOR */}
       {/* ========================================================================= */}
       {showAddMoradorModal && (
@@ -2264,6 +3075,418 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
                   className="flex-1 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition active:scale-98 cursor-pointer"
                 >
                   Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: RESPONDER OCORRÊNCIA / ATUALIZAR STATUS */}
+      {/* ========================================================================= */}
+      {selectedOcorrencia && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+          <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden p-6 text-xs text-slate-800 my-8">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-100 text-amber-700">
+                  <Wrench className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Responder Chamado #{selectedOcorrencia.id.slice(-4)}</h3>
+                  <p className="text-[11px] text-slate-500">
+                    {selectedOcorrencia.moradorNome} • {selectedOcorrencia.unidade}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedOcorrencia(null)}
+                className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 mb-4">
+              <div className="text-[11px] font-bold text-slate-500 mb-1">Relato do Morador:</div>
+              <div className="font-bold text-slate-900 text-xs mb-1">{selectedOcorrencia.titulo}</div>
+              <p className="text-slate-600 text-xs">{selectedOcorrencia.descricao}</p>
+            </div>
+
+            <form onSubmit={handleResponderOcorrencia} className="space-y-4">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Status da Ocorrência:</label>
+                <select
+                  value={respostaOcorrenciaStatus}
+                  onChange={(e) => setRespostaOcorrenciaStatus(e.target.value as any)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  <option value="em_andamento">⚙️ Em Andamento / Em Análise pela Manutenção</option>
+                  <option value="resolvido">✅ Resolvido / Concluído com Sucesso</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Mensagem de Resposta Oficial ao Morador *</label>
+                <textarea
+                  required
+                  rows={4}
+                  placeholder="Ex: A equipe de manutenção predial realizou a vistoria e o reparo foi concluído hoje pela manhã."
+                  value={respostaOcorrenciaTexto}
+                  onChange={(e) => setRespostaOcorrenciaTexto(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="pt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedOcorrencia(null)}
+                  className="flex-1 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition active:scale-98 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>Enviar Resposta</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: NOVO LANÇAMENTO NO BALANCETE FINANCEIRO */}
+      {/* ========================================================================= */}
+      {showAddExtratoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+          <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden p-6 text-xs text-slate-800 my-8">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-emerald-100 text-emerald-700">
+                  <DollarSign className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Novo Lançamento Financeiro</h3>
+                  <p className="text-[11px] text-slate-500">Adicione despesa ou receita ao balancete transparente</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAddExtratoModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddExtratoItem} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Tipo de Lançamento:</label>
+                  <select
+                    value={novoExtratoTipo}
+                    onChange={(e) => setNovoExtratoTipo(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  >
+                    <option value="despesa">🔴 Despesa / Saída (-)</option>
+                    <option value="receita">🟢 Receita / Entrada (+)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Categoria:</label>
+                  <select
+                    value={novoExtratoCategoria}
+                    onChange={(e) => setNovoExtratoCategoria(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  >
+                    <option value="manutencao_predial">Manutenção Predial</option>
+                    <option value="seguranca_portaria">Segurança & Portaria</option>
+                    <option value="limpeza_conservacao">Limpeza & Conservação</option>
+                    <option value="energia_eletrica">Energia Elétrica</option>
+                    <option value="agua_esgoto">Água & Esgoto</option>
+                    <option value="fundo_reserva">Fundo de Reserva</option>
+                    <option value="taxa_condominial">Taxas Ordinárias</option>
+                    <option value="outros">Outros</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Descrição do Lançamento *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Troca de lâmpadas de LED da garagem e sensores"
+                  value={novoExtratoDescricao}
+                  onChange={(e) => setNovoExtratoDescricao(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Valor (R$) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="1"
+                    required
+                    value={novoExtratoValor}
+                    onChange={(e) => setNovoExtratoValor(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Data do Lançamento *</label>
+                  <input
+                    type="date"
+                    required
+                    value={novoExtratoData}
+                    onChange={(e) => setNovoExtratoData(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAddExtratoModal(false)}
+                  className="flex-1 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition active:scale-98 cursor-pointer"
+                >
+                  Salvar Lançamento
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: CRIAR NOVA ENQUETE OFICIAL */}
+      {/* ========================================================================= */}
+      {showAddEnqueteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+          <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden p-6 text-xs text-slate-800 my-8">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-indigo-100 text-indigo-700">
+                  <Vote className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Criar Nova Enquete Oficial</h3>
+                  <p className="text-[11px] text-slate-500">Abra uma votação democrática entre todos os moradores</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAddEnqueteModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddEnquete} className="space-y-4">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Título da Enquete / Pergunta Principal *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Aprovação da Instalação de Energia Solar nas Áreas Comuns"
+                  value={novaEnqueteTitulo}
+                  onChange={(e) => setNovaEnqueteTitulo(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Descrição / Contexto *</label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="Ex: Projeto para instalar painéis solares no telhado das torres, com retorno previsto em 18 meses."
+                  value={novaEnqueteDescricao}
+                  onChange={(e) => setNovaEnqueteDescricao(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Opções de Resposta:</label>
+                <div className="space-y-2 mb-2">
+                  {novaEnqueteOpcoes.map((op, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <span className="w-6 text-center font-bold text-slate-400">{idx + 1}.</span>
+                      <input
+                        type="text"
+                        value={op}
+                        onChange={(e) => {
+                          const updated = [...novaEnqueteOpcoes];
+                          updated[idx] = e.target.value;
+                          setNovaEnqueteOpcoes(updated);
+                        }}
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                      />
+                      {novaEnqueteOpcoes.length > 2 && (
+                        <button
+                          type="button"
+                          onClick={() => setNovaEnqueteOpcoes(novaEnqueteOpcoes.filter((_, i) => i !== idx))}
+                          className="p-2 text-rose-500 hover:text-rose-700 cursor-pointer"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Adicionar outra opção..."
+                    value={novaEnqueteNovaOpcao}
+                    onChange={(e) => setNovaEnqueteNovaOpcao(e.target.value)}
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (novaEnqueteNovaOpcao.trim()) {
+                        setNovaEnqueteOpcoes([...novaEnqueteOpcoes, novaEnqueteNovaOpcao.trim()]);
+                        setNovaEnqueteNovaOpcao('');
+                      }
+                    }}
+                    className="px-3 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl text-xs font-bold text-slate-700 cursor-pointer"
+                  >
+                    + Opção
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAddEnqueteModal(false)}
+                  className="flex-1 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition active:scale-98 cursor-pointer"
+                >
+                  Publicar Enquete
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: PUBLICAR NOVO DOCUMENTO */}
+      {/* ========================================================================= */}
+      {showAddDocModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+          <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden p-6 text-xs text-slate-800 my-8">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-indigo-100 text-indigo-700">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Publicar Novo Documento</h3>
+                  <p className="text-[11px] text-slate-500">Disponibilize atas, laudos ou normas para consulta dos moradores</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAddDocModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddDocumento} className="space-y-4">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Título do Documento *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Ata da Assembleia Geral Extraordinária (AGE 2026)"
+                  value={novoDocTitulo}
+                  onChange={(e) => setNovoDocTitulo(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Categoria:</label>
+                  <select
+                    value={novoDocCategoria}
+                    onChange={(e) => setNovoDocCategoria(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  >
+                    <option value="regulamento">Regulamento Interno</option>
+                    <option value="convencao">Convenção Condominial</option>
+                    <option value="ata">Ata de Assembleia</option>
+                    <option value="laudo">Laudo Técnico / AVCB</option>
+                    <option value="manual">Manual do Proprietário</option>
+                    <option value="outros">Outros</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Tamanho do Arquivo:</label>
+                  <input
+                    type="text"
+                    value={novoDocTamanho}
+                    onChange={(e) => setNovoDocTamanho(e.target.value)}
+                    placeholder="Ex: 2.5 MB"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Descrição / Resumo do Conteúdo *</label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="Ex: Deliberação sobre aprovação de contas do exercício anterior e eleição do conselho fiscal."
+                  value={novoDocDescricao}
+                  onChange={(e) => setNovoDocDescricao(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="pt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAddDocModal(false)}
+                  className="flex-1 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition active:scale-98 cursor-pointer"
+                >
+                  Publicar Documento
                 </button>
               </div>
             </form>

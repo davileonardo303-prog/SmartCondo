@@ -1,6 +1,6 @@
 export type UserRole = 'super_admin' | 'sindico' | 'portaria' | 'morador';
 
-export type BikeStatus = 'disponivel' | 'em_uso' | 'manutencao';
+export type BikeStatus = 'disponivel' | 'reservada_5min' | 'em_uso' | 'manutencao';
 
 export type PackageStatus = 'na_portaria' | 'entregue';
 
@@ -8,7 +8,7 @@ export type AreaStatus = 'aberto' | 'manutencao' | 'limpeza' | 'fechado_clima';
 
 export type ReservationStatus = 'confirmada' | 'pendente' | 'cancelada';
 
-export type NoticeCategory = 'urgente' | 'manutencao' | 'comunicado' | 'social';
+export type NoticeCategory = 'urgente' | 'manutencao' | 'comunicado' | 'social' | 'eventos' | 'regras';
 
 export interface Unidade {
   bloco: string;
@@ -92,12 +92,15 @@ export interface Condominio {
   dataFimTeste?: string;
   sindicoNome: string;
   sindicoEmail: string;
+  sindicoTelefone?: string;
+  portariaTelefone?: string;
   regras: {
     limiteTempoBikeMinutos: number;
     limiteBikesPorMorador: number;
     horarioBicicletario: string;
     diasAntecedenciaReserva: number;
     taxaReservaSalao: number;
+    tempoToleranciaRetiradaMinutos?: number;
   };
 }
 
@@ -139,6 +142,12 @@ export interface Bicicleta {
   ultimaRevisao: string;
   avariasAtuais?: string[];
   inicioUsoTimestamp?: number | null;
+  // Campos da Reserva Exclusiva com Timer de 5 Minutos (Novolar)
+  reserva5minTimestamp?: number | null;
+  reservaMoradorId?: string | null;
+  reservaMoradorNome?: string | null;
+  reservaMoradorUnidade?: string | null;
+  reservaCodigo?: string | null;
 }
 
 export interface HistoricoLocacao {
@@ -159,6 +168,12 @@ export interface HistoricoLocacao {
     pneusOk: boolean;
     quadroOk: boolean;
   };
+  // Vistoria Fotográfica na Baixa / Devolução
+  fotoVistoriaDevolucaoUrl?: string;
+  fotoVistoriaTimestamp?: number;
+  vistoriaStatus?: 'sem_avarias' | 'com_defeito';
+  vistoriaOperador?: string;
+  detalhesDefeito?: string;
   observacoes?: string;
 }
 
@@ -183,7 +198,7 @@ export interface AreaLazer {
   id: string;
   condominioId: string;
   nome: string;
-  tipo: 'piscina' | 'academia' | 'salao_festas' | 'churrasqueira' | 'sauna' | 'quadra';
+  tipo: 'piscina' | 'academia' | 'salao_festas' | 'churrasqueira' | 'sauna' | 'quadra' | 'espaco_gourmet' | 'coworking';
   status: AreaStatus;
   aviso: string;
   previsaoReabertura?: string;
@@ -192,6 +207,7 @@ export interface AreaLazer {
   permiteReserva: boolean;
   taxaReserva: number;
   horarioFuncionamento: string;
+  regrasUso?: string[];
 }
 
 export interface Reserva {
@@ -222,6 +238,179 @@ export interface Aviso {
   autorCargo: string;
   criadoEm: number;
   expiraEm?: string;
+  lidoPor?: string[];
+}
+
+// Módulo 3: Visitantes, Prestadores & Câmeras
+export interface VisitanteLiberado {
+  id: string;
+  condominioId: string;
+  moradorId: string;
+  moradorNome: string;
+  unidade: Unidade;
+  nomeVisitante: string;
+  documento?: string; // RG ou CPF
+  placaVeiculo?: string;
+  tipo: 'visitante' | 'prestador' | 'entrega';
+  empresa?: string;
+  servicoDescricao?: string;
+  dataVisita: string; // YYYY-MM-DD
+  periodoPermitido?: string; // Ex: "08:00 às 18:00"
+  codigoAcesso: string; // Código de 4 a 6 dígitos ou alfanumérico
+  status: 'pendente' | 'dentro' | 'saiu' | 'expirado';
+  criadoEm: number;
+  entradaEm?: number | null;
+  saidaEm?: number | null;
+  observacoes?: string;
+}
+
+export interface CameraAreaComum {
+  id: string;
+  condominioId: string;
+  nome: string;
+  localizacao: string;
+  status: 'online' | 'manutencao';
+  gravando: boolean;
+  urlPlaceholder: string;
+  fps: number;
+}
+
+// Módulo 5: Ocorrências e Problemas
+export type OcorrenciaCategoria = 'barulho' | 'vazamento' | 'manutencao' | 'limpeza' | 'elevador' | 'garagem' | 'seguranca' | 'outro';
+export type OcorrenciaStatus = 'enviado' | 'aberto' | 'em_analise' | 'em_andamento' | 'resolvido';
+export type OcorrenciaPrioridade = 'baixa' | 'media' | 'alta' | 'urgente';
+
+export interface Ocorrencia {
+  id: string;
+  condominioId: string;
+  moradorId: string;
+  moradorNome: string;
+  unidade: Unidade;
+  titulo: string;
+  descricao: string;
+  local?: string;
+  categoria: OcorrenciaCategoria;
+  prioridade: OcorrenciaPrioridade;
+  status: OcorrenciaStatus;
+  fotoUrl?: string;
+  criadoEm: number;
+  atualizadoEm: number;
+  respostaSindico?: string;
+  respondidoEm?: number | null;
+  respondidoPor?: string;
+  historicoAcoes?: {
+    status: OcorrenciaStatus;
+    mensagem: string;
+    data: number;
+    autor: string;
+  }[];
+}
+
+// Módulo 6: Financeiro e Transparência
+export interface BoletoMensalidade {
+  id: string;
+  condominioId: string;
+  moradorId: string;
+  moradorNome: string;
+  unidade: Unidade;
+  mesReferencia: string; // Ex: "Agosto / 2026"
+  valor: number;
+  dataVencimento: string; // YYYY-MM-DD
+  status: 'pago' | 'a_vencer' | 'vencido';
+  linhaDigitavel: string;
+  codigoBarras: string;
+  pixCopiaCola: string;
+  dataPagamento?: number | null;
+  descontoAteVencimento?: number;
+  multaAposVencimento?: number;
+}
+
+export interface ItemExtratoFinanceiro {
+  id: string;
+  condominioId: string;
+  mesReferencia: string;
+  categoria: 'folha_pagamento' | 'energia_eletrica' | 'agua_esgoto' | 'manutencao_predial' | 'seguranca_portaria' | 'limpeza_conservacao' | 'fundo_reserva' | 'taxa_condominial' | 'outros';
+  tipo: 'receita' | 'despesa';
+  descricao: string;
+  valor: number;
+  data: string;
+  comprovanteDisponivel?: boolean;
+}
+
+export type ExtratoMensalItem = ItemExtratoFinanceiro;
+
+// Módulo 7: Comunidade, Mural e Enquetes
+export type MuralTipo = 'perdi_achei' | 'troca_venda' | 'indicacao' | 'geral';
+
+export interface MuralPost {
+  id: string;
+  condominioId: string;
+  autorId: string;
+  autorNome: string;
+  autorUnidade: string;
+  tipo: MuralTipo;
+  titulo: string;
+  conteudo: string;
+  contatoTelefone?: string;
+  valor?: number;
+  fotoUrl?: string;
+  criadoEm: number;
+  curtidas: string[]; // ids dos moradores
+  comentarios: {
+    id: string;
+    autorNome: string;
+    autorUnidade: string;
+    texto: string;
+    timestamp: number;
+  }[];
+}
+
+export interface EnqueteOpcao {
+  id: string;
+  texto: string;
+  votosCount: number;
+  votantesIds: string[];
+}
+
+export interface EnqueteCondominio {
+  id: string;
+  condominioId: string;
+  titulo: string;
+  descricao: string;
+  opcoes: EnqueteOpcao[];
+  dataLimite: string;
+  expiraEm?: string;
+  criadoEm: number;
+  finalizada: boolean;
+  totalVotos: number;
+  autorNome: string;
+}
+
+export interface SugestaoMorador {
+  id: string;
+  condominioId: string;
+  moradorId: string;
+  moradorNome: string;
+  unidade: string;
+  titulo: string;
+  mensagem: string;
+  status: 'recebida' | 'em_analise' | 'aprovada' | 'rejeitada' | 'atendida';
+  criadoEm: number;
+  respostaSindico?: string;
+  respondidoEm?: number;
+}
+
+// Módulo 8: Documentos
+export interface DocumentoCondominio {
+  id: string;
+  condominioId: string;
+  titulo: string;
+  categoria: 'regulamento' | 'convencao' | 'ata' | 'laudo' | 'manual' | 'prestacao_contas' | 'outros';
+  dataPublicacao: string;
+  tamanho: string;
+  tipoArquivo: 'pdf' | 'doc' | 'img';
+  descricao: string;
+  urlSimulada: string;
 }
 
 export interface AppNotification {
@@ -230,7 +419,7 @@ export interface AppNotification {
   paraMoradorId?: string; // se undefined, broadcast
   titulo: string;
   mensagem: string;
-  tipo: 'bike' | 'encomenda' | 'lazer' | 'aviso' | 'sistema';
+  tipo: 'bike' | 'encomenda' | 'lazer' | 'aviso' | 'sistema' | 'seguranca' | 'ocorrencia' | 'financeiro';
   timestamp: number;
   lida: boolean;
   dadosExtras?: Record<string, unknown>;
@@ -243,7 +432,7 @@ export interface WhatsAppMessageLog {
   moradorNome: string;
   moradorTelefone: string;
   moradorUnidade?: string;
-  tipo: 'cadastro' | 'bike_retirada' | 'bike_devolucao' | 'encomenda' | 'encomenda_baixa' | 'reserva' | 'reserva_cancelamento' | 'comunicado_massa' | 'aviso_urgente';
+  tipo: 'cadastro' | 'bike_retirada' | 'bike_devolucao' | 'bike_reserva_5min' | 'bike_reserva_expirada' | 'encomenda' | 'encomenda_baixa' | 'reserva' | 'reserva_cancelamento' | 'visitante_liberado' | 'ocorrencia_atualizada' | 'comunicado_massa' | 'aviso_urgente';
   titulo: string;
   mensagem: string;
   whatsappUrl: string;
@@ -276,4 +465,5 @@ export interface ActiveUserSession {
   condominioId: string;
   moradorId: string; // se role === 'morador'
 }
+
 

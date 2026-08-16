@@ -7,6 +7,7 @@ import { MoradorDashboard } from './components/morador/MoradorDashboard';
 import { PortariaDashboard } from './components/portaria/PortariaDashboard';
 import { SindicoDashboard } from './components/sindico/SindicoDashboard';
 import { SuperAdminDashboard } from './components/superadmin/SuperAdminDashboard';
+import { PwaInstallPrompt } from './components/common/PwaInstallPrompt';
 import { auth, testFirestoreConnection, logoutFirebase } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
@@ -120,18 +121,21 @@ export default function App() {
   // Se não houver usuário conectado, exibe a tela de login / primeiro acesso
   if (!currentUser) {
     return (
-      <AuthScreen
-        condominios={condominios}
-        onLoginSuccess={(user) => {
-          try {
-            localStorage.setItem('smartcondo_session_v1', JSON.stringify(user));
-          } catch {
-            // ignore
-          }
-          setCurrentUser(user);
-          setSelectedCondoId(user.condominioId);
-        }}
-      />
+      <>
+        <AuthScreen
+          condominios={condominios}
+          onLoginSuccess={(user) => {
+            try {
+              localStorage.setItem('smartcondo_session_v1', JSON.stringify(user));
+            } catch {
+              // ignore
+            }
+            setCurrentUser(user);
+            setSelectedCondoId(user.condominioId);
+          }}
+        />
+        <PwaInstallPrompt />
+      </>
     );
   }
 
@@ -214,6 +218,9 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* Modal / Prompt de Instalação PWA (Dispositivos Móveis, Tablets, Desktops, iPhones, iPads) */}
+      <PwaInstallPrompt />
     </div>
   );
 }

@@ -8,6 +8,9 @@ import {
   Wrench,
   Shield,
   Bike,
+  Camera,
+  Upload,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Bicicleta, Morador } from '../../types';
 import confetti from 'canvas-confetti';
@@ -16,7 +19,7 @@ interface BikeReturnModalProps {
   isOpen: boolean;
   onClose: () => void;
   bike: Bicicleta | null;
-  currentMorador: Morador | undefined;
+  currentMorador?: Morador | undefined;
   onSubmitReturn: (data: {
     localDevolucao: string;
     freiosOk: boolean;
@@ -24,6 +27,8 @@ interface BikeReturnModalProps {
     pneusOk: boolean;
     quadroOk: boolean;
     observacoes: string;
+    fotoVistoriaDevolucaoUrl?: string;
+    detalhesDefeito?: string;
   }) => void;
 }
 
@@ -40,10 +45,23 @@ export const BikeReturnModal: React.FC<BikeReturnModalProps> = ({
   const [pneusOk, setPneusOk] = useState(true);
   const [quadroOk, setQuadroOk] = useState(true);
   const [observacoes, setObservacoes] = useState('');
+  const [fotoVistoriaUrl, setFotoVistoriaUrl] = useState<string>('');
+  const [detalhesDefeito, setDetalhesDefeito] = useState('');
 
   if (!isOpen || !bike) return null;
 
-  const hasAvaria = !freiosOk || !correnteOk || !pneusOk || !quadroOk;
+  const hasAvaria = !freiosOk || !correnteOk || !pneusOk || !quadroOk || Boolean(detalhesDefeito.trim());
+
+  const handleFotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setFotoVistoriaUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,12 +79,14 @@ export const BikeReturnModal: React.FC<BikeReturnModalProps> = ({
       pneusOk,
       quadroOk,
       observacoes,
+      fotoVistoriaDevolucaoUrl: fotoVistoriaUrl || undefined,
+      detalhesDefeito: detalhesDefeito || undefined,
     });
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-      <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden text-slate-800 max-h-[90vh] flex flex-col">
+      <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden text-slate-800 max-h-[92vh] flex flex-col">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
           <div className="flex items-center gap-3">
@@ -75,7 +95,7 @@ export const BikeReturnModal: React.FC<BikeReturnModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900">
-                Devolução & Checklist da Bike
+                Devolução & Vistoria da Bicicleta
               </h3>
               <p className="text-xs text-slate-500">
                 Bike #{bike.codigo} • {bike.modelo}
@@ -91,7 +111,7 @@ export const BikeReturnModal: React.FC<BikeReturnModalProps> = ({
         </div>
 
         {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-5 flex-1 text-xs">
+        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 flex-1 text-xs">
           {/* Station Selection */}
           <div>
             <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5 mb-1.5">
@@ -116,6 +136,48 @@ export const BikeReturnModal: React.FC<BikeReturnModalProps> = ({
                 Bicicletário da Piscina / Clube
               </option>
             </select>
+          </div>
+
+          {/* Vistoria Fotográfica Obrigatória / Recomendada */}
+          <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-black text-emerald-950 flex items-center gap-1.5">
+                <Camera className="w-4 h-4 text-emerald-600" />
+                Foto de Vistoria da Devolução
+              </label>
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                Anexo de Segurança
+              </span>
+            </div>
+            <p className="text-[11px] text-emerald-800 leading-snug">
+              A foto fica vinculada ao relatório deste morador para resguardo e investigação de eventuais defeitos futuros.
+            </p>
+
+            {fotoVistoriaUrl ? (
+              <div className="relative rounded-2xl overflow-hidden border border-emerald-300">
+                <img src={fotoVistoriaUrl} alt="Vistoria" className="w-full h-40 object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setFotoVistoriaUrl('')}
+                  className="absolute top-2 right-2 bg-black/70 hover:bg-black text-white p-1.5 rounded-full text-xs"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-emerald-300 hover:border-emerald-500 rounded-2xl bg-white cursor-pointer transition text-center group">
+                <Camera className="w-6 h-6 text-emerald-600 group-hover:scale-110 transition" />
+                <span className="text-xs font-bold text-emerald-900 mt-1">Tirar Foto ou Carregar Imagem</span>
+                <span className="text-[10px] text-slate-500">Câmera do celular, tablet ou arquivo</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleFotoUpload}
+                  className="hidden"
+                />
+              </label>
+            )}
           </div>
 
           {/* Checklist de Condições */}
@@ -204,24 +266,33 @@ export const BikeReturnModal: React.FC<BikeReturnModalProps> = ({
 
           {/* Aviso se houver avaria */}
           {hasAvaria && (
-            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2.5">
-              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-              <p className="text-xs text-amber-900 leading-relaxed">
-                Você sinalizou itens que precisam de atenção. A bicicleta será automaticamente direcionada para a oficina de manutenção preventiva do condomínio.
-              </p>
+            <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 space-y-2">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-900 leading-relaxed font-bold">
+                  Defeito ou Avaria Identificada: A foto e relatório serão arquivados para investigação e manutenção preventiva.
+                </p>
+              </div>
+              <input
+                type="text"
+                value={detalhesDefeito}
+                onChange={(e) => setDetalhesDefeito(e.target.value)}
+                placeholder="Descreva o defeito (ex: pedal esquerdo solto, guidão arranhado...)"
+                className="w-full bg-white border border-amber-300 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none"
+              />
             </div>
           )}
 
           {/* Observações Livres */}
           <div>
             <label className="font-bold text-slate-700 block mb-1">
-              Observações adicionais para a equipe de manutenção:
+              Observações adicionais para a administração:
             </label>
             <textarea
               rows={2}
               value={observacoes}
               onChange={(e) => setObservacoes(e.target.value)}
-              placeholder="Ex: Pneu traseiro pareceu esvaziar um pouco durante o trajeto..."
+              placeholder="Ex: Deixei travada no totem conforme as regras..."
               className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
             />
           </div>
@@ -230,15 +301,15 @@ export const BikeReturnModal: React.FC<BikeReturnModalProps> = ({
           <div className="pt-2">
             <button
               type="submit"
-              className={`w-full py-3.5 px-4 rounded-xl font-bold text-sm shadow-md transition active:scale-98 ${
+              className={`w-full py-3.5 px-4 rounded-xl font-bold text-xs shadow-md transition active:scale-98 cursor-pointer ${
                 hasAvaria
                   ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20'
                   : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
               }`}
             >
               {hasAvaria
-                ? 'Concluir Devolução & Solicitar Manutenção'
-                : 'Concluir Devolução com Sucesso ✓'}
+                ? 'Concluir Devolução & Anexar Vistoria de Defeito'
+                : 'Concluir Devolução com Vistoria Fotográfica ✓'}
             </button>
           </div>
         </form>
@@ -246,3 +317,4 @@ export const BikeReturnModal: React.FC<BikeReturnModalProps> = ({
     </div>
   );
 };
+

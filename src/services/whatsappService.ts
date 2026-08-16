@@ -82,7 +82,7 @@ export class WhatsAppService {
     condominioId: string;
     condominioNome: string;
     morador: Morador;
-    tipo: 'cadastro' | 'bike_retirada' | 'bike_devolucao' | 'encomenda' | 'encomenda_baixa' | 'reserva' | 'reserva_cancelamento' | 'aviso_urgente';
+    tipo: WhatsAppMessageLog['tipo'];
     titulo: string;
     corpoMensagem: string;
   }): WhatsAppMessageLog {
@@ -136,6 +136,8 @@ ${dados.corpoMensagem}
       manutencao: '🛠️ *AVISO DE MANUTENÇÃO*',
       comunicado: '📢 *COMUNICADO DA ADMINISTRAÇÃO*',
       social: '🎉 *EVENTO & CONVIVÊNCIA*',
+      eventos: '📅 *EVENTOS & ATIVIDADES*',
+      regras: '📋 *REGRAS & CONVIVÊNCIA*',
     };
 
     const emojiHeader = categoriaEmojiMap[dados.categoria] || '📢 *COMUNICADO OFICIAL*';

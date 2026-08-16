@@ -14,6 +14,17 @@ import {
   CobrancaCondominio,
   PlanoTipo,
   PlanoConfigItem,
+  VisitanteLiberado,
+  CameraAreaComum,
+  Ocorrencia,
+  OcorrenciaStatus,
+  BoletoMensalidade,
+  ItemExtratoFinanceiro,
+  ExtratoMensalItem,
+  MuralPost,
+  EnqueteCondominio,
+  SugestaoMorador,
+  DocumentoCondominio,
 } from '../types';
 import { whatsappService } from './whatsappService';
 import {
@@ -37,7 +48,7 @@ import {
 } from './firebase';
 import { collection, onSnapshot, doc, getDocs } from 'firebase/firestore';
 
-const STORAGE_KEY_PREFIX = 'smartcondo_clean_v6';
+const STORAGE_KEY_PREFIX = 'smartcondo_clean_v7';
 
 export const DEFAULT_PLANOS_CONFIG: Record<PlanoTipo, PlanoConfigItem> = {
   Teste: {
@@ -114,10 +125,30 @@ const INITIAL_USUARIOS_SISTEMA: UsuarioSistema[] = [
     statusCadastro: 'ativo',
     authProvider: 'email',
   },
+  {
+    id: 'sindico_carlos',
+    nome: 'Carlos Eduardo Mendes',
+    email: 'sindico@smartcondo.com.br',
+    senha: 'sindico123',
+    role: 'sindico',
+    condominioId: 'condo_park_avenue',
+    statusCadastro: 'ativo',
+    authProvider: 'email',
+  },
+  {
+    id: 'portaria_central',
+    nome: 'Portaria 24 Horas',
+    email: 'portaria@smartcondo.com.br',
+    senha: 'portaria123',
+    role: 'portaria',
+    condominioId: 'condo_park_avenue',
+    statusCadastro: 'ativo',
+    authProvider: 'email',
+  },
 ];
 
-// Banco de Dados Limpo / Zerado
 const INITIAL_CONDOMINIOS: Condominio[] = [];
+
 const INITIAL_MORADORES: Record<string, Morador[]> = {};
 const INITIAL_BIKES: Record<string, Bicicleta[]> = {};
 const INITIAL_HISTORICO_LOCACOES: Record<string, HistoricoLocacao[]> = {};
@@ -142,6 +173,15 @@ class MockCondoStore {
   private notificacoes: AppNotification[] = [];
   private cobrancas: CobrancaCondominio[] = [];
   private planosConfig: Record<PlanoTipo, PlanoConfigItem> = { ...DEFAULT_PLANOS_CONFIG };
+  private visitantes: Record<string, VisitanteLiberado[]> = {};
+  private cameras: Record<string, CameraAreaComum[]> = {};
+  private ocorrencias: Record<string, Ocorrencia[]> = {};
+  private boletos: Record<string, BoletoMensalidade[]> = {};
+  private extratoFinanceiro: Record<string, ItemExtratoFinanceiro[]> = {};
+  private muralPosts: Record<string, MuralPost[]> = {};
+  private enquetes: Record<string, EnqueteCondominio[]> = {};
+  private sugestoes: Record<string, SugestaoMorador[]> = {};
+  private documentos: Record<string, DocumentoCondominio[]> = {};
   private listeners: Set<Listener> = new Set();
   private subUnsubscribers: Record<string, (() => void)[]> = {};
   private version = 0;
@@ -151,6 +191,12 @@ class MockCondoStore {
     this.loadFromStorage();
     this.initFirestoreListeners();
     this.bootstrapFromFirestore();
+    this.initializeSampleData();
+
+    // Verificação contínua do Timer de 5 Minutos da Reserva de Bicicletas (Novolar)
+    setInterval(() => {
+      this.verificarExpiracaoReservas5Min();
+    }, 2500);
   }
 
   public async bootstrapFromFirestore(): Promise<boolean> {
@@ -544,6 +590,15 @@ class MockCondoStore {
         this.avisos = parsed.avisos || {};
         this.notificacoes = parsed.notificacoes || [];
         this.cobrancas = parsed.cobrancas || [];
+        this.visitantes = parsed.visitantes || {};
+        this.cameras = parsed.cameras || {};
+        this.ocorrencias = parsed.ocorrencias || {};
+        this.boletos = parsed.boletos || {};
+        this.extratoFinanceiro = parsed.extratoFinanceiro || {};
+        this.muralPosts = parsed.muralPosts || {};
+        this.enquetes = parsed.enquetes || {};
+        this.sugestoes = parsed.sugestoes || {};
+        this.documentos = parsed.documentos || {};
         this.planosConfig = parsed.planosConfig
           ? { ...DEFAULT_PLANOS_CONFIG, ...parsed.planosConfig }
           : { ...DEFAULT_PLANOS_CONFIG };
@@ -577,6 +632,16 @@ class MockCondoStore {
     this.reservas = {};
     this.avisos = {};
     this.notificacoes = [];
+    this.cobrancas = [];
+    this.visitantes = {};
+    this.cameras = {};
+    this.ocorrencias = {};
+    this.boletos = {};
+    this.extratoFinanceiro = {};
+    this.muralPosts = {};
+    this.enquetes = {};
+    this.sugestoes = {};
+    this.documentos = {};
     this.planosConfig = { ...DEFAULT_PLANOS_CONFIG };
     this.saveToStorage();
   }
@@ -596,6 +661,15 @@ class MockCondoStore {
         notificacoes: this.notificacoes,
         cobrancas: this.cobrancas,
         planosConfig: this.planosConfig,
+        visitantes: this.visitantes,
+        cameras: this.cameras,
+        ocorrencias: this.ocorrencias,
+        boletos: this.boletos,
+        extratoFinanceiro: this.extratoFinanceiro,
+        muralPosts: this.muralPosts,
+        enquetes: this.enquetes,
+        sugestoes: this.sugestoes,
+        documentos: this.documentos,
       };
       localStorage.setItem(STORAGE_KEY_PREFIX, JSON.stringify(data));
     } catch {
@@ -881,6 +955,47 @@ class MockCondoStore {
       error:
         'E-mail não cadastrado no banco de dados. Clique na aba "Criar Conta" para solicitar sua entrada no condomínio.',
     };
+  }
+
+  public getUsuarios(): UserAccount[] {
+    const list: UserAccount[] = [];
+    // 1. Administrative / System users
+    this.usuariosSistema.forEach((u) => {
+      list.push({
+        id: u.id,
+        nome: u.nome,
+        email: u.email,
+        telefone: u.telefone,
+        role: u.role,
+        condominioId: u.condominioId,
+        unidade: u.unidade,
+        statusCadastro: u.statusCadastro,
+        avatarUrl: u.avatarUrl,
+        authProvider: u.authProvider,
+      });
+    });
+
+    // 2. Active Moradores
+    Object.values(this.moradores).forEach((mList) => {
+      mList.forEach((m) => {
+        if (m.statusCadastro === 'ativo') {
+          list.push({
+            id: m.id,
+            nome: m.nome,
+            email: m.email,
+            telefone: m.telefone,
+            role: 'morador',
+            condominioId: m.condominioId,
+            unidade: m.unidade,
+            statusCadastro: m.statusCadastro,
+            avatarUrl: m.avatarUrl,
+            authProvider: m.authProvider,
+          });
+        }
+      });
+    });
+
+    return list;
   }
 
   public async cadastrarSindicoAsync(dados: {
@@ -1305,7 +1420,7 @@ class MockCondoStore {
     };
   }
 
-  // Check-in / Devolução com Checklist
+  // Check-in / Devolução com Checklist & Vistoria Fotográfica
   public checkinBike(
     condoId: string,
     bikeId: string,
@@ -1317,6 +1432,10 @@ class MockCondoStore {
       pneusOk: boolean;
       quadroOk: boolean;
       observacoes?: string;
+      fotoVistoriaDevolucaoUrl?: string;
+      vistoriaStatus?: 'sem_avarias' | 'com_defeito';
+      vistoriaOperador?: string;
+      detalhesDefeito?: string;
     }
   ): { success: boolean; message: string; emManutencao: boolean } {
     const bike = this.getBike(condoId, bikeId);
@@ -1325,17 +1444,25 @@ class MockCondoStore {
       return { success: false, message: 'Dados da devolução inválidos.', emManutencao: false };
     }
 
-    const hasDefect = !data.freiosOk || !data.correnteOk || !data.pneusOk || !data.quadroOk;
+    const hasDefect =
+      !data.freiosOk ||
+      !data.correnteOk ||
+      !data.pneusOk ||
+      !data.quadroOk ||
+      data.vistoriaStatus === 'com_defeito' ||
+      Boolean(data.detalhesDefeito);
+
     const avarias: string[] = [];
     if (!data.freiosOk) avarias.push('Freios com folga ou ruído');
     if (!data.correnteOk) avarias.push('Corrente frouxa/desregulada');
     if (!data.pneusOk) avarias.push('Pneu esvaziando ou furado');
     if (!data.quadroOk) avarias.push('Estrutura/Luzes/Pedal com avaria');
+    if (data.detalhesDefeito) avarias.push(data.detalhesDefeito);
 
     const retiradaTimestamp = bike.inicioUsoTimestamp || Date.now() - 30 * 60 * 1000;
     const agora = Date.now();
 
-    // Salva histórico
+    // Salva histórico com foto e dados da vistoria
     const historicoId = `loc_${Date.now()}`;
     const novoHist: HistoricoLocacao = {
       id: historicoId,
@@ -1355,6 +1482,11 @@ class MockCondoStore {
         pneusOk: data.pneusOk,
         quadroOk: data.quadroOk,
       },
+      fotoVistoriaDevolucaoUrl: data.fotoVistoriaDevolucaoUrl || undefined,
+      fotoVistoriaTimestamp: data.fotoVistoriaDevolucaoUrl ? agora : undefined,
+      vistoriaStatus: hasDefect ? 'com_defeito' : 'sem_avarias',
+      vistoriaOperador: data.vistoriaOperador || 'Totem / Autoatendimento',
+      detalhesDefeito: data.detalhesDefeito || undefined,
       observacoes: data.observacoes || '',
     };
 
@@ -1365,13 +1497,13 @@ class MockCondoStore {
     if (hasDefect) {
       bike.status = 'manutencao';
       bike.avariasAtuais = avarias;
-      bike.localizacaoAtual = `Devolvida em: ${data.localDevolucao} (Aguardando Reparo)`;
+      bike.localizacaoAtual = `Devolvida em: ${data.localDevolucao} (Aguardando Reparo / Vistoria Anexada)`;
 
       // Alerta para o síndico e portaria
       this.addNotification({
         condominioId: condoId,
-        titulo: `⚠️ Avaria Reportada na Bike ${bike.codigo}`,
-        mensagem: `Devolvida por ${morador.nome} (${novoHist.moradorUnidade}). Avarias: ${avarias.join(', ')}. Status comutado para manutenção.`,
+        titulo: `⚠️ Avaria / Defeito Reportado na Bike ${bike.codigo}`,
+        mensagem: `Recebida de ${morador.nome} (${novoHist.moradorUnidade}) com vistoria fotográfica. Avarias: ${avarias.join(', ')}. Status comutado para manutenção para averiguação.`,
         tipo: 'bike',
       });
     } else {
@@ -1395,16 +1527,70 @@ class MockCondoStore {
       morador,
       tipo: 'bike_devolucao',
       titulo: `✅ Devolução de Bike: ${bike.codigo}`,
-      corpoMensagem: `Devolução da bike *${bike.codigo}* confirmada no local: *${data.localDevolucao}*.\n\n${hasDefect ? `⚠️ *Checklist:* Foram reportadas avarias (${avarias.join(', ')}). A manutenção foi acionada.` : '✨ *Checklist:* Bicicleta devolvida em perfeito estado. 100%!'}\n\nObrigado por utilizar nosso bicicletário compartilhado!`,
+      corpoMensagem: `Devolução da bike *${bike.codigo}* confirmada no local: *${data.localDevolucao}*.\n\n${hasDefect ? `⚠️ *Vistoria Portaria:* Foram registradas observações de avaria (${avarias.join(', ')}). O relatório e foto foram anexados.` : '✨ *Vistoria Portaria:* Bicicleta conferida e recebida em perfeito estado. 100%!'}\n\nObrigado por utilizar nosso bicicletário compartilhado!`,
     });
 
     this.notify();
     return {
       success: true,
       message: hasDefect
-        ? `Devolução registrada. Avarias foram encaminhadas automaticamente para a manutenção do síndico.`
-        : `Devolução da bike ${bike.codigo} concluída com sucesso! Obrigado pelo cuidado.`,
+        ? `Devolução e foto de vistoria registradas! Avaria encaminhada para investigação da administração.`
+        : `Devolução da bike ${bike.codigo} e vistoria fotográfica concluídas com sucesso!`,
       emManutencao: hasDefect,
+    };
+  }
+
+  // Baixa / Devolução de Bike realizada diretamente pelo Porteiro na Portaria com Vistoria Fotográfica
+  public receberDevolucaoPortariaBike(
+    condoId: string,
+    bikeId: string,
+    dados: {
+      operadorNome?: string;
+      vistoriaOperador?: string;
+      fotoUrl?: string;
+      fotoVistoriaDevolucaoUrl?: string;
+      comDefeito?: boolean;
+      vistoriaStatus?: 'ok' | 'com_defeito' | 'sem_avarias';
+      detalhesDefeito?: string;
+      localDevolucao?: string;
+    }
+  ): { success: boolean; message: string; emManutencao: boolean } {
+    const bike = this.getBike(condoId, bikeId);
+    if (!bike) return { success: false, message: 'Bicicleta não encontrada.', emManutencao: false };
+
+    const moradorId = bike.usuarioAtualId || bike.reservaMoradorId || 'morador_avulso';
+    const morador = this.getMorador(condoId, moradorId) || {
+      id: moradorId,
+      condominioId: condoId,
+      nome: bike.usuarioAtualNome || bike.reservaMoradorNome || 'Morador Unidade',
+      email: '',
+      telefone: '',
+      unidade: { bloco: 'A', apto: '101' },
+      statusAdimplencia: 'em_dia' as const,
+      statusCadastro: 'ativo' as const,
+    };
+
+    const isDefective = dados.comDefeito || dados.vistoriaStatus === 'com_defeito';
+    const fotoFinal = dados.fotoVistoriaDevolucaoUrl || dados.fotoUrl;
+    const operadorFinal = dados.vistoriaOperador || dados.operadorNome || 'Portaria';
+
+    const res = this.checkinBike(condoId, bike.id, morador.id, {
+      localDevolucao: dados.localDevolucao || 'Portaria Principal / Totem',
+      freiosOk: !isDefective,
+      correnteOk: !isDefective,
+      pneusOk: !isDefective,
+      quadroOk: !isDefective,
+      fotoVistoriaDevolucaoUrl: fotoFinal,
+      vistoriaStatus: isDefective ? 'com_defeito' : 'sem_avarias',
+      vistoriaOperador: operadorFinal,
+      detalhesDefeito: dados.detalhesDefeito,
+      observacoes: `Devolução inspecionada pelo operador da portaria: ${operadorFinal}.`,
+    });
+
+    return {
+      success: res.success,
+      message: res.message,
+      emManutencao: res.emManutencao,
     };
   }
 
@@ -2001,6 +2187,1521 @@ class MockCondoStore {
     this.notify();
 
     return { success: true, novaDataFim: novaDataStr, condo };
+  }
+
+  // --- MÓDULO 4.1: RESERVA DE BICICLETAS COMPARTILHADAS (5 MINUTOS - NOVOLAR) ---
+  public reservarBike5Min(
+    condoId: string,
+    bikeId: string,
+    moradorId: string
+  ): { success: boolean; message: string; bike?: Bicicleta; codigoReserva?: string; tempoLimiteSegundos?: number } {
+    const morador = this.getMorador(condoId, moradorId);
+    if (!morador) {
+      return { success: false, message: 'Morador não localizado no sistema.' };
+    }
+
+    if (morador.statusAdimplencia === 'com_pendencia') {
+      return {
+        success: false,
+        message: 'Unidade com pendência cadastral ou financeira. Regularize para liberar bicicletas.',
+      };
+    }
+
+    // Regra: Somente 1 bike ativa ou reservada por morador
+    const condoBikes = this.getBikes(condoId);
+    const jaPossuiReservaOuUso = condoBikes.some(
+      (b) =>
+        (b.status === 'em_uso' && b.usuarioAtualId === moradorId) ||
+        (b.status === 'reservada_5min' && b.reservaMoradorId === moradorId)
+    );
+
+    if (jaPossuiReservaOuUso) {
+      return {
+        success: false,
+        message: 'Você já possui uma bicicleta em andamento ou reservada. Finalize a utilização atual primeiro.',
+      };
+    }
+
+    const bike = this.getBike(condoId, bikeId);
+    if (!bike) {
+      return { success: false, message: 'Bicicleta não encontrada.' };
+    }
+
+    if (bike.status !== 'disponivel') {
+      return {
+        success: false,
+        message:
+          bike.status === 'reservada_5min'
+            ? 'Esta bicicleta já foi reservada por outro morador e está aguardando retirada.'
+            : bike.status === 'em_uso'
+            ? 'Esta bicicleta já está em uso.'
+            : 'Esta bicicleta está em manutenção preventiva.',
+      };
+    }
+
+    const agora = Date.now();
+    const codigoReserva = `BK-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    bike.status = 'reservada_5min';
+    bike.reserva5minTimestamp = agora;
+    bike.reservaMoradorId = morador.id;
+    bike.reservaMoradorNome = morador.nome;
+    bike.reservaMoradorUnidade = `Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto}`;
+    bike.reservaCodigo = codigoReserva;
+
+    syncBikeToFirestore(bike).catch((err) => console.warn('Sync Bike 5min error:', err));
+
+    // Notificação imediata no app
+    this.addNotification({
+      condominioId: condoId,
+      paraMoradorId: morador.id,
+      titulo: `⏱️ Reserva Confirmada: Bike #${bike.codigo}`,
+      mensagem: `Você tem 5 minutos para retirar na portaria! Apresente o código ${codigoReserva}. Expira em breve se não retirado.`,
+      tipo: 'bike',
+    });
+
+    const condo = this.getCondominio(condoId);
+    const condoNome = condo ? condo.nome : 'Condomínio Residencial';
+
+    whatsappService.notificarMorador({
+      condominioId: condoId,
+      condominioNome: condoNome,
+      morador,
+      tipo: 'bike_reserva_5min',
+      titulo: `⏱️ Reserva de Bike Ativada: ${bike.codigo}`,
+      corpoMensagem: `Sua reserva da bicicleta *#${bike.codigo}* (${bike.modelo}) foi realizada com sucesso!\n\n🔑 *Código de Retirada:* *${codigoReserva}*\n⏱️ *TEMPO LIMITE:* *5 MINUTOS* para retirar na portaria.\n\n⚠️ _Caso não retire em 5 minutos, a reserva será cancelada automaticamente e liberada para outros moradores._`,
+    });
+
+    this.saveToStorage();
+    this.notify();
+
+    return {
+      success: true,
+      message: `Bicicleta #${bike.codigo} reservada! Você tem 5 minutos para retirar na portaria.`,
+      bike,
+      codigoReserva,
+      tempoLimiteSegundos: 300,
+    };
+  }
+
+  public cancelarReserva5Min(
+    condoId: string,
+    bikeId: string,
+    motivo: string = 'Reserva cancelada pelo morador'
+  ): { success: boolean; message: string } {
+    const bike = this.getBike(condoId, bikeId);
+    if (!bike) return { success: false, message: 'Bicicleta não encontrada.' };
+
+    const moradorId = bike.reservaMoradorId;
+    const bikeCodigo = bike.codigo;
+
+    bike.status = 'disponivel';
+    bike.reserva5minTimestamp = null;
+    bike.reservaMoradorId = null;
+    bike.reservaMoradorNome = null;
+    bike.reservaMoradorUnidade = null;
+    bike.reservaCodigo = null;
+
+    syncBikeToFirestore(bike).catch((err) => console.warn('Sync Bike cancel 5min error:', err));
+
+    if (moradorId) {
+      this.addNotification({
+        condominioId: condoId,
+        paraMoradorId: moradorId,
+        titulo: `❌ Reserva Cancelada: Bike #${bikeCodigo}`,
+        mensagem: motivo,
+        tipo: 'bike',
+      });
+    }
+
+    this.saveToStorage();
+    this.notify();
+    return { success: true, message: `Reserva da bicicleta #${bikeCodigo} foi cancelada.` };
+  }
+
+  public verificarExpiracaoReservas5Min() {
+    const LIMITE_MS = 5 * 60 * 1000; // 5 minutos exatos
+    const agora = Date.now();
+    let mudou = false;
+
+    Object.keys(this.bikes).forEach((condoId) => {
+      const list = this.bikes[condoId] || [];
+      list.forEach((b) => {
+        if (b.status === 'reservada_5min' && b.reserva5minTimestamp) {
+          const decorrido = agora - b.reserva5minTimestamp;
+          if (decorrido > LIMITE_MS) {
+            // Expirou! Auto-cancelamento
+            const moradorId = b.reservaMoradorId;
+            const moradorNome = b.reservaMoradorNome || 'Morador';
+            const bikeCodigo = b.codigo;
+
+            b.status = 'disponivel';
+            b.reserva5minTimestamp = null;
+            b.reservaMoradorId = null;
+            b.reservaMoradorNome = null;
+            b.reservaMoradorUnidade = null;
+            b.reservaCodigo = null;
+
+            syncBikeToFirestore(b).catch((err) => console.warn('Sync Expired Bike error:', err));
+            mudou = true;
+
+            if (moradorId) {
+              const morador = this.getMorador(condoId, moradorId);
+              this.addNotification({
+                condominioId: condoId,
+                paraMoradorId: moradorId,
+                titulo: `⏰ Reserva Expirada: Bike #${bikeCodigo}`,
+                mensagem: `O prazo de 5 minutos para retirada na portaria esgotou. A bicicleta voltou a ficar disponível para todos.`,
+                tipo: 'bike',
+              });
+
+              if (morador) {
+                whatsappService.notificarMorador({
+                  condominioId: condoId,
+                  condominioNome: 'Condomínio',
+                  morador,
+                  tipo: 'bike_reserva_expirada',
+                  titulo: `⏰ Prazo de 5 Minutos Expirado: Bike #${bikeCodigo}`,
+                  corpoMensagem: `Olá ${moradorNome}, o tempo limite de 5 minutos para retirar a bicicleta *#${bikeCodigo}* na portaria expirou. A reserva foi cancelada automaticamente.`,
+                });
+              }
+            }
+          }
+        }
+      });
+    });
+
+    if (mudou) {
+      this.saveToStorage();
+      this.notify();
+    }
+  }
+
+  public confirmarRetiradaPortaria(
+    condoId: string,
+    bikeIdOrCode: string,
+    porteiroNome: string = 'Portaria Central'
+  ): { success: boolean; message: string; bike?: Bicicleta; lockPassword?: string } {
+    const bike = this.getBike(condoId, bikeIdOrCode);
+    if (!bike) {
+      return { success: false, message: 'Bicicleta ou código não localizado.' };
+    }
+
+    if (bike.status !== 'reservada_5min' && bike.status !== 'disponivel') {
+      return {
+        success: false,
+        message: `Esta bicicleta não pode ser retirada (status atual: ${bike.status}).`,
+      };
+    }
+
+    const moradorId = bike.reservaMoradorId || bike.usuarioAtualId;
+    if (!moradorId) {
+      return {
+        success: false,
+        message: 'Nenhum morador associado a esta retirada. Faça a reserva pelo app primeiro.',
+      };
+    }
+
+    const morador = this.getMorador(condoId, moradorId);
+    if (!morador) {
+      return { success: false, message: 'Morador não localizado.' };
+    }
+
+    // Passa para 'em_uso'
+    bike.status = 'em_uso';
+    bike.usuarioAtualId = morador.id;
+    bike.usuarioAtualNome = morador.nome;
+    bike.usuarioAtualUnidade = `Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto}`;
+    bike.inicioUsoTimestamp = Date.now();
+    bike.localizacaoAtual = 'Em trânsito com morador';
+    bike.reserva5minTimestamp = null;
+    bike.reservaCodigo = null;
+
+    syncBikeToFirestore(bike).catch((err) => console.warn('Sync Bike checkout error:', err));
+
+    this.addNotification({
+      condominioId: condoId,
+      paraMoradorId: morador.id,
+      titulo: `🚲 Bike #${bike.codigo} Retirada na Portaria`,
+      mensagem: `Retirada autorizada por ${porteiroNome}. Senha do cadeado: ${bike.lockPassword}. Tempo de pedalada iniciado!`,
+      tipo: 'bike',
+    });
+
+    const condo = this.getCondominio(condoId);
+    whatsappService.notificarMorador({
+      condominioId: condoId,
+      condominioNome: condo?.nome || 'Condomínio',
+      morador,
+      tipo: 'bike_retirada',
+      titulo: `🚲 Retirada Confirmada: Bike #${bike.codigo}`,
+      corpoMensagem: `Retirada da bike *#${bike.codigo}* confirmada na portaria!\n\n🔑 *Senha do Cadeado:* \`${bike.lockPassword}\`\n⏱️ *Tempo Máximo Sugerido:* 60 min\n👮 *Confirmado por:* ${porteiroNome}\n\nBom passeio! Lembre-se de trancar o cadeado ao estacionar.`,
+    });
+
+    this.saveToStorage();
+    this.notify();
+
+    return {
+      success: true,
+      message: `Retirada da bicicleta #${bike.codigo} liberada com sucesso para ${morador.nome}!`,
+      bike,
+      lockPassword: bike.lockPassword,
+    };
+  }
+
+  // --- MÓDULO 3: SEGURANÇA, VISITANTES E CÂMERAS ---
+  public getVisitantes(condoId: string, moradorId?: string): VisitanteLiberado[] {
+    const list = this.visitantes[condoId] || [];
+    if (moradorId) {
+      return list.filter((v) => v.moradorId === moradorId);
+    }
+    return [...list].sort((a, b) => b.criadoEm - a.criadoEm);
+  }
+
+  public addVisitante(
+    condoId: string,
+    data: {
+      moradorId: string;
+      nomeVisitante: string;
+      documento?: string;
+      placaVeiculo?: string;
+      tipo: 'visitante' | 'prestador' | 'entrega';
+      empresa?: string;
+      servicoDescricao?: string;
+      dataVisita: string;
+      periodoPermitido?: string;
+      observacoes?: string;
+    }
+  ): VisitanteLiberado {
+    const morador = this.getMorador(condoId, data.moradorId);
+    if (!morador) throw new Error('Morador não encontrado');
+
+    const codigoAcesso = `VIS-${Math.floor(1000 + Math.random() * 9000)}`;
+    const novo: VisitanteLiberado = {
+      id: `vis_${Date.now()}`,
+      condominioId: condoId,
+      moradorId: morador.id,
+      moradorNome: morador.nome,
+      unidade: morador.unidade,
+      nomeVisitante: data.nomeVisitante,
+      documento: data.documento || '',
+      placaVeiculo: data.placaVeiculo || '',
+      tipo: data.tipo,
+      empresa: data.empresa || '',
+      servicoDescricao: data.servicoDescricao || '',
+      dataVisita: data.dataVisita,
+      periodoPermitido: data.periodoPermitido || 'Dia Inteiro',
+      codigoAcesso,
+      status: 'pendente',
+      criadoEm: Date.now(),
+      observacoes: data.observacoes || '',
+    };
+
+    if (!this.visitantes[condoId]) this.visitantes[condoId] = [];
+    this.visitantes[condoId].unshift(novo);
+
+    this.addNotification({
+      condominioId: condoId,
+      paraMoradorId: morador.id,
+      titulo: `🔐 Acesso Criado: ${data.nomeVisitante}`,
+      mensagem: `Código gerado: ${codigoAcesso}. Envie pelo WhatsApp para seu convidado/prestador.`,
+      tipo: 'seguranca',
+    });
+
+    this.saveToStorage();
+    this.notify();
+    return novo;
+  }
+
+  public cancelarVisitante(condoId: string, id: string): boolean {
+    if (!this.visitantes[condoId]) return false;
+    const item = this.visitantes[condoId].find((v) => v.id === id);
+    if (item) {
+      item.status = 'expirado';
+      this.saveToStorage();
+      this.notify();
+      return true;
+    }
+    return false;
+  }
+
+  public registrarEntradaPortaria(
+    condoId: string,
+    codigoOuId: string,
+    porteiroNome: string = 'Portaria Central'
+  ): { success: boolean; message: string; visitante?: VisitanteLiberado } {
+    const list = this.visitantes[condoId] || [];
+    const item = list.find((v) => v.id === codigoOuId || v.codigoAcesso.toUpperCase() === codigoOuId.toUpperCase());
+    if (!item) {
+      return { success: false, message: 'Código de autorização de visitante não encontrado.' };
+    }
+
+    if (item.status === 'dentro') {
+      return { success: false, message: 'Este visitante já se encontra dentro do condomínio.' };
+    }
+
+    item.status = 'dentro';
+    item.entradaEm = Date.now();
+
+    this.addNotification({
+      condominioId: condoId,
+      paraMoradorId: item.moradorId,
+      titulo: `🚪 Entrada na Portaria: ${item.nomeVisitante}`,
+      mensagem: `${item.nomeVisitante} (${item.tipo === 'prestador' ? item.empresa || 'Prestador' : 'Visitante'}) acabou de ingressar no condomínio pela portaria.`,
+      tipo: 'seguranca',
+    });
+
+    this.saveToStorage();
+    this.notify();
+    return {
+      success: true,
+      message: `Entrada de ${item.nomeVisitante} registrada para a unidade Bloco ${item.unidade.bloco} - Apto ${item.unidade.apto}.`,
+      visitante: item,
+    };
+  }
+
+  public registrarSaidaPortaria(
+    condoId: string,
+    id: string
+  ): { success: boolean; message: string } {
+    const list = this.visitantes[condoId] || [];
+    const item = list.find((v) => v.id === id);
+    if (!item) return { success: false, message: 'Visitante não encontrado.' };
+
+    item.status = 'saiu';
+    item.saidaEm = Date.now();
+
+    this.saveToStorage();
+    this.notify();
+    return { success: true, message: `Saída de ${item.nomeVisitante} registrada.` };
+  }
+
+  public getCameras(condoId: string): CameraAreaComum[] {
+    const list = this.cameras[condoId] || [];
+    if (list.length === 0) {
+      return [
+        {
+          id: 'cam_1',
+          condominioId: condoId,
+          nome: 'Portaria Principal 24h & Eclusa',
+          localizacao: 'Acesso Social Guarita',
+          status: 'online',
+          gravando: true,
+          urlPlaceholder: 'https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=600&q=80',
+          fps: 30,
+        },
+        {
+          id: 'cam_2',
+          condominioId: condoId,
+          nome: 'Hall Social & Elevadores',
+          localizacao: 'Torre A - Térreo',
+          status: 'online',
+          gravando: true,
+          urlPlaceholder: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=600&q=80',
+          fps: 30,
+        },
+        {
+          id: 'cam_3',
+          condominioId: condoId,
+          nome: 'Garagem & Portão Veicular G1',
+          localizacao: 'Subsolo 1',
+          status: 'online',
+          gravando: true,
+          urlPlaceholder: 'https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&w=600&q=80',
+          fps: 30,
+        },
+        {
+          id: 'cam_4',
+          condominioId: condoId,
+          nome: 'Piscina & Deck de Lazer',
+          localizacao: 'Área Externa',
+          status: 'online',
+          gravando: true,
+          urlPlaceholder: 'https://images.unsplash.com/photo-1584132967334-10e028bd69f7?auto=format&fit=crop&w=600&q=80',
+          fps: 30,
+        },
+        {
+          id: 'cam_5',
+          condominioId: condoId,
+          nome: 'Totem do Bicicletário Compartilhado',
+          localizacao: 'Pátio Central Novolar',
+          status: 'online',
+          gravando: true,
+          urlPlaceholder: 'https://images.unsplash.com/photo-1485965120184-e220f721d03e?auto=format&fit=crop&w=600&q=80',
+          fps: 30,
+        },
+      ];
+    }
+    return [...list];
+  }
+
+  // --- MÓDULO 5: OCORRÊNCIAS E PROBLEMAS ---
+  public getOcorrencias(condoId: string, moradorId?: string): Ocorrencia[] {
+    const list = this.ocorrencias[condoId] || [];
+    if (moradorId) {
+      return list.filter((o) => o.moradorId === moradorId).sort((a, b) => b.criadoEm - a.criadoEm);
+    }
+    return [...list].sort((a, b) => b.criadoEm - a.criadoEm);
+  }
+
+  public addOcorrencia(
+    condoId: string,
+    data: {
+      moradorId: string;
+      titulo: string;
+      descricao: string;
+      categoria: Ocorrencia['categoria'];
+      prioridade: Ocorrencia['prioridade'];
+      fotoUrl?: string;
+    }
+  ): Ocorrencia {
+    const morador = this.getMorador(condoId, data.moradorId);
+    if (!morador) throw new Error('Morador não encontrado');
+
+    const agora = Date.now();
+    const nova: Ocorrencia = {
+      id: `ocorr_${agora}`,
+      condominioId: condoId,
+      moradorId: morador.id,
+      moradorNome: morador.nome,
+      unidade: morador.unidade,
+      titulo: data.titulo,
+      descricao: data.descricao,
+      categoria: data.categoria,
+      prioridade: data.prioridade,
+      status: 'enviado',
+      fotoUrl: data.fotoUrl,
+      criadoEm: agora,
+      atualizadoEm: agora,
+      historicoAcoes: [
+        {
+          status: 'enviado',
+          mensagem: 'Ocorrência registrada pelo morador e encaminhada à administração.',
+          data: agora,
+          autor: morador.nome,
+        },
+      ],
+    };
+
+    if (!this.ocorrencias[condoId]) this.ocorrencias[condoId] = [];
+    this.ocorrencias[condoId].unshift(nova);
+
+    this.addNotification({
+      condominioId: condoId,
+      titulo: `⚠️ Nova Ocorrência: ${data.titulo}`,
+      mensagem: `Registrada por ${morador.nome} (Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto}) • Categoria: ${data.categoria}`,
+      tipo: 'ocorrencia',
+    });
+
+    this.saveToStorage();
+    this.notify();
+    return nova;
+  }
+
+  public updateOcorrenciaStatus(
+    condoId: string,
+    id: string,
+    status: OcorrenciaStatus,
+    resposta?: string,
+    autorNome: string = 'Síndico / Administração'
+  ): boolean {
+    const list = this.ocorrencias[condoId] || [];
+    const ocorrencia = list.find((o) => o.id === id);
+    if (!ocorrencia) return false;
+
+    const agora = Date.now();
+    ocorrencia.status = status;
+    ocorrencia.atualizadoEm = agora;
+
+    if (resposta) {
+      ocorrencia.respostaSindico = resposta;
+      ocorrencia.respondidoEm = agora;
+      ocorrencia.respondidoPor = autorNome;
+    }
+
+    if (!ocorrencia.historicoAcoes) ocorrencia.historicoAcoes = [];
+    ocorrencia.historicoAcoes.push({
+      status,
+      mensagem: resposta || `Status atualizado para: ${status.replace('_', ' ').toUpperCase()}`,
+      data: agora,
+      autor: autorNome,
+    });
+
+    this.addNotification({
+      condominioId: condoId,
+      paraMoradorId: ocorrencia.moradorId,
+      titulo: `📋 Atualização no Chamado: ${ocorrencia.titulo}`,
+      mensagem: `Status: ${status.toUpperCase()}${resposta ? ` • Resposta: "${resposta}"` : ''}`,
+      tipo: 'ocorrencia',
+    });
+
+    this.saveToStorage();
+    this.notify();
+    return true;
+  }
+
+  public responderOcorrencia(
+    condoId: string,
+    id: string,
+    resposta: string,
+    status: OcorrenciaStatus = 'resolvido',
+    autorNome: string = 'Síndico / Administração'
+  ): boolean {
+    return this.updateOcorrenciaStatus(condoId, id, status, resposta, autorNome);
+  }
+
+  // --- MÓDULO 6: FINANCEIRO E TRANSPARÊNCIA ---
+  public getBoletos(condoId: string, moradorId?: string): BoletoMensalidade[] {
+    const list = this.boletos[condoId] || [];
+    if (moradorId) {
+      return list.filter((b) => b.moradorId === moradorId);
+    }
+    return [...list];
+  }
+
+  public marcarBoletoComoPago(condoId: string, id: string): boolean {
+    const list = this.boletos[condoId] || [];
+    const boleto = list.find((b) => b.id === id);
+    if (boleto) {
+      boleto.status = 'pago';
+      boleto.dataPagamento = Date.now();
+
+      this.addNotification({
+        condominioId: condoId,
+        paraMoradorId: boleto.moradorId,
+        titulo: `✅ Boleto Quitado: ${boleto.mesReferencia}`,
+        mensagem: `Pagamento de R$ ${boleto.valor.toFixed(2)} confirmado com sucesso. Obrigado!`,
+        tipo: 'financeiro',
+      });
+
+      this.saveToStorage();
+      this.notify();
+      return true;
+    }
+    return false;
+  }
+
+  public getExtratoFinanceiro(condoId: string): ItemExtratoFinanceiro[] {
+    const list = this.extratoFinanceiro[condoId] || [];
+    if (list.length === 0) {
+      return [
+        {
+          id: 'ext_1',
+          condominioId: condoId,
+          mesReferencia: 'Agosto/2026',
+          categoria: 'taxa_condominial',
+          tipo: 'receita',
+          descricao: 'Arrecadação de Taxas Condominiais Ordinárias (94% adimplência)',
+          valor: 48500.0,
+          data: '2026-08-10',
+          comprovanteDisponivel: true,
+        },
+        {
+          id: 'ext_2',
+          condominioId: condoId,
+          mesReferencia: 'Agosto/2026',
+          categoria: 'seguranca_portaria',
+          tipo: 'despesa',
+          descricao: 'Empresa de Segurança e Portaria 24h (Contrato Mensal)',
+          valor: 16800.0,
+          data: '2026-08-05',
+          comprovanteDisponivel: true,
+        },
+        {
+          id: 'ext_3',
+          condominioId: condoId,
+          mesReferencia: 'Agosto/2026',
+          categoria: 'energia_eletrica',
+          tipo: 'despesa',
+          descricao: 'Concessionária de Energia (Áreas Comuns, Elevadores e Bombas)',
+          valor: 6420.5,
+          data: '2026-08-12',
+          comprovanteDisponivel: true,
+        },
+        {
+          id: 'ext_4',
+          condominioId: condoId,
+          mesReferencia: 'Agosto/2026',
+          categoria: 'agua_esgoto',
+          tipo: 'despesa',
+          descricao: 'Concessionária de Água e Saneamento (Consumo Geral)',
+          valor: 4890.3,
+          data: '2026-08-14',
+          comprovanteDisponivel: true,
+        },
+        {
+          id: 'ext_5',
+          condominioId: condoId,
+          mesReferencia: 'Agosto/2026',
+          categoria: 'manutencao_predial',
+          tipo: 'despesa',
+          descricao: 'Manutenção Preventiva de Elevadores Atlas Schindler',
+          valor: 3200.0,
+          data: '2026-08-08',
+          comprovanteDisponivel: true,
+        },
+        {
+          id: 'ext_6',
+          condominioId: condoId,
+          mesReferencia: 'Agosto/2026',
+          categoria: 'limpeza_conservacao',
+          tipo: 'despesa',
+          descricao: 'Equipe de Limpeza, Jardinagem e Produtos Químicos da Piscina',
+          valor: 5400.0,
+          data: '2026-08-06',
+          comprovanteDisponivel: true,
+        },
+        {
+          id: 'ext_7',
+          condominioId: condoId,
+          mesReferencia: 'Agosto/2026',
+          categoria: 'fundo_reserva',
+          tipo: 'receita',
+          descricao: 'Aporte Mensal ao Fundo de Reserva Condominial (5%)',
+          valor: 2425.0,
+          data: '2026-08-10',
+          comprovanteDisponivel: true,
+        },
+      ];
+    }
+    return [...list];
+  }
+
+  // --- MÓDULO 7: COMUNIDADE, MURAL E ENQUETES ---
+  public getMuralPosts(condoId: string): MuralPost[] {
+    const list = this.muralPosts[condoId] || [];
+    return [...list].sort((a, b) => b.criadoEm - a.criadoEm);
+  }
+
+  public addMuralPost(
+    condoId: string,
+    data: {
+      autorId: string;
+      tipo: MuralPost['tipo'];
+      titulo: string;
+      conteudo: string;
+      contatoTelefone?: string;
+      valor?: number;
+      fotoUrl?: string;
+    }
+  ): MuralPost {
+    const morador = this.getMorador(condoId, data.autorId);
+    if (!morador) throw new Error('Morador não encontrado');
+
+    const novo: MuralPost = {
+      id: `mural_${Date.now()}`,
+      condominioId: condoId,
+      autorId: morador.id,
+      autorNome: morador.nome,
+      autorUnidade: `Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto}`,
+      tipo: data.tipo,
+      titulo: data.titulo,
+      conteudo: data.conteudo,
+      contatoTelefone: data.contatoTelefone || morador.telefone,
+      valor: data.valor,
+      fotoUrl: data.fotoUrl,
+      criadoEm: Date.now(),
+      curtidas: [],
+      comentarios: [],
+    };
+
+    if (!this.muralPosts[condoId]) this.muralPosts[condoId] = [];
+    this.muralPosts[condoId].unshift(novo);
+
+    this.saveToStorage();
+    this.notify();
+    return novo;
+  }
+
+  public curtirMuralPost(condoId: string, postId: string, moradorId: string) {
+    const list = this.muralPosts[condoId] || [];
+    const post = list.find((p) => p.id === postId);
+    if (post) {
+      if (post.curtidas.includes(moradorId)) {
+        post.curtidas = post.curtidas.filter((id) => id !== moradorId);
+      } else {
+        post.curtidas.push(moradorId);
+      }
+      this.saveToStorage();
+      this.notify();
+    }
+  }
+
+  public addComentarioMural(
+    condoId: string,
+    postId: string,
+    comentario: { autorNome: string; autorUnidade: string; texto: string }
+  ) {
+    const list = this.muralPosts[condoId] || [];
+    const post = list.find((p) => p.id === postId);
+    if (post) {
+      post.comentarios.push({
+        id: `c_${Date.now()}`,
+        autorNome: comentario.autorNome,
+        autorUnidade: comentario.autorUnidade,
+        texto: comentario.texto,
+        timestamp: Date.now(),
+      });
+      this.saveToStorage();
+      this.notify();
+    }
+  }
+
+  public getEnquetes(condoId: string): EnqueteCondominio[] {
+    const list = this.enquetes[condoId] || [];
+    return [...list].sort((a, b) => b.criadoEm - a.criadoEm);
+  }
+
+  public votarEnquete(
+    condoId: string,
+    enqueteId: string,
+    opcaoId: string,
+    moradorId: string
+  ): boolean {
+    const list = this.enquetes[condoId] || [];
+    const enquete = list.find((e) => e.id === enqueteId);
+    if (!enquete || enquete.finalizada) return false;
+
+    // Remove voto anterior do morador se houver
+    enquete.opcoes.forEach((op) => {
+      if (op.votantesIds.includes(moradorId)) {
+        op.votantesIds = op.votantesIds.filter((id) => id !== moradorId);
+        op.votosCount = Math.max(0, op.votosCount - 1);
+      }
+    });
+
+    // Adiciona novo voto
+    const opcao = enquete.opcoes.find((o) => o.id === opcaoId);
+    if (opcao) {
+      opcao.votantesIds.push(moradorId);
+      opcao.votosCount += 1;
+      enquete.totalVotos = enquete.opcoes.reduce((acc, curr) => acc + curr.votosCount, 0);
+
+      this.saveToStorage();
+      this.notify();
+      return true;
+    }
+    return false;
+  }
+
+  public getSugestoes(condoId: string): SugestaoMorador[] {
+    const list = this.sugestoes[condoId] || [];
+    return [...list].sort((a, b) => b.criadoEm - a.criadoEm);
+  }
+
+  public addSugestao(
+    condoId: string,
+    data: {
+      moradorId: string;
+      titulo: string;
+      mensagem: string;
+    }
+  ): SugestaoMorador {
+    const morador = this.getMorador(condoId, data.moradorId);
+    if (!morador) throw new Error('Morador não encontrado');
+
+    const nova: SugestaoMorador = {
+      id: `sug_${Date.now()}`,
+      condominioId: condoId,
+      moradorId: morador.id,
+      moradorNome: morador.nome,
+      unidade: `Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto}`,
+      titulo: data.titulo,
+      mensagem: data.mensagem,
+      status: 'recebida',
+      criadoEm: Date.now(),
+    };
+
+    if (!this.sugestoes[condoId]) this.sugestoes[condoId] = [];
+    this.sugestoes[condoId].unshift(nova);
+
+    this.saveToStorage();
+    this.notify();
+    return nova;
+  }
+
+  public updateSugestaoStatus(
+    condoId: string,
+    id: string,
+    status: 'recebida' | 'em_analise' | 'aprovada' | 'rejeitada' | 'atendida',
+    resposta?: string
+  ): boolean {
+    const list = this.sugestoes[condoId] || [];
+    const item = list.find((s) => s.id === id);
+    if (!item) return false;
+
+    item.status = status;
+    if (resposta) {
+      item.respostaSindico = resposta;
+      item.respondidoEm = Date.now();
+    }
+
+    this.saveToStorage();
+    this.notify();
+    return true;
+  }
+
+  // --- MÓDULO 8: DOCUMENTOS ---
+  public getDocumentos(condoId: string): DocumentoCondominio[] {
+    const list = this.documentos[condoId] || [];
+    if (list.length === 0) {
+      return [
+        {
+          id: 'doc_1',
+          condominioId: condoId,
+          titulo: 'Regulamento Interno & Normas de Convivência',
+          categoria: 'regulamento',
+          dataPublicacao: '2026-01-15',
+          tamanho: '2.4 MB',
+          tipoArquivo: 'pdf',
+          descricao: 'Regras de uso das áreas comuns, horários de silêncio, normas de pets e bicicletário.',
+          urlSimulada: '#',
+        },
+        {
+          id: 'doc_2',
+          condominioId: condoId,
+          titulo: 'Convenção Condominial Registrada em Cartório',
+          categoria: 'convencao',
+          dataPublicacao: '2025-06-20',
+          tamanho: '4.8 MB',
+          tipoArquivo: 'pdf',
+          descricao: 'Estatuto legal de constituição do condomínio, frações ideais e rateio de despesas.',
+          urlSimulada: '#',
+        },
+        {
+          id: 'doc_3',
+          condominioId: condoId,
+          titulo: 'Ata da Assembleia Geral Ordinária (AGO 2026)',
+          categoria: 'ata',
+          dataPublicacao: '2026-03-28',
+          tamanho: '1.1 MB',
+          tipoArquivo: 'pdf',
+          descricao: 'Aprovação de contas do exercício anterior, previsão orçamentária e eleição do corpo diretivo.',
+          urlSimulada: '#',
+        },
+        {
+          id: 'doc_4',
+          condominioId: condoId,
+          titulo: 'Laudo de Inspeção Predial & AVCB do Corpo de Bombeiros',
+          categoria: 'laudo',
+          dataPublicacao: '2026-05-10',
+          tamanho: '3.2 MB',
+          tipoArquivo: 'pdf',
+          descricao: 'Certificado de vistoria válido até 2028, hidrantes, alarmes e para-raios (SPDA).',
+          urlSimulada: '#',
+        },
+        {
+          id: 'doc_5',
+          condominioId: condoId,
+          titulo: 'Manual do Proprietário & Planta Hidráulica/Elétrica',
+          categoria: 'manual',
+          dataPublicacao: '2025-01-10',
+          tamanho: '8.5 MB',
+          tipoArquivo: 'pdf',
+          descricao: 'Orientações técnicas para reformas, furações de paredes e especificações das instalações.',
+          urlSimulada: '#',
+        },
+      ];
+    }
+    return [...list];
+  }
+
+  public addDocumento(
+    condoId: string,
+    data: {
+      titulo: string;
+      categoria: DocumentoCondominio['categoria'];
+      descricao: string;
+      tamanho?: string;
+      tipoArquivo?: 'pdf' | 'doc' | 'img';
+      urlSimulada?: string;
+    }
+  ): DocumentoCondominio {
+    const novo: DocumentoCondominio = {
+      id: `doc_${Date.now()}`,
+      condominioId: condoId,
+      titulo: data.titulo,
+      categoria: data.categoria,
+      descricao: data.descricao,
+      dataPublicacao: new Date().toISOString().split('T')[0],
+      tamanho: data.tamanho || '1.5 MB',
+      tipoArquivo: data.tipoArquivo || 'pdf',
+      urlSimulada: data.urlSimulada || '#',
+    };
+
+    if (!this.documentos[condoId]) {
+      this.documentos[condoId] = this.getDocumentos(condoId);
+    }
+    this.documentos[condoId].unshift(novo);
+    this.saveToStorage();
+    this.notify();
+    return novo;
+  }
+
+  public deleteDocumento(condoId: string, docId: string) {
+    if (!this.documentos[condoId]) {
+      this.documentos[condoId] = this.getDocumentos(condoId);
+    }
+    this.documentos[condoId] = this.documentos[condoId].filter((d) => d.id !== docId);
+    this.saveToStorage();
+    this.notify();
+  }
+
+  public addExtratoItem(
+    condoId: string,
+    data: {
+      mesReferencia: string;
+      categoria: ExtratoMensalItem['categoria'];
+      tipo: 'receita' | 'despesa';
+      descricao: string;
+      valor: number;
+      data: string;
+    }
+  ): ExtratoMensalItem {
+    const novo: ExtratoMensalItem = {
+      id: `ext_${Date.now()}`,
+      condominioId: condoId,
+      mesReferencia: data.mesReferencia,
+      categoria: data.categoria,
+      tipo: data.tipo,
+      descricao: data.descricao,
+      valor: data.valor,
+      data: data.data,
+      comprovanteDisponivel: true,
+    };
+
+    if (!this.extratoFinanceiro[condoId]) {
+      this.extratoFinanceiro[condoId] = this.getExtratoFinanceiro(condoId);
+    }
+    this.extratoFinanceiro[condoId].unshift(novo);
+    this.saveToStorage();
+    this.notify();
+    return novo;
+  }
+
+  public addEnquete(
+    condoId: string,
+    data: {
+      titulo: string;
+      descricao: string;
+      opcoesTextos: string[];
+      expiraEm?: string;
+      dataLimite?: string;
+      autorNome?: string;
+    }
+  ): EnqueteCondominio {
+    const nova: EnqueteCondominio = {
+      id: `enq_${Date.now()}`,
+      condominioId: condoId,
+      titulo: data.titulo,
+      descricao: data.descricao,
+      dataLimite: data.dataLimite || data.expiraEm || '2026-12-31',
+      expiraEm: data.expiraEm || data.dataLimite || '2026-12-31',
+      autorNome: data.autorNome || 'Administração / Síndico',
+      criadoEm: Date.now(),
+      totalVotos: 0,
+      finalizada: false,
+      opcoes: data.opcoesTextos.map((txt, idx) => ({
+        id: `op_${idx + 1}_${Date.now()}`,
+        texto: txt,
+        votosCount: 0,
+        votantesIds: [],
+      })),
+    };
+
+    if (!this.enquetes[condoId]) {
+      this.enquetes[condoId] = this.getEnquetes(condoId);
+    }
+    this.enquetes[condoId].unshift(nova);
+    this.saveToStorage();
+    this.notify();
+    return nova;
+  }
+
+  public finalizarEnquete(condoId: string, enqueteId: string) {
+    const list = this.enquetes[condoId] || [];
+    const enq = list.find((e) => e.id === enqueteId);
+    if (enq) {
+      enq.finalizada = true;
+      this.saveToStorage();
+      this.notify();
+    }
+  }
+
+  public deleteMuralPost(condoId: string, postId: string) {
+    if (this.muralPosts[condoId]) {
+      this.muralPosts[condoId] = this.muralPosts[condoId].filter((p) => p.id !== postId);
+      this.saveToStorage();
+      this.notify();
+    }
+  }
+
+  private initializeSampleData() {
+    const demoCondoId = 'condo_park_avenue';
+
+    // 1. Condomínio
+    if (this.condominios.length === 0) {
+      this.condominios = [
+        {
+          id: demoCondoId,
+          nome: 'Residencial Park Avenue',
+          cnpj: '34.892.110/0001-45',
+          endereco: 'Av. das Américas, 4200 - Barra da Tijuca',
+          cidade: 'Rio de Janeiro',
+          uf: 'RJ',
+          totalUnidades: 80,
+          statusAssinatura: 'ativo',
+          plano: 'Pro',
+          valorMensalidade: 799,
+          diaVencimento: 10,
+          statusPagamento: 'em_dia',
+          chavePix: 'financeiro@smartcondo.com.br',
+          sindicoNome: 'Carlos Eduardo Mendes',
+          sindicoEmail: 'sindico@smartcondo.com.br',
+          sindicoTelefone: '(21) 98844-5511',
+          portariaTelefone: '(21) 3344-9900',
+          regras: {
+            limiteTempoBikeMinutos: 60,
+            limiteBikesPorMorador: 1,
+            horarioBicicletario: '06:00 às 22:00',
+            diasAntecedenciaReserva: 30,
+            taxaReservaSalao: 120,
+            tempoToleranciaRetiradaMinutos: 5,
+          },
+        },
+      ];
+    }
+
+    // 2. Moradores
+    if (!this.moradores[demoCondoId] || this.moradores[demoCondoId].length === 0) {
+      this.moradores[demoCondoId] = [
+        {
+          id: 'morador_demo_1',
+          condominioId: demoCondoId,
+          nome: 'Juliana Paes Silveira',
+          email: 'juliana.silveira@email.com',
+          telefone: '(21) 99765-4321',
+          senha: '123',
+          unidade: { bloco: 'A', apto: '302' },
+          statusAdimplencia: 'em_dia',
+          statusCadastro: 'ativo',
+          avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80',
+        },
+        {
+          id: 'morador_demo_2',
+          condominioId: demoCondoId,
+          nome: 'Rodrigo Santoro Maia',
+          email: 'rodrigo.maia@email.com',
+          telefone: '(21) 98111-2233',
+          senha: '123',
+          unidade: { bloco: 'B', apto: '104' },
+          statusAdimplencia: 'em_dia',
+          statusCadastro: 'ativo',
+          avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80',
+        },
+        {
+          id: 'morador_demo_3',
+          condominioId: demoCondoId,
+          nome: 'Mariana Ximenes Rocha',
+          email: 'mariana.ximenes@email.com',
+          telefone: '(21) 97222-3344',
+          senha: '123',
+          unidade: { bloco: 'A', apto: '501' },
+          statusAdimplencia: 'em_dia',
+          statusCadastro: 'ativo',
+        },
+      ];
+    }
+
+    // 3. Bicicletas Compartilhadas (Módulo 4.1 - Exclusivo Novolar)
+    if (!this.bikes[demoCondoId] || this.bikes[demoCondoId].length === 0) {
+      this.bikes[demoCondoId] = [
+        {
+          id: 'bike_1',
+          condominioId: demoCondoId,
+          codigo: '101',
+          modelo: 'Novolar Urban Comfort 26"',
+          tipo: 'urbana',
+          status: 'disponivel',
+          usuarioAtualId: null,
+          qrToken: 'QR_NOVOLAR_101',
+          lockPassword: '482',
+          localizacaoAtual: 'Totem Central Novolar - Vaga 01',
+          ultimaRevisao: '12/08/2026',
+        },
+        {
+          id: 'bike_2',
+          condominioId: demoCondoId,
+          codigo: '102',
+          modelo: 'Novolar E-Bike Boost Pro',
+          tipo: 'e-bike',
+          status: 'disponivel',
+          usuarioAtualId: null,
+          qrToken: 'QR_NOVOLAR_102',
+          lockPassword: '915',
+          localizacaoAtual: 'Totem Central Novolar - Vaga 02 (Carregando 95%)',
+          nivelBateria: 95,
+          ultimaRevisao: '10/08/2026',
+        },
+        {
+          id: 'bike_3',
+          condominioId: demoCondoId,
+          codigo: '103',
+          modelo: 'Novolar Trail Mountain 29"',
+          tipo: 'mountain',
+          status: 'disponivel',
+          usuarioAtualId: null,
+          qrToken: 'QR_NOVOLAR_103',
+          lockPassword: '730',
+          localizacaoAtual: 'Totem Central Novolar - Vaga 03',
+          ultimaRevisao: '05/08/2026',
+        },
+        {
+          id: 'bike_4',
+          condominioId: demoCondoId,
+          codigo: '104',
+          modelo: 'Novolar E-Bike Urban Flow',
+          tipo: 'e-bike',
+          status: 'em_uso',
+          usuarioAtualId: 'morador_demo_2',
+          usuarioAtualNome: 'Rodrigo Santoro Maia',
+          usuarioAtualUnidade: 'Bloco B - Apto 104',
+          qrToken: 'QR_NOVOLAR_104',
+          lockPassword: '341',
+          localizacaoAtual: 'Em trânsito no condomínio',
+          nivelBateria: 78,
+          ultimaRevisao: '01/08/2026',
+          inicioUsoTimestamp: Date.now() - 18 * 60 * 1000, // 18 minutos atrás
+        },
+        {
+          id: 'bike_5',
+          condominioId: demoCondoId,
+          codigo: '105',
+          modelo: 'Novolar Urban Comfort 26"',
+          tipo: 'urbana',
+          status: 'manutencao',
+          usuarioAtualId: null,
+          qrToken: 'QR_NOVOLAR_105',
+          lockPassword: '119',
+          localizacaoAtual: 'Oficina Técnica (Aguardando troca de pastilha)',
+          ultimaRevisao: '14/08/2026',
+          avariasAtuais: ['Troca de pastilha do freio dianteiro agendada'],
+        },
+      ];
+    }
+
+    // 4. Áreas de Lazer
+    if (!this.areasLazer[demoCondoId] || this.areasLazer[demoCondoId].length === 0) {
+      this.areasLazer[demoCondoId] = [
+        {
+          id: 'area_1',
+          condominioId: demoCondoId,
+          nome: 'Espaço Gourmet & Churrasqueira',
+          tipo: 'churrasqueira',
+          status: 'aberto',
+          aviso: 'Equipado com churrasqueira a carvão, chopeira e freezer horizontal.',
+          capacidade: 25,
+          permiteReserva: true,
+          taxaReserva: 80,
+          horarioFuncionamento: '10:00 às 22:00',
+          atualizadoEm: Date.now(),
+        },
+        {
+          id: 'area_2',
+          condominioId: demoCondoId,
+          nome: 'Salão de Festas Nobre',
+          tipo: 'salao_festas',
+          status: 'aberto',
+          aviso: 'Climatizado, com cozinha de apoio completa e sistema de som ambiente.',
+          capacidade: 80,
+          permiteReserva: true,
+          taxaReserva: 150,
+          horarioFuncionamento: '11:00 às 00:00',
+          atualizadoEm: Date.now(),
+        },
+        {
+          id: 'area_3',
+          condominioId: demoCondoId,
+          nome: 'Quadra Poliesportiva',
+          tipo: 'quadra',
+          status: 'aberto',
+          aviso: 'Piso emborrachado com iluminação LED para jogos noturnos.',
+          capacidade: 14,
+          permiteReserva: true,
+          taxaReserva: 0,
+          horarioFuncionamento: '07:00 às 22:00',
+          atualizadoEm: Date.now(),
+        },
+        {
+          id: 'area_4',
+          condominioId: demoCondoId,
+          nome: 'Academia & Espaço Fitness',
+          tipo: 'academia',
+          status: 'aberto',
+          aviso: 'Equipamentos modernos LifeFitness. Uso livre para moradores.',
+          capacidade: 20,
+          permiteReserva: false,
+          taxaReserva: 0,
+          horarioFuncionamento: '05:30 às 23:00',
+          atualizadoEm: Date.now(),
+        },
+        {
+          id: 'area_5',
+          condominioId: demoCondoId,
+          nome: 'Piscina Adulto & Infantil',
+          tipo: 'piscina',
+          status: 'aberto',
+          aviso: 'Exame médico obrigatório. Aberta de terça a domingo.',
+          capacidade: 50,
+          permiteReserva: false,
+          taxaReserva: 0,
+          horarioFuncionamento: '08:00 às 20:00',
+          atualizadoEm: Date.now(),
+        },
+      ];
+    }
+
+    // 5. Avisos
+    if (!this.avisos[demoCondoId] || this.avisos[demoCondoId].length === 0) {
+      this.avisos[demoCondoId] = [
+        {
+          id: 'aviso_1',
+          condominioId: demoCondoId,
+          titulo: '🚨 Manutenção Preventiva dos Elevadores da Torre A',
+          mensagem: 'Nesta quinta-feira das 09h às 12h o elevador social passará por revisão periódica da Atlas Schindler. O elevador de serviço permanecerá 100% operante.',
+          categoria: 'manutencao',
+          prioritario: true,
+          autor: 'Carlos Mendes',
+          autorCargo: 'Síndico Profissional',
+          criadoEm: Date.now() - 2 * 3600 * 1000,
+        },
+        {
+          id: 'aviso_2',
+          condominioId: demoCondoId,
+          titulo: '🚲 Regras de Uso do Bicicletário Compartilhado Novolar',
+          mensagem: 'Lembramos que o tempo limite de retirada após a reserva no app é de 5 minutos. Tranque o cadeado e respeite o limite de 60 minutos de passeio para que todos os vizinhos possam pedalar!',
+          categoria: 'regras',
+          prioritario: false,
+          autor: 'Administração Novolar',
+          autorCargo: 'Gestão de Mobilidade',
+          criadoEm: Date.now() - 24 * 3600 * 1000,
+        },
+        {
+          id: 'aviso_3',
+          condominioId: demoCondoId,
+          titulo: '🎉 Festa da Primavera & Feirinha de Moradores',
+          mensagem: 'No próximo sábado teremos música ao vivo, food trucks e espaço kids na praça central do condomínio. Participe com sua família!',
+          categoria: 'eventos',
+          prioritario: false,
+          autor: 'Comissão Social',
+          autorCargo: 'Conselho',
+          criadoEm: Date.now() - 48 * 3600 * 1000,
+        },
+      ];
+    }
+
+    // 6. Encomendas
+    if (!this.encomendas[demoCondoId] || this.encomendas[demoCondoId].length === 0) {
+      this.encomendas[demoCondoId] = [
+        {
+          id: 'enc_1',
+          condominioId: demoCondoId,
+          moradorId: 'morador_demo_1',
+          moradorNome: 'Juliana Paes Silveira',
+          unidade: { bloco: 'A', apto: '302' },
+          transportadora: 'Mercado Livre Express',
+          codigoRastreio: 'ML98421045BR',
+          codigoResgate: '492815',
+          status: 'na_portaria',
+          recebidoEm: Date.now() - 3 * 3600 * 1000,
+          recebidoPor: 'Porteiro Marcos',
+          observacao: 'Pacote médio - Caixa lacrada',
+        },
+        {
+          id: 'enc_2',
+          condominioId: demoCondoId,
+          moradorId: 'morador_demo_1',
+          moradorNome: 'Juliana Paes Silveira',
+          unidade: { bloco: 'A', apto: '302' },
+          transportadora: 'Amazon Prime',
+          codigoRastreio: 'AMZ7719203BR',
+          codigoResgate: '810344',
+          status: 'na_portaria',
+          recebidoEm: Date.now() - 5 * 3600 * 1000,
+          recebidoPor: 'Porteiro Marcos',
+          observacao: 'Envelope com livro/documentos',
+        },
+      ];
+    }
+
+    // 7. Boletos Financeiros
+    if (!this.boletos[demoCondoId] || this.boletos[demoCondoId].length === 0) {
+      this.boletos[demoCondoId] = [
+        {
+          id: 'bol_1',
+          condominioId: demoCondoId,
+          moradorId: 'morador_demo_1',
+          moradorNome: 'Juliana Paes Silveira',
+          unidade: { bloco: 'A', apto: '302' },
+          mesReferencia: 'Agosto / 2026',
+          valor: 620.0,
+          dataVencimento: '2026-08-25',
+          status: 'a_vencer',
+          linhaDigitavel: '34191.79001 01043.510047 91020.150008 5 94520000062000',
+          codigoBarras: '34195945200000620001790001043510049102015000',
+          pixCopiaCola: '00020126580014br.gov.bcb.pix0136smartcondo-pix-parkavenue-agosto-20265204000053039865406620.005802BR5922Condominio Park Avenue6009Rio de Janeiro62070503***6304E8A1',
+        },
+        {
+          id: 'bol_2',
+          condominioId: demoCondoId,
+          moradorId: 'morador_demo_1',
+          moradorNome: 'Juliana Paes Silveira',
+          unidade: { bloco: 'A', apto: '302' },
+          mesReferencia: 'Julho / 2026',
+          valor: 620.0,
+          dataVencimento: '2026-07-25',
+          status: 'pago',
+          linhaDigitavel: '34191.79001 01043.510047 91020.150008 5 94210000062000',
+          codigoBarras: '34195942100000620001790001043510049102015000',
+          pixCopiaCola: '00020126580014br.gov.bcb.pix0136smartcondo-julho-pago',
+          dataPagamento: Date.now() - 22 * 24 * 3600 * 1000,
+        },
+      ];
+    }
+
+    // 8. Ocorrências
+    if (!this.ocorrencias[demoCondoId] || this.ocorrencias[demoCondoId].length === 0) {
+      this.ocorrencias[demoCondoId] = [
+        {
+          id: 'ocorr_1',
+          condominioId: demoCondoId,
+          moradorId: 'morador_demo_1',
+          moradorNome: 'Juliana Paes Silveira',
+          unidade: { bloco: 'A', apto: '302' },
+          titulo: 'Lâmpada queimada no corredor do 3º andar',
+          descricao: 'A luminária em frente ao apartamento 304 está piscando e apagando à noite.',
+          categoria: 'manutencao',
+          prioridade: 'media',
+          status: 'em_andamento',
+          criadoEm: Date.now() - 36 * 3600 * 1000,
+          atualizadoEm: Date.now() - 6 * 3600 * 1000,
+          respostaSindico: 'Ordem de serviço aberta com o zelador. A troca do reator LED será realizada hoje à tarde.',
+          respondidoEm: Date.now() - 6 * 3600 * 1000,
+          respondidoPor: 'Carlos Mendes (Síndico)',
+          historicoAcoes: [
+            {
+              status: 'enviado',
+              mensagem: 'Chamado aberto pelo morador.',
+              data: Date.now() - 36 * 3600 * 1000,
+              autor: 'Juliana Paes',
+            },
+            {
+              status: 'em_andamento',
+              mensagem: 'Zeladoria acionada para troca de lâmpada.',
+              data: Date.now() - 6 * 3600 * 1000,
+              autor: 'Carlos Mendes',
+            },
+          ],
+        },
+      ];
+    }
+
+    // 9. Mural da Comunidade
+    if (!this.muralPosts[demoCondoId] || this.muralPosts[demoCondoId].length === 0) {
+      this.muralPosts[demoCondoId] = [
+        {
+          id: 'post_1',
+          condominioId: demoCondoId,
+          autorId: 'morador_demo_2',
+          autorNome: 'Rodrigo Santoro Maia',
+          autorUnidade: 'Bloco B - Apto 104',
+          tipo: 'troca_venda',
+          titulo: 'Cadeirinha infantil para bicicleta (seminova)',
+          conteudo: 'Estou vendendo cadeirinha dianteira para bike em perfeito estado, marca Thule com cinto de 5 pontos. Valor simbólico para vizinhos!',
+          valor: 150,
+          contatoTelefone: '(21) 98111-2233',
+          criadoEm: Date.now() - 14 * 3600 * 1000,
+          curtidas: ['morador_demo_1'],
+          comentarios: [
+            {
+              id: 'com_1',
+              autorNome: 'Juliana Paes',
+              autorUnidade: 'Bloco A - Apto 302',
+              texto: 'Ainda disponível? Te chamei no WhatsApp!',
+              timestamp: Date.now() - 10 * 3600 * 1000,
+            },
+          ],
+        },
+        {
+          id: 'post_2',
+          condominioId: demoCondoId,
+          autorId: 'morador_demo_3',
+          autorNome: 'Mariana Ximenes',
+          autorUnidade: 'Bloco A - Apto 501',
+          tipo: 'perdi_achei',
+          titulo: 'Chaveiro com controle de portão encontrado no jardim',
+          conteudo: 'Encontrei ontem à noite próximo ao parquinho infantil um chaveiro com fita azul e um controle preto. Deixei com a portaria central.',
+          criadoEm: Date.now() - 28 * 3600 * 1000,
+          curtidas: ['morador_demo_1', 'morador_demo_2'],
+          comentarios: [],
+        },
+      ];
+    }
+
+    // 10. Enquetes Condominiais
+    if (!this.enquetes[demoCondoId] || this.enquetes[demoCondoId].length === 0) {
+      this.enquetes[demoCondoId] = [
+        {
+          id: 'enq_1',
+          condominioId: demoCondoId,
+          titulo: 'Instalação de Ar-Condicionado Inverter na Academia',
+          descricao: 'Consulta prévia aos moradores sobre a aquisição e instalação de 2 aparelhos de ar-condicionado de 24.000 BTUs para climatização do espaço fitness, utilizando saldo do fundo de reserva.',
+          dataLimite: '2026-08-30',
+          criadoEm: Date.now() - 72 * 3600 * 1000,
+          finalizada: false,
+          totalVotos: 48,
+          autorNome: 'Administração & Conselho Consultivo',
+          opcoes: [
+            {
+              id: 'op_1',
+              texto: 'Sim, concordo com a melhoria',
+              votosCount: 39,
+              votantesIds: ['morador_demo_2', 'morador_demo_3'],
+            },
+            {
+              id: 'op_2',
+              texto: 'Não, prefiro manter ventiladores',
+              votosCount: 9,
+              votantesIds: [],
+            },
+          ],
+        },
+      ];
+    }
+
+    // 11. Visitantes
+    if (!this.visitantes[demoCondoId] || this.visitantes[demoCondoId].length === 0) {
+      this.visitantes[demoCondoId] = [
+        {
+          id: 'vis_demo_1',
+          condominioId: demoCondoId,
+          moradorId: 'morador_demo_1',
+          moradorNome: 'Juliana Paes Silveira',
+          unidade: { bloco: 'A', apto: '302' },
+          nomeVisitante: 'Roberto Silveira (Pai)',
+          documento: 'MG-14.890.123',
+          placaVeiculo: 'RJS-8A90',
+          tipo: 'visitante',
+          dataVisita: '2026-08-16',
+          periodoPermitido: '14:00 às 20:00',
+          codigoAcesso: 'VIS-4921',
+          status: 'pendente',
+          criadoEm: Date.now() - 2 * 3600 * 1000,
+          observacoes: 'Vaga de visitante solicitada',
+        },
+      ];
+    }
+
+    this.saveToStorage();
   }
 
   // --- Consulta de Moradores por Unidade (Múltiplos moradores no mesmo apto) ---
