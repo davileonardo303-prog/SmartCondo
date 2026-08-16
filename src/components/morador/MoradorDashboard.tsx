@@ -2013,6 +2013,10 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
             setBikeForReturn(null);
           }}
           bike={bikeForReturn}
+          condominio={condominio}
+          locaisDisponiveis={condominio.regras?.locaisDevolucao}
+          currentMorador={morador}
+          onSubmitReturn={handleReturnSubmit}
           onSubmit={handleReturnSubmit}
         />
       )}

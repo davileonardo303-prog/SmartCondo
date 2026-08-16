@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   CheckCircle2,
@@ -12,7 +12,8 @@ import {
   Upload,
   Image as ImageIcon,
 } from 'lucide-react';
-import { Bicicleta, Morador } from '../../types';
+import { Bicicleta, Morador, Condominio } from '../../types';
+import { condoStore } from '../../services/mockStorage';
 import confetti from 'canvas-confetti';
 
 interface BikeReturnModalProps {
@@ -20,7 +21,19 @@ interface BikeReturnModalProps {
   onClose: () => void;
   bike: Bicicleta | null;
   currentMorador?: Morador | undefined;
-  onSubmitReturn: (data: {
+  locaisDisponiveis?: string[];
+  condominio?: Condominio;
+  onSubmitReturn?: (data: {
+    localDevolucao: string;
+    freiosOk: boolean;
+    correnteOk: boolean;
+    pneusOk: boolean;
+    quadroOk: boolean;
+    observacoes: string;
+    fotoVistoriaDevolucaoUrl?: string;
+    detalhesDefeito?: string;
+  }) => void;
+  onSubmit?: (data: {
     localDevolucao: string;
     freiosOk: boolean;
     correnteOk: boolean;
@@ -32,14 +45,38 @@ interface BikeReturnModalProps {
   }) => void;
 }
 
+const DEFAULT_LOCAIS = [
+  'Totem Principal - Portaria A',
+  'Totem Secundário - Portaria B',
+  'Deck de Bicicletas - Subsolo 1',
+  'Bicicletário da Piscina / Clube',
+];
+
 export const BikeReturnModal: React.FC<BikeReturnModalProps> = ({
   isOpen,
   onClose,
   bike,
   currentMorador,
+  locaisDisponiveis,
+  condominio,
   onSubmitReturn,
+  onSubmit,
 }) => {
-  const [localDevolucao, setLocalDevolucao] = useState('Totem Principal - Portaria A');
+  // Busca lista de locais cadastrados pelo síndico
+  const condoFromStore = bike ? condoStore.getCondominio(bike.condominioId) : undefined;
+  const listaLocais =
+    locaisDisponiveis && locaisDisponiveis.length > 0
+      ? locaisDisponiveis
+      : condominio?.regras?.locaisDevolucao && condominio.regras.locaisDevolucao.length > 0
+      ? condominio.regras.locaisDevolucao
+      : condoFromStore?.regras?.locaisDevolucao && condoFromStore.regras.locaisDevolucao.length > 0
+      ? condoFromStore.regras.locaisDevolucao
+      : DEFAULT_LOCAIS;
+
+  const [localDevolucao, setLocalDevolucao] = useState<string>(listaLocais[0] || 'Totem Principal - Portaria A');
+  const [outroLocalCustom, setOutroLocalCustom] = useState('');
+  const [isCustomLocal, setIsCustomLocal] = useState(false);
+
   const [freiosOk, setFreiosOk] = useState(true);
   const [correnteOk, setCorrenteOk] = useState(true);
   const [pneusOk, setPneusOk] = useState(true);
@@ -47,6 +84,13 @@ export const BikeReturnModal: React.FC<BikeReturnModalProps> = ({
   const [observacoes, setObservacoes] = useState('');
   const [fotoVistoriaUrl, setFotoVistoriaUrl] = useState<string>('');
   const [detalhesDefeito, setDetalhesDefeito] = useState('');
+
+  // Atualiza local inicial caso lista mude
+  useEffect(() => {
+    if (listaLocais.length > 0 && !isCustomLocal) {
+      setLocalDevolucao(listaLocais[0]);
+    }
+  }, [listaLocais]);
 
   if (!isOpen || !bike) return null;
 
@@ -72,8 +116,11 @@ export const BikeReturnModal: React.FC<BikeReturnModalProps> = ({
         origin: { y: 0.6 },
       });
     }
-    onSubmitReturn({
-      localDevolucao,
+
+    const localFinal = isCustomLocal && outroLocalCustom.trim() ? outroLocalCustom.trim() : localDevolucao;
+
+    const returnData = {
+      localDevolucao: localFinal,
       freiosOk,
       correnteOk,
       pneusOk,
@@ -81,7 +128,15 @@ export const BikeReturnModal: React.FC<BikeReturnModalProps> = ({
       observacoes,
       fotoVistoriaDevolucaoUrl: fotoVistoriaUrl || undefined,
       detalhesDefeito: detalhesDefeito || undefined,
-    });
+    };
+
+    const submitFn = onSubmitReturn || onSubmit;
+    if (typeof submitFn === 'function') {
+      submitFn(returnData);
+    } else {
+      console.warn('No return callback defined on BikeReturnModal');
+      onClose();
+    }
   };
 
   return (
@@ -114,28 +169,46 @@ export const BikeReturnModal: React.FC<BikeReturnModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 flex-1 text-xs">
           {/* Station Selection */}
           <div>
-            <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5 mb-1.5">
-              <MapPin className="w-4 h-4 text-emerald-600" />
-              Onde você está devolvendo a bicicleta?
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <MapPin className="w-4 h-4 text-emerald-600" />
+                Onde você está devolvendo a bicicleta?
+              </label>
+              <span className="text-[10px] text-slate-400 font-medium">Pontos oficiais do condomínio</span>
+            </div>
+
             <select
-              value={localDevolucao}
-              onChange={(e) => setLocalDevolucao(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+              value={isCustomLocal ? '__custom__' : localDevolucao}
+              onChange={(e) => {
+                if (e.target.value === '__custom__') {
+                  setIsCustomLocal(true);
+                } else {
+                  setIsCustomLocal(false);
+                  setLocalDevolucao(e.target.value);
+                }
+              }}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 text-xs focus:outline-none focus:border-emerald-500 font-medium"
             >
-              <option value="Totem Principal - Portaria A">
-                Totem Principal - Portaria A
-              </option>
-              <option value="Totem Secundário - Portaria B">
-                Totem Secundário - Portaria B
-              </option>
-              <option value="Deck de Bicicletas - Subsolo 1">
-                Deck de Bicicletas - Subsolo 1
-              </option>
-              <option value="Bicicletário da Piscina / Clube">
-                Bicicletário da Piscina / Clube
-              </option>
+              {listaLocais.map((loc, idx) => (
+                <option key={idx} value={loc}>
+                  {loc}
+                </option>
+              ))}
+              <option value="__custom__">+ Outro Ponto / Estação Especificada</option>
             </select>
+
+            {isCustomLocal && (
+              <div className="mt-2 animate-in fade-in">
+                <input
+                  type="text"
+                  placeholder="Especifique o local exato da devolução (ex: Totem Portaria B, Garagem...)"
+                  value={outroLocalCustom}
+                  onChange={(e) => setOutroLocalCustom(e.target.value)}
+                  className="w-full bg-white border border-emerald-300 rounded-xl p-2.5 text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  required
+                />
+              </div>
+            )}
           </div>
 
           {/* Vistoria Fotográfica Obrigatória / Recomendada */}

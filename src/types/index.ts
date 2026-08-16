@@ -101,6 +101,7 @@ export interface Condominio {
     diasAntecedenciaReserva: number;
     taxaReservaSalao: number;
     tempoToleranciaRetiradaMinutos?: number;
+    locaisDevolucao?: string[];
   };
 }
 

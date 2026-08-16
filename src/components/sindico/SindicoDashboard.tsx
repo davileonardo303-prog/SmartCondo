@@ -109,7 +109,17 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
   const [newBikeModelo, setNewBikeModelo] = useState('');
   const [newBikeTipo, setNewBikeTipo] = useState<'urbana' | 'e-bike' | 'mountain'>('urbana');
   const [newBikeLockPassword, setNewBikeLockPassword] = useState('');
+  const [newBikeLocalizacao, setNewBikeLocalizacao] = useState('Totem Principal - Portaria A');
   const [editingBike, setEditingBike] = useState<Bicicleta | null>(null);
+
+  // Gestão de Pontos & Totens de Devolução
+  const [locaisDevolucaoList, setLocaisDevolucaoList] = useState<string[]>([
+    'Totem Principal - Portaria A',
+    'Totem Secundário - Portaria B',
+    'Deck de Bicicletas - Subsolo 1',
+    'Bicicletário da Piscina / Clube',
+  ]);
+  const [novoLocalDevolucao, setNovoLocalDevolucao] = useState('');
 
   // Modais de Áreas de Lazer
   const [showAddAreaModal, setShowAddAreaModal] = useState(false);
@@ -192,6 +202,12 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
       setConfigHorarioBicicletario(condominio.regras?.horarioBicicletario || '06:00 às 22:00');
       setConfigTaxaSalao(condominio.regras?.taxaReservaSalao || 150);
       setConfigDiasAntecedencia(condominio.regras?.diasAntecedenciaReserva || 30);
+      if (condominio.regras?.locaisDevolucao && condominio.regras.locaisDevolucao.length > 0) {
+        setLocaisDevolucaoList(condominio.regras.locaisDevolucao);
+        if (!newBikeLocalizacao) {
+          setNewBikeLocalizacao(condominio.regras.locaisDevolucao[0]);
+        }
+      }
     }
   }, [condominio]);
 
@@ -307,6 +323,7 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
 
     const pass = newBikeLockPassword.trim() || Math.floor(1000 + Math.random() * 9000).toString();
     const qr = `QR-${condominio.id.toUpperCase()}-${newBikeCodigo.toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`;
+    const localInicial = newBikeLocalizacao.trim() || locaisDevolucaoList[0] || 'Totem Principal - Portaria A';
 
     const bikeData: any = {
       codigo: newBikeCodigo.toUpperCase(),
@@ -316,7 +333,7 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
       usuarioAtualId: null,
       qrToken: qr,
       lockPassword: pass,
-      localizacaoAtual: 'Bicicletário Principal',
+      localizacaoAtual: localInicial,
       ultimaRevisao: new Date().toLocaleDateString('pt-BR'),
     };
     if (newBikeTipo === 'e-bike') {
@@ -330,6 +347,56 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
     setNewBikeLockPassword('');
     confetti({ particleCount: 50, spread: 60 });
     showNotification('Nova bicicleta cadastrada na frota do condomínio com sucesso!');
+  };
+
+  const handleAddLocalDevolucao = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = novoLocalDevolucao.trim();
+    if (!trimmed) return;
+    if (locaisDevolucaoList.some((l) => l.toLowerCase() === trimmed.toLowerCase())) {
+      showNotification('Este ponto de devolução já está cadastrado.');
+      return;
+    }
+    const updated = [...locaisDevolucaoList, trimmed];
+    setLocaisDevolucaoList(updated);
+    setNovoLocalDevolucao('');
+
+    condoStore.updateCondominio(condominio.id, {
+      regras: {
+        ...condominio.regras,
+        limiteTempoBikeMinutos: Number(configLimiteTempoBike),
+        limiteBikesPorMorador: Number(configLimiteBikesMorador),
+        horarioBicicletario: configHorarioBicicletario,
+        diasAntecedenciaReserva: Number(configDiasAntecedencia),
+        taxaReservaSalao: Number(configTaxaSalao),
+        locaisDevolucao: updated,
+      },
+    });
+    confetti({ particleCount: 40, spread: 50 });
+    showNotification(`Ponto "${trimmed}" cadastrado como local de devolução oficial!`);
+  };
+
+  const handleRemoveLocalDevolucao = (locToRemove: string) => {
+    if (locaisDevolucaoList.length <= 1) {
+      alert('O condomínio precisa ter pelo menos um ponto de devolução cadastrado.');
+      return;
+    }
+    if (confirm(`Deseja remover o ponto de devolução "${locToRemove}"?`)) {
+      const updated = locaisDevolucaoList.filter((l) => l !== locToRemove);
+      setLocaisDevolucaoList(updated);
+      condoStore.updateCondominio(condominio.id, {
+        regras: {
+          ...condominio.regras,
+          limiteTempoBikeMinutos: Number(configLimiteTempoBike),
+          limiteBikesPorMorador: Number(configLimiteBikesMorador),
+          horarioBicicletario: configHorarioBicicletario,
+          diasAntecedenciaReserva: Number(configDiasAntecedencia),
+          taxaReservaSalao: Number(configTaxaSalao),
+          locaisDevolucao: updated,
+        },
+      });
+      showNotification(`Ponto "${locToRemove}" removido.`);
+    }
   };
 
   const handleUpdateBike = (e: React.FormEvent) => {
@@ -461,6 +528,7 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
         horarioBicicletario: configHorarioBicicletario,
         diasAntecedenciaReserva: Number(configDiasAntecedencia),
         taxaReservaSalao: Number(configTaxaSalao),
+        locaisDevolucao: locaisDevolucaoList,
       },
     });
 
