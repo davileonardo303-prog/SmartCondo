@@ -26,8 +26,12 @@ import {
   SugestaoMorador,
   DocumentoCondominio,
   ItemCompartilhado,
+  FuncionarioEquipe,
+  CargoFuncionario,
+  PermissoesFuncionario,
 } from '../types';
 import { whatsappService } from './whatsappService';
+import { notificationService } from './notificationService';
 import {
   db,
   syncCondominioToFirestore,
@@ -186,6 +190,7 @@ class MockCondoStore {
   private sugestoes: Record<string, SugestaoMorador[]> = {};
   private documentos: Record<string, DocumentoCondominio[]> = {};
   private itensCompartilhados: Record<string, ItemCompartilhado[]> = {};
+  private funcionarios: Record<string, FuncionarioEquipe[]> = {};
   private listeners: Set<Listener> = new Set();
   private subUnsubscribers: Record<string, (() => void)[]> = {};
   private version = 0;
@@ -197,10 +202,11 @@ class MockCondoStore {
     this.bootstrapFromFirestore();
     this.initializeSampleData();
 
-    // Verificação contínua do Timer de 5 Minutos da Reserva de Bicicletas (Novolar)
+    // Verificação contínua do Timer de 5 Minutos da Reserva de Bicicletas e Itens e Prazos de Encomendas
     setInterval(() => {
       this.verificarExpiracaoReservas5Min();
       this.verificarExpiracaoReservasItensCompartilhados();
+      this.verificarPrazosEncomendas();
     }, 2500);
   }
 
@@ -666,6 +672,7 @@ class MockCondoStore {
         this.sugestoes = parsed.sugestoes || {};
         this.documentos = parsed.documentos || {};
         this.itensCompartilhados = parsed.itensCompartilhados || {};
+        this.funcionarios = parsed.funcionarios || {};
         this.planosConfig = parsed.planosConfig
           ? { ...DEFAULT_PLANOS_CONFIG, ...parsed.planosConfig }
           : { ...DEFAULT_PLANOS_CONFIG };
@@ -710,6 +717,7 @@ class MockCondoStore {
     this.sugestoes = {};
     this.documentos = {};
     this.itensCompartilhados = {};
+    this.funcionarios = {};
     this.planosConfig = { ...DEFAULT_PLANOS_CONFIG };
     this.saveToStorage();
   }
@@ -739,6 +747,7 @@ class MockCondoStore {
         sugestoes: this.sugestoes,
         documentos: this.documentos,
         itensCompartilhados: this.itensCompartilhados,
+        funcionarios: this.funcionarios,
       };
       localStorage.setItem(STORAGE_KEY_PREFIX, JSON.stringify(data));
     } catch {
@@ -2311,6 +2320,60 @@ class MockCondoStore {
     return [...list];
   }
 
+  // Verificador Contínuo dos Prazos de Retirada de Encomendas (Regra do Condomínio)
+  public verificarPrazosEncomendas() {
+    const agora = Date.now();
+    let houveMudanca = false;
+
+    for (const condoId of Object.keys(this.encomendas)) {
+      const condo = this.getCondominio(condoId);
+      const diasLimite = condo?.regras?.diasLimiteRetiradaEncomenda ?? 5; // Padrão: 5 dias
+      const condoNome = condo?.nome || 'Condomínio Residencial';
+      const encList = this.encomendas[condoId] || [];
+
+      for (const enc of encList) {
+        if (enc.status === 'na_portaria') {
+          const limiteTimestamp = enc.dataLimiteRetirada || (enc.recebidoEm + diasLimite * 24 * 60 * 60 * 1000);
+          
+          if (agora > limiteTimestamp) {
+            enc.status = 'encaminhada_administracao';
+            enc.encaminhadaAdministracaoEm = agora;
+            enc.motivoEncaminhamentoAdmin = `Prazo de ${diasLimite} dias para retirada na portaria expirou. Pacote transferido para guarda na Administração.`;
+
+            syncEncomendaToFirestore(enc).catch(() => {});
+
+            // Notificação interna no sistema
+            this.addNotification({
+              condominioId: condoId,
+              paraMoradorId: enc.moradorId,
+              titulo: `🏛️ Encomenda Transferida para a Administração (${enc.transportadora})`,
+              mensagem: `O prazo de ${diasLimite} dias expirou. Seu pacote foi transferido para a sala da Administração do condomínio. Código: ${enc.codigoResgate}`,
+              tipo: 'encomenda',
+            });
+
+            // Notificação multicanal (Push + WhatsApp + E-mail)
+            const morador = this.getMorador(condoId, enc.moradorId);
+            if (morador && condo) {
+              notificationService.notificarEncaminhamentoAdministracao({
+                condominio: condo,
+                morador,
+                encomenda: enc,
+                diasLimite,
+              });
+            }
+
+            houveMudanca = true;
+          }
+        }
+      }
+    }
+
+    if (houveMudanca) {
+      this.saveToStorage();
+      this.notify();
+    }
+  }
+
   public addEncomenda(
     condoId: string,
     data: {
@@ -2319,10 +2382,17 @@ class MockCondoStore {
       codigoRastreio: string;
       recebidoPor: string;
       observacao?: string;
+      fotoUrl?: string;
+      diasLimiteCustomizado?: number;
     }
   ): Encomenda {
     const morador = this.getMorador(condoId, data.moradorId);
     if (!morador) throw new Error('Morador não encontrado');
+
+    const condo = this.getCondominio(condoId);
+    const diasLimite = data.diasLimiteCustomizado ?? condo?.regras?.diasLimiteRetiradaEncomenda ?? 5; // Padrão: 5 dias
+    const agora = Date.now();
+    const dataLimite = agora + diasLimite * 24 * 60 * 60 * 1000;
 
     // Gerar código de 6 dígitos numéricos aleatório
     const codigo6Digitos = Math.floor(100000 + Math.random() * 900000).toString();
@@ -2337,38 +2407,81 @@ class MockCondoStore {
       codigoRastreio: data.codigoRastreio || `BR${Math.floor(100000000 + Math.random() * 900000000)}`,
       codigoResgate: codigo6Digitos,
       status: 'na_portaria',
-      recebidoEm: Date.now(),
+      recebidoEm: agora,
       recebidoPor: data.recebidoPor,
+      diasLimiteRetirada: diasLimite,
+      dataLimiteRetirada: dataLimite,
+      notificacaoPushEnviada: true,
+      notificacaoEmailEnviada: true,
+      notificacaoWhatsAppEnviada: true,
+      fotoUrl: data.fotoUrl,
       observacao: data.observacao || '',
     };
 
     if (!this.encomendas[condoId]) this.encomendas[condoId] = [];
     this.encomendas[condoId].unshift(novaEnc);
 
+    this.saveToStorage();
     syncEncomendaToFirestore(novaEnc).catch((err) => console.warn('Sync Encomenda error:', err));
 
-    // Disparo imediato de Push Notification para o morador
+    // 1. Notificação In-App
     this.addNotification({
       condominioId: condoId,
       paraMoradorId: morador.id,
-      titulo: '📦 Nova Encomenda na Portaria',
-      mensagem: `${data.transportadora} entregou um pacote para sua unidade (Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto}). Código de Resgate: ${codigo6Digitos}`,
+      titulo: '📦 Nova Encomenda Recebida na Portaria',
+      mensagem: `${data.transportadora} entregou um pacote para sua unidade (${morador.unidade.bloco ? `Bloco ${morador.unidade.bloco} - ` : ''}Apto ${morador.unidade.apto}). Código de Resgate: ${codigo6Digitos}. Retire em até ${diasLimite} dias.`,
       tipo: 'encomenda',
     });
 
-    const condo = this.getCondominio(condoId);
-    const condoNome = condo ? condo.nome : 'Condomínio Residencial';
-    whatsappService.notificarMorador({
-      condominioId: condoId,
-      condominioNome: condoNome,
-      morador,
-      tipo: 'encomenda',
-      titulo: '📦 Nova Encomenda Recebida na Portaria',
-      corpoMensagem: `Chegou uma encomenda para sua unidade!\n\n🚚 *Transportadora:* ${data.transportadora}\n🏷️ *Rastreio:* ${novaEnc.codigoRastreio}\n🔐 *CÓDIGO DE RESGATE:* *${codigo6Digitos}*\n👮 *Recebido por:* ${data.recebidoPor}\n\n_Apresente este código de 6 dígitos ao porteiro para retirar seu pacote._`,
-    });
+    // 2. Disparo Multicanal Integrado (Push Barra de Notificações + WhatsApp + E-mail)
+    if (condo) {
+      notificationService.notificarChegadaEncomenda({
+        condominio: condo,
+        morador,
+        encomenda: novaEnc,
+        diasLimite,
+      });
+    }
 
     this.notify();
     return novaEnc;
+  }
+
+  // Encaminhar manualmente para a administração antes ou após o prazo
+  public encaminharEncomendaAdministracao(
+    condoId: string,
+    encomendaId: string,
+    operadorNome: string,
+    motivo?: string
+  ): { success: boolean; message: string; encomenda?: Encomenda } {
+    const list = this.encomendas[condoId] || [];
+    const enc = list.find((e) => e.id === encomendaId || e.codigoResgate === encomendaId.trim());
+
+    if (!enc) {
+      return { success: false, message: 'Encomenda não encontrada.' };
+    }
+
+    enc.status = 'encaminhada_administracao';
+    enc.encaminhadaAdministracaoEm = Date.now();
+    enc.motivoEncaminhamentoAdmin = motivo || `Encaminhado por ${operadorNome} para a Administração.`;
+
+    this.saveToStorage();
+    syncEncomendaToFirestore(enc).catch((err) => console.warn('Sync Encomenda admin error:', err));
+
+    this.addNotification({
+      condominioId: condoId,
+      paraMoradorId: enc.moradorId,
+      titulo: `🏛️ Encomenda Transferida para a Administração`,
+      mensagem: `A encomenda da ${enc.transportadora} (Código: ${enc.codigoResgate}) está agora na Administração do condomínio.`,
+      tipo: 'encomenda',
+    });
+
+    this.notify();
+    return {
+      success: true,
+      message: `Encomenda de ${enc.moradorNome} transferida com sucesso para a Administração!`,
+      encomenda: enc,
+    };
   }
 
   public darBaixaEncomenda(
@@ -2399,13 +2512,14 @@ class MockCondoStore {
     enc.entregueEm = Date.now();
     enc.entreguePara = `${enc.moradorNome} (Código ${enc.codigoResgate} Validado por ${operadorNome})`;
 
+    this.saveToStorage();
     syncEncomendaToFirestore(enc).catch((err) => console.warn('Sync Encomenda baixa error:', err));
 
     this.addNotification({
       condominioId: condoId,
       paraMoradorId: enc.moradorId,
       titulo: '✅ Encomenda Retirada',
-      mensagem: `A encomenda da ${enc.transportadora} foi entregue pela portaria com sucesso.`,
+      mensagem: `A encomenda da ${enc.transportadora} foi entregue com sucesso.`,
       tipo: 'encomenda',
     });
 
@@ -2419,7 +2533,7 @@ class MockCondoStore {
         morador,
         tipo: 'encomenda_baixa',
         titulo: '✅ Encomenda Retirada com Sucesso',
-        corpoMensagem: `Sua encomenda da transportadora *${enc.transportadora}* foi retirada na portaria.\n\nCódigo validado: *${enc.codigoResgate}*\nEntregue por: *${operadorNome}*`,
+        corpoMensagem: `Sua encomenda da transportadora *${enc.transportadora}* foi retirada.\n\nCódigo validado: *${enc.codigoResgate}*\nEntregue por: *${operadorNome}*`,
       });
     }
 
@@ -2429,6 +2543,165 @@ class MockCondoStore {
       message: `Baixa confirmada para ${enc.moradorNome} (Bloco ${enc.unidade.bloco} - ${enc.unidade.apto})!`,
       encomenda: enc,
     };
+  }
+
+  // ==========================================
+  // --- EQUIPE & PERMISSÕES (FUNCIONÁRIOS) ---
+  // ==========================================
+
+  public getFuncionarios(condoId: string): FuncionarioEquipe[] {
+    const list = this.funcionarios[condoId] || [];
+    // Se a lista estiver vazia para o condomínio, cria funcionários de amostra padrão
+    if (list.length === 0) {
+      const sampleFuncs: FuncionarioEquipe[] = [
+        {
+          id: `func_${condoId}_porteiro`,
+          condominioId: condoId,
+          nome: 'Marcos Silveira (Porteiro Diurno)',
+          email: 'porteiro.marcos@smartcondo.com.br',
+          telefone: '(11) 98123-4567',
+          cargo: 'porteiro',
+          status: 'ativo',
+          cadastradoEm: Date.now() - 30 * 24 * 60 * 60 * 1000,
+          turnoTrabalho: '07:00 às 19:00 (Escala 12x36)',
+          permissoes: {
+            receber_encomendas: true,
+            liberar_bicicletas: true,
+            gerenciar_equipamentos: true,
+            autorizar_visitantes: true,
+            enviar_avisos: false,
+            acesso_financeiro: false,
+            administracao_geral: false,
+          },
+        },
+        {
+          id: `func_${condoId}_zelador`,
+          condominioId: condoId,
+          nome: 'Antônio Ferreira (Zelador Geral)',
+          email: 'zelador.antonio@smartcondo.com.br',
+          telefone: '(11) 97654-3210',
+          cargo: 'zelador',
+          status: 'ativo',
+          cadastradoEm: Date.now() - 60 * 24 * 60 * 60 * 1000,
+          turnoTrabalho: '08:00 às 17:00 (Seg a Sex)',
+          permissoes: {
+            receber_encomendas: true,
+            liberar_bicicletas: true,
+            gerenciar_equipamentos: true,
+            autorizar_visitantes: true,
+            enviar_avisos: true,
+            acesso_financeiro: false,
+            administracao_geral: false,
+          },
+        },
+        {
+          id: `func_${condoId}_admin`,
+          condominioId: condoId,
+          nome: 'Juliana Castro (Administração Predial)',
+          email: 'administracao@smartcondo.com.br',
+          telefone: '(11) 99887-7665',
+          cargo: 'administracao',
+          status: 'ativo',
+          cadastradoEm: Date.now() - 90 * 24 * 60 * 60 * 1000,
+          turnoTrabalho: '09:00 às 18:00 (Comercial)',
+          permissoes: {
+            receber_encomendas: true,
+            liberar_bicicletas: true,
+            gerenciar_equipamentos: true,
+            autorizar_visitantes: true,
+            enviar_avisos: true,
+            acesso_financeiro: true,
+            administracao_geral: true,
+          },
+        },
+      ];
+      this.funcionarios[condoId] = sampleFuncs;
+      this.saveToStorage();
+      return sampleFuncs;
+    }
+    return [...list];
+  }
+
+  public addFuncionario(
+    condoId: string,
+    data: Omit<FuncionarioEquipe, 'id' | 'condominioId' | 'cadastradoEm'>
+  ): FuncionarioEquipe {
+    const newId = `func_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const novoFunc: FuncionarioEquipe = {
+      ...data,
+      id: newId,
+      condominioId: condoId,
+      cadastradoEm: Date.now(),
+      status: data.status || 'ativo',
+    };
+
+    if (!this.funcionarios[condoId]) {
+      this.funcionarios[condoId] = [];
+    }
+    this.funcionarios[condoId].unshift(novoFunc);
+
+    // Também cria ou atualiza no usuariosSistema para permitir login caso tenha e-mail
+    if (novoFunc.email) {
+      const roleEquivalente = novoFunc.cargo === 'administracao' || novoFunc.cargo === 'gerente_predial' ? 'sindico' : 'portaria';
+      const existingUser = this.usuariosSistema.find((u) => u.email.toLowerCase() === novoFunc.email.toLowerCase());
+      if (!existingUser) {
+        this.usuariosSistema.push({
+          id: `usr_${novoFunc.id}`,
+          nome: novoFunc.nome,
+          email: novoFunc.email,
+          senha: novoFunc.senha || 'equipe123',
+          role: roleEquivalente,
+          condominioId: condoId,
+          statusCadastro: 'ativo',
+          authProvider: 'email',
+        });
+      }
+    }
+
+    this.saveToStorage();
+    this.notify();
+    return novoFunc;
+  }
+
+  public updateFuncionario(
+    condoId: string,
+    funcId: string,
+    data: Partial<FuncionarioEquipe>
+  ): boolean {
+    const list = this.funcionarios[condoId] || [];
+    const func = list.find((f) => f.id === funcId);
+    if (!func) return false;
+
+    Object.assign(func, data);
+
+    // Atualiza usuário de login se houver
+    if (func.email) {
+      const user = this.usuariosSistema.find((u) => u.email.toLowerCase() === func.email.toLowerCase());
+      if (user) {
+        user.nome = func.nome;
+        if (data.senha) user.senha = data.senha;
+      }
+    }
+
+    this.saveToStorage();
+    this.notify();
+    return true;
+  }
+
+  public deleteFuncionario(condoId: string, funcId: string): boolean {
+    if (!this.funcionarios[condoId]) return false;
+    const func = this.funcionarios[condoId].find((f) => f.id === funcId);
+    this.funcionarios[condoId] = this.funcionarios[condoId].filter((f) => f.id !== funcId);
+
+    if (func?.email) {
+      this.usuariosSistema = this.usuariosSistema.filter(
+        (u) => u.email.toLowerCase() !== func.email.toLowerCase()
+      );
+    }
+
+    this.saveToStorage();
+    this.notify();
+    return true;
   }
 
   // --- Áreas de Lazer ---

@@ -14,6 +14,7 @@ import {
 import { UserRole, Condominio, Morador, AppNotification, UserAccount } from '../../types';
 import { condoStore } from '../../services/mockStorage';
 import { SmartCondoLogo } from './SmartCondoLogo';
+import { ThemeToggleCompact } from '../../context/ThemeContext';
 
 interface HeaderProps {
   currentUser: UserAccount;
@@ -116,6 +117,9 @@ export const Header: React.FC<HeaderProps> = ({
               {roleLabels[currentUser.role].icon}
               <span>{roleLabels[currentUser.role].label}</span>
             </div>
+
+            {/* Alternador de Tema (Claro / Escuro Negrito / Sistema Celular) */}
+            <ThemeToggleCompact />
 
             {/* Notificações */}
             <div className="relative">

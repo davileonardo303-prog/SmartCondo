@@ -37,6 +37,7 @@ import {
   Clock,
   Shirt,
   ShoppingBag,
+  Package,
 } from 'lucide-react';
 import {
   Condominio,
@@ -57,6 +58,8 @@ import {
 } from '../../types';
 import { condoStore } from '../../services/mockStorage';
 import { WhatsAppBroadcastPanel } from './WhatsAppBroadcastPanel';
+import { GestaoEquipePermissoes } from './GestaoEquipePermissoes';
+import { RegrasEncomendasPanel } from './RegrasEncomendasPanel';
 import { ItensCompartilhadosView } from '../compartilhados/ItensCompartilhadosView';
 import { ScrollableTabsNav } from '../common/ScrollableTabsNav';
 import confetti from 'canvas-confetti';
@@ -80,6 +83,8 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<
     | 'moradores'
+    | 'equipe'
+    | 'regras_encomendas'
     | 'frota'
     | 'equipamentos'
     | 'liberacoes'
@@ -783,6 +788,32 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
         </button>
 
         <button
+          id="tab-sindico-equipe"
+          onClick={() => setActiveTab('equipe')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition whitespace-nowrap cursor-pointer ${
+            activeTab === 'equipe'
+              ? 'bg-indigo-900 text-white shadow-md shadow-indigo-900/30'
+              : 'text-indigo-950 bg-indigo-50/80 hover:bg-indigo-100 border border-indigo-200'
+          }`}
+        >
+          <ShieldCheck className="w-4 h-4 text-indigo-600" />
+          <span>Equipe & Permissões ({condoStore.getFuncionarios(condominio.id).length})</span>
+        </button>
+
+        <button
+          id="tab-sindico-regras-encomendas"
+          onClick={() => setActiveTab('regras_encomendas')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition whitespace-nowrap cursor-pointer ${
+            activeTab === 'regras_encomendas'
+              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
+              : 'text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200'
+          }`}
+        >
+          <Package className="w-4 h-4 text-amber-600" />
+          <span>Regras de Encomendas ({condominio.regras?.diasLimiteRetiradaEncomenda ?? 5} dias)</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('frota')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
             activeTab === 'frota'
@@ -1159,6 +1190,20 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ABA: EQUIPE & PERMISSÕES DOS FUNCIONÁRIOS (PORTEIRO, ZELADOR, ADMIN) */}
+      {/* ========================================================================= */}
+      {activeTab === 'equipe' && (
+        <GestaoEquipePermissoes condominio={condominio} />
+      )}
+
+      {/* ========================================================================= */}
+      {/* ABA: REGRAS & PRAZOS DE ENCOMENDAS (EX: JARDINS DO BRITO - 5 DIAS) */}
+      {/* ========================================================================= */}
+      {activeTab === 'regras_encomendas' && (
+        <RegrasEncomendasPanel condominio={condominio} />
       )}
 
       {/* ========================================================================= */}

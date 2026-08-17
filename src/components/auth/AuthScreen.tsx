@@ -25,6 +25,7 @@ import { auth, googleProvider, syncMoradorToFirestore } from '../../services/fir
 import { signInWithPopup } from 'firebase/auth';
 import confetti from 'canvas-confetti';
 import { SmartCondoLogo } from '../common/SmartCondoLogo';
+import { ThemeToggleCompact } from '../../context/ThemeContext';
 
 interface AuthScreenProps {
   condominios: Condominio[];
@@ -387,7 +388,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col justify-center items-center p-4 selection:bg-emerald-600 selection:text-white">
+    <div className="min-h-screen bg-slate-900 flex flex-col justify-center items-center p-4 selection:bg-emerald-600 selection:text-white relative">
+      {/* Barra superior de Tema e Acessibilidade no Topo da Tela Inicial */}
+      <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+        <ThemeToggleCompact />
+      </div>
+
       {/* Background Decorativo */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-20">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-emerald-600/30 rounded-full blur-[140px]" />

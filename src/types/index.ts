@@ -1,8 +1,35 @@
 export type UserRole = 'super_admin' | 'sindico' | 'portaria' | 'morador';
 
+export type CargoFuncionario = 'porteiro' | 'zelador' | 'administracao' | 'gerente_predial' | 'vigilante' | 'auxiliar_servicos';
+
+export interface PermissoesFuncionario {
+  receber_encomendas: boolean;
+  liberar_bicicletas: boolean;
+  gerenciar_equipamentos: boolean;
+  autorizar_visitantes: boolean;
+  enviar_avisos: boolean;
+  acesso_financeiro: boolean;
+  administracao_geral: boolean;
+}
+
+export interface FuncionarioEquipe {
+  id: string;
+  condominioId: string;
+  nome: string;
+  email: string;
+  telefone: string;
+  cargo: CargoFuncionario;
+  status: 'ativo' | 'inativo' | 'ferias';
+  permissoes: PermissoesFuncionario;
+  cadastradoEm: number;
+  senha?: string;
+  documentoCpf?: string;
+  turnoTrabalho?: string;
+}
+
 export type BikeStatus = 'disponivel' | 'reservada_5min' | 'em_uso' | 'manutencao';
 
-export type PackageStatus = 'na_portaria' | 'entregue';
+export type PackageStatus = 'na_portaria' | 'encaminhada_administracao' | 'entregue' | 'devolvida';
 
 export type AreaStatus = 'aberto' | 'manutencao' | 'limpeza' | 'fechado_clima';
 
@@ -102,6 +129,8 @@ export interface Condominio {
     taxaReservaSalao: number;
     tempoToleranciaRetiradaMinutos?: number;
     locaisDevolucao?: string[];
+    diasLimiteRetiradaEncomenda?: number; // Padrão: 5 dias (Ex: Jardins do Brito)
+    acaoAposLimiteEncomenda?: 'encaminhar_administracao' | 'notificar_reincidencia';
   };
 }
 
@@ -190,6 +219,14 @@ export interface Encomenda {
   status: PackageStatus;
   recebidoEm: number; // timestamp
   recebidoPor: string;
+  diasLimiteRetirada?: number; // Ex: 5 dias
+  dataLimiteRetirada?: number; // Timestamp limite
+  encaminhadaAdministracaoEm?: number | null;
+  motivoEncaminhamentoAdmin?: string;
+  notificacaoPushEnviada?: boolean;
+  notificacaoEmailEnviada?: boolean;
+  notificacaoWhatsAppEnviada?: boolean;
+  fotoUrl?: string;
   entregueEm?: number | null;
   entreguePara?: string | null;
   observacao?: string;
