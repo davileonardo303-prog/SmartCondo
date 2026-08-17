@@ -31,6 +31,7 @@ import {
   AppNotification,
   UsuarioSistema,
   CobrancaCondominio,
+  ItemCompartilhado,
 } from '../types';
 
 // Initialize Firebase App
@@ -296,6 +297,27 @@ export async function syncPlanoConfigToFirestore(planoKey: string, config: any):
     await setDoc(doc(db, 'planosConfig', planoKey), data, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function syncItemCompartilhadoToFirestore(item: ItemCompartilhado): Promise<void> {
+  const path = `condominios/${item.condominioId}/itens_compartilhados/${item.id}`;
+  try {
+    const data = cleanFirestoreData(item);
+    await setDoc(doc(db, 'condominios', item.condominioId, 'itens_compartilhados', item.id), data, {
+      merge: true,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteItemCompartilhadoFromFirestore(condoId: string, itemId: string): Promise<void> {
+  const path = `condominios/${condoId}/itens_compartilhados/${itemId}`;
+  try {
+    await deleteDoc(doc(db, 'condominios', condoId, 'itens_compartilhados', itemId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
   }
 }
 

@@ -81,6 +81,9 @@ import { QrScannerModal } from '../common/QrScannerModal';
 import { BikeLockModal } from '../common/BikeLockModal';
 import { BikeReturnModal } from '../common/BikeReturnModal';
 import { BikeSelectionModal } from '../common/BikeSelectionModal';
+import { ItensCompartilhadosView } from '../compartilhados/ItensCompartilhadosView';
+import { ScrollableTabsNav } from '../common/ScrollableTabsNav';
+import { Wrench } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface MoradorDashboardProps {
@@ -104,10 +107,11 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
   avisos,
   historicoLocacoes,
 }) => {
-  // Navigation Tabs (Todos os 8 módulos do SmartCondo)
+  // Navigation Tabs (Todos os módulos do SmartCondo)
   const [activeTab, setActiveTab] = useState<
     | 'inicio'
     | 'bicicletario'
+    | 'equipamentos'
     | 'lazer'
     | 'seguranca'
     | 'encomendas'
@@ -694,9 +698,9 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
       </div>
 
       {/* ==================================================================== */}
-      {/* BARRA DE NAVEGAÇÃO ENTRE OS 8 MÓDULOS (SCROLL HORIZONTAL RESPONSIVO) */}
+      {/* BARRA DE NAVEGAÇÃO ENTRE OS MÓDULOS (SCROLL HORIZONTAL RESPONSIVO)  */}
       {/* ==================================================================== */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto no-scrollbar">
+      <ScrollableTabsNav>
         <button
           onClick={() => setActiveTab('inicio')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
@@ -728,6 +732,19 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
           >
             {availableBikesCount} livres
           </span>
+        </button>
+
+        <button
+          id="tab-morador-equipamentos"
+          onClick={() => setActiveTab('equipamentos')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
+            activeTab === 'equipamentos'
+              ? 'bg-teal-700 text-white shadow-md shadow-teal-700/20'
+              : 'text-teal-900 bg-teal-50 hover:bg-teal-100 border border-teal-200'
+          }`}
+        >
+          <Wrench className="w-4 h-4 text-teal-700" />
+          <span>Itens & Equipamentos</span>
         </button>
 
         <button
@@ -823,7 +840,7 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
           <FileText className="w-4 h-4" />
           <span>Documentos</span>
         </button>
-      </div>
+      </ScrollableTabsNav>
 
       {/* ==================================================================== */}
       {/* MÓDULO 1: TELA INICIAL (DASHBOARD EXECUTIVO DO MORADOR)              */}
@@ -1317,6 +1334,17 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* MÓDULO: ITENS E EQUIPAMENTOS COMPARTILHADOS (REGRAS A CUSTO ZERO)    */}
+      {/* ==================================================================== */}
+      {activeTab === 'equipamentos' && (
+        <ItensCompartilhadosView
+          condominio={condominio}
+          moradorAtual={morador}
+          isStaff={false}
+        />
       )}
 
       {/* ==================================================================== */}

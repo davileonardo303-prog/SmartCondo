@@ -467,4 +467,58 @@ export interface ActiveUserSession {
   moradorId: string; // se role === 'morador'
 }
 
+// Versão do Aplicativo SmartCondo
+export const APP_VERSION = '1.0.0.1';
+
+// Módulo de Itens e Equipamentos Compartilhados
+export type CategoriaItemCompartilhado = 'mobilidade' | 'ferramentas' | 'utilidades' | 'lavanderia';
+export type StatusItemCompartilhado = 'disponivel' | 'reservado' | 'em_uso' | 'manutencao';
+
+export interface ReservaItemCompartilhado {
+  moradorId: string;
+  moradorNome: string;
+  unidade: string;
+  codigoResgate: string; // 6 dígitos numéricos
+  expiraEm: string; // ISO string
+  expiraEmTimestamp: number;
+  reservadoEm: number;
+}
+
+export interface UsoAtualItemCompartilhado {
+  moradorId: string;
+  moradorNome: string;
+  unidade: string;
+  retiradoEm: number;
+  devolucaoPrevistaEm?: number;
+  liberadoPor?: string;
+}
+
+export interface ItemCompartilhado {
+  id: string;
+  condominioId: string;
+  nome: string;
+  categoria: CategoriaItemCompartilhado;
+  codigoIdentificador: string; // Ex: FER-01, UTI-02, MOB-01, LAV-01
+  status: StatusItemCompartilhado;
+  tempoMaximoUsoHoras: number;
+  descricao?: string;
+  instrucoesUso?: string;
+  fotoUrl?: string;
+  localArmazenamento?: string;
+  requerAprovacao?: boolean;
+  reservaAtual?: ReservaItemCompartilhado | null;
+  usoAtual?: UsoAtualItemCompartilhado | null;
+  historicoUso?: {
+    id: string;
+    moradorId: string;
+    moradorNome: string;
+    unidade: string;
+    retiradaEm: number;
+    devolucaoEm: number;
+    operador?: string;
+    observacoes?: string;
+  }[];
+}
+
+
 

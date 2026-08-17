@@ -8,6 +8,8 @@ import {
   VisitanteLiberado,
 } from '../../types';
 import { condoStore } from '../../services/mockStorage';
+import { ItensCompartilhadosView } from '../compartilhados/ItensCompartilhadosView';
+import { ScrollableTabsNav } from '../common/ScrollableTabsNav';
 import {
   Package,
   Bike,
@@ -27,6 +29,7 @@ import {
   Layers,
   Phone,
   AlertTriangle,
+  Wrench,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -46,7 +49,7 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
   historicoLocacoes,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'receber' | 'baixa' | 'bicicletario' | 'visitantes' | 'historico'
+    'receber' | 'baixa' | 'bicicletario' | 'equipamentos' | 'visitantes' | 'historico'
   >('receber');
 
   // Encomendas: Receber
@@ -273,7 +276,7 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
       </div>
 
       {/* Navegação de Abas */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto no-scrollbar">
+      <ScrollableTabsNav>
         <button
           onClick={() => setActiveTab('receber')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
@@ -321,6 +324,19 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
         </button>
 
         <button
+          id="tab-portaria-equipamentos"
+          onClick={() => setActiveTab('equipamentos')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
+            activeTab === 'equipamentos'
+              ? 'bg-teal-700 text-white shadow-md shadow-teal-700/20'
+              : 'text-teal-900 bg-teal-50 hover:bg-teal-100 border border-teal-200'
+          }`}
+        >
+          <Wrench className="w-4 h-4 text-teal-700" />
+          <span>Itens & Equipamentos (5 min)</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('visitantes')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
             activeTab === 'visitantes'
@@ -343,7 +359,7 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
           <Clock className="w-4 h-4" />
           <span>Histórico</span>
         </button>
-      </div>
+      </ScrollableTabsNav>
 
       {/* ABA 1: RECEBER ENCOMENDA */}
       {activeTab === 'receber' && (
@@ -723,6 +739,15 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ABA: ITENS E EQUIPAMENTOS COMPARTILHADOS */}
+      {activeTab === 'equipamentos' && (
+        <ItensCompartilhadosView
+          condominio={condominio}
+          isStaff={true}
+          operadorNome="Portaria Principal"
+        />
       )}
 
       {/* ABA 4: VISITANTES & PRESTADORES */}

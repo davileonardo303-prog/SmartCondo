@@ -25,6 +25,7 @@ import {
   EnqueteCondominio,
   SugestaoMorador,
   DocumentoCondominio,
+  ItemCompartilhado,
 } from '../types';
 import { whatsappService } from './whatsappService';
 import {
@@ -45,6 +46,8 @@ import {
   syncCobrancaToFirestore,
   deleteCobrancaFromFirestore,
   syncPlanoConfigToFirestore,
+  syncItemCompartilhadoToFirestore,
+  deleteItemCompartilhadoFromFirestore,
 } from './firebase';
 import { collection, onSnapshot, doc, getDocs } from 'firebase/firestore';
 
@@ -182,6 +185,7 @@ class MockCondoStore {
   private enquetes: Record<string, EnqueteCondominio[]> = {};
   private sugestoes: Record<string, SugestaoMorador[]> = {};
   private documentos: Record<string, DocumentoCondominio[]> = {};
+  private itensCompartilhados: Record<string, ItemCompartilhado[]> = {};
   private listeners: Set<Listener> = new Set();
   private subUnsubscribers: Record<string, (() => void)[]> = {};
   private version = 0;
@@ -196,6 +200,7 @@ class MockCondoStore {
     // Verificação contínua do Timer de 5 Minutos da Reserva de Bicicletas (Novolar)
     setInterval(() => {
       this.verificarExpiracaoReservas5Min();
+      this.verificarExpiracaoReservasItensCompartilhados();
     }, 2500);
   }
 
@@ -432,6 +437,14 @@ class MockCondoStore {
       }
       this.mergeSubcollection(this.reservas, condoId, resList);
 
+      // Itens Compartilhados (Ferramentas, Lavanderia, Utilidades, etc.)
+      const itemSnap = await getDocs(collection(db, 'condominios', condoId, 'itens_compartilhados'));
+      const itemList: ItemCompartilhado[] = [];
+      if (!itemSnap.empty) {
+        itemSnap.forEach((d) => itemList.push({ ...(d.data() as ItemCompartilhado), id: d.id }));
+      }
+      this.mergeSubcollection(this.itensCompartilhados, condoId, itemList, syncItemCompartilhadoToFirestore);
+
       this.saveToStorage();
       this.notify();
     } catch (err) {
@@ -601,6 +614,19 @@ class MockCondoStore {
       );
       unsubs.push(unsubAvisos);
 
+      // Itens Compartilhados
+      const unsubItens = onSnapshot(
+        collection(db, 'condominios', condoId, 'itens_compartilhados'),
+        (snap) => {
+          const list: ItemCompartilhado[] = [];
+          snap.forEach((d) => list.push({ ...(d.data() as ItemCompartilhado), id: d.id }));
+          this.mergeSubcollection(this.itensCompartilhados, condoId, list, syncItemCompartilhadoToFirestore);
+          this.notify();
+        },
+        (err) => console.warn('Itens Compartilhados sync error:', err.message)
+      );
+      unsubs.push(unsubItens);
+
       this.subUnsubscribers[condoId] = unsubs;
     } catch (err) {
       console.warn(`Erro ao assinar subcoleções do condomínio ${condoId}:`, err);
@@ -639,6 +665,7 @@ class MockCondoStore {
         this.enquetes = parsed.enquetes || {};
         this.sugestoes = parsed.sugestoes || {};
         this.documentos = parsed.documentos || {};
+        this.itensCompartilhados = parsed.itensCompartilhados || {};
         this.planosConfig = parsed.planosConfig
           ? { ...DEFAULT_PLANOS_CONFIG, ...parsed.planosConfig }
           : { ...DEFAULT_PLANOS_CONFIG };
@@ -682,6 +709,7 @@ class MockCondoStore {
     this.enquetes = {};
     this.sugestoes = {};
     this.documentos = {};
+    this.itensCompartilhados = {};
     this.planosConfig = { ...DEFAULT_PLANOS_CONFIG };
     this.saveToStorage();
   }
@@ -710,6 +738,7 @@ class MockCondoStore {
         enquetes: this.enquetes,
         sugestoes: this.sugestoes,
         documentos: this.documentos,
+        itensCompartilhados: this.itensCompartilhados,
       };
       localStorage.setItem(STORAGE_KEY_PREFIX, JSON.stringify(data));
     } catch {
@@ -1443,6 +1472,100 @@ class MockCondoStore {
     };
   }
 
+  // Confirmar Retirada de Bike pela Portaria ou Síndico (Busca por Código de Reserva, ID ou Código da Bike)
+  public confirmarRetiradaPortaria(
+    condoId: string,
+    codigoOrId: string,
+    autorNome: string = 'Portaria / Síndico'
+  ): { success: boolean; message: string; bike?: Bicicleta; lockPassword?: string } {
+    const list = this.getBikes(condoId);
+    const cleanSearch = (codigoOrId || '').trim().toUpperCase();
+
+    const bike = list.find((b) => {
+      if (b.id === codigoOrId) return true;
+      if (b.codigo && b.codigo.toUpperCase() === cleanSearch) return true;
+      if (b.codigo && `BK-${b.codigo.toUpperCase()}` === cleanSearch) return true;
+      if (b.reservaCodigo && b.reservaCodigo.toUpperCase() === cleanSearch) return true;
+      if (b.reservaCodigo && b.reservaCodigo.replace('BK-', '').toUpperCase() === cleanSearch) return true;
+      if (b.qrToken && b.qrToken.toUpperCase() === cleanSearch) return true;
+      return false;
+    });
+
+    if (!bike) {
+      return {
+        success: false,
+        message: `Bicicleta ou código "${codigoOrId}" não encontrado. Verifique o código de liberação fornecido pelo morador.`,
+      };
+    }
+
+    if (bike.status === 'em_uso') {
+      return {
+        success: false,
+        message: `A Bike #${bike.codigo} já está em uso por ${bike.usuarioAtualNome || 'outro morador'}.`,
+        bike,
+        lockPassword: bike.lockPassword,
+      };
+    }
+
+    if (bike.status === 'manutencao') {
+      return {
+        success: false,
+        message: `A Bike #${bike.codigo} está interditada para manutenção.`,
+        bike,
+      };
+    }
+
+    // Identifica o morador que reservou ou pega o morador padrão
+    const moradorId = bike.reservaMoradorId || 'morador_portaria';
+    const moradorNome = bike.reservaMoradorNome || 'Morador';
+    const moradorUnidade = bike.reservaMoradorUnidade || 'Unidade';
+
+    // Transição para Em Uso
+    bike.status = 'em_uso';
+    bike.usuarioAtualId = moradorId;
+    bike.usuarioAtualNome = moradorNome;
+    bike.usuarioAtualUnidade = moradorUnidade;
+    bike.inicioUsoTimestamp = Date.now();
+    bike.localizacaoAtual = `Em trânsito com ${moradorNome} (${moradorUnidade})`;
+    bike.reservaCodigo = null;
+    bike.reserva5minTimestamp = null;
+
+    this.saveToStorage();
+    syncBikeToFirestore(bike).catch((err) => console.warn('Sync Confirmar Retirada error:', err));
+
+    // Notificação para o Síndico, Portaria e Morador
+    this.addNotification({
+      condominioId: condoId,
+      titulo: `🚲 Bike #${bike.codigo} Retirada & Liberada`,
+      mensagem: `${moradorNome} (${moradorUnidade}) retirou a Bike #${bike.codigo}. Autorizado por: ${autorNome}. Senha do cadeado: ${bike.lockPassword}`,
+      tipo: 'bike',
+    });
+
+    // Notificação WhatsApp
+    const condo = this.getCondominio(condoId);
+    const condoNome = condo ? condo.nome : 'Condomínio Residencial';
+    const moradorObj = this.getMorador(condoId, moradorId);
+    if (moradorObj) {
+      whatsappService.notificarMorador({
+        condominioId: condoId,
+        condominioNome: condoNome,
+        morador: moradorObj,
+        tipo: 'bike_retirada',
+        titulo: `🚲 Liberação de Bike #${bike.codigo}`,
+        corpoMensagem: `Olá ${moradorNome}! Sua retirada da bicicleta *#${bike.codigo}* foi autorizada por *${autorNome}*.\n\n🔑 *SENHA DO CADEADO:* \`${bike.lockPassword}\`\n⏱️ *Tempo Limite:* 60 minutos\n\nBoas pedaladas e devolva no totem ao finalizar!`,
+      });
+    }
+
+    this.notify();
+
+    return {
+      success: true,
+      message: `Bicicleta #${bike.codigo} liberada com sucesso para ${moradorNome}! Senha do cadeado: ${bike.lockPassword}`,
+      bike,
+      lockPassword: bike.lockPassword,
+    };
+  }
+
   // Autorizar Retirada de Bike pelo Porteiro, Síndico ou Administração (Entrega a Senha do Cadeado)
   public autorizarRetiradaBike(
     condoId: string,
@@ -1763,6 +1886,412 @@ class MockCondoStore {
       success: res.success,
       message: res.message,
       emManutencao: res.emManutencao,
+    };
+  }
+
+  // Verificador Contínuo de Expiração das Reservas de 5 Minutos de Bicicletas
+  public verificarExpiracaoReservas5Min() {
+    const agora = Date.now();
+    const TOLERANCIA_MS = 5 * 60 * 1000; // 5 minutos
+
+    let houveMudanca = false;
+
+    for (const condoId of Object.keys(this.bikes)) {
+      const bikeList = this.bikes[condoId] || [];
+      for (const bike of bikeList) {
+        if (bike.status === 'reservada_5min' && bike.reserva5minTimestamp) {
+          const decorrido = agora - bike.reserva5minTimestamp;
+          if (decorrido > TOLERANCIA_MS) {
+            const moradorNome = bike.reservaMoradorNome || 'Morador';
+            const moradorUnidade = bike.reservaMoradorUnidade || '';
+
+            bike.status = 'disponivel';
+            bike.reservaMoradorId = null;
+            bike.reservaMoradorNome = null;
+            bike.reservaMoradorUnidade = null;
+            bike.reservaCodigo = null;
+            bike.reserva5minTimestamp = null;
+
+            syncBikeToFirestore(bike).catch(() => {});
+
+            this.addNotification({
+              condominioId: condoId,
+              titulo: `⏱️ Reserva da Bike #${bike.codigo} Expirada`,
+              mensagem: `A reserva temporária de 5 minutos de ${moradorNome} (${moradorUnidade}) expirou e a bicicleta voltou a ficar disponível.`,
+              tipo: 'bike',
+            });
+
+            houveMudanca = true;
+          }
+        }
+      }
+    }
+
+    if (houveMudanca) {
+      this.notify();
+    }
+  }
+
+  // Verificador Contínuo de Expiração das Reservas de 5 Minutos de Itens Compartilhados (Ferramentas, Utilidades, etc.)
+  public verificarExpiracaoReservasItensCompartilhados() {
+    const agora = Date.now();
+    let houveMudanca = false;
+
+    for (const condoId of Object.keys(this.itensCompartilhados)) {
+      const itemList = this.itensCompartilhados[condoId] || [];
+      for (const item of itemList) {
+        if (item.status === 'reservado' && item.reservaAtual) {
+          const expiraEmMs = item.reservaAtual.expiraEmTimestamp || item.reservaAtual.reservadoEm + 5 * 60 * 1000;
+          if (agora > expiraEmMs) {
+            const moradorNome = item.reservaAtual.moradorNome || 'Morador';
+            const moradorUnidade = item.reservaAtual.unidade || '';
+
+            item.status = 'disponivel';
+            item.reservaAtual = null;
+
+            syncItemCompartilhadoToFirestore(item).catch(() => {});
+
+            this.addNotification({
+              condominioId: condoId,
+              titulo: `⏱️ Reserva Expirada: ${item.nome}`,
+              mensagem: `A reserva de 5 minutos de ${moradorNome} (${moradorUnidade}) para o item ${item.nome} (${item.codigoIdentificador}) expirou. O item está liberado novamente.`,
+              tipo: 'sistema',
+            });
+
+            houveMudanca = true;
+          }
+        }
+      }
+    }
+
+    if (houveMudanca) {
+      this.notify();
+    }
+  }
+
+  // ==========================================
+  // --- ITENS E EQUIPAMENTOS COMPARTILHADOS ---
+  // ==========================================
+
+  public getItensCompartilhados(condoId: string, categoria?: string): ItemCompartilhado[] {
+    if (condoId) {
+      this.ensureCondoSubscribed(condoId);
+    }
+    const list = this.itensCompartilhados[condoId] || [];
+    if (categoria && categoria !== 'todos') {
+      return list.filter((i) => i.categoria === categoria);
+    }
+    return [...list];
+  }
+
+  public getItemCompartilhado(condoId: string, itemId: string): ItemCompartilhado | undefined {
+    if (condoId) {
+      this.ensureCondoSubscribed(condoId);
+    }
+    return (this.itensCompartilhados[condoId] || []).find(
+      (i) =>
+        i.id === itemId ||
+        i.codigoIdentificador?.toUpperCase() === itemId.toUpperCase() ||
+        i.reservaAtual?.codigoResgate === itemId
+    );
+  }
+
+  public addItemCompartilhado(
+    condoId: string,
+    item: Omit<ItemCompartilhado, 'id' | 'condominioId'>
+  ): ItemCompartilhado {
+    const newId = `item_comp_${Date.now()}`;
+    const novoItem: ItemCompartilhado = {
+      ...item,
+      id: newId,
+      condominioId: condoId,
+      status: item.status || 'disponivel',
+      reservaAtual: null,
+      usoAtual: null,
+      historicoUso: [],
+    };
+
+    if (!this.itensCompartilhados[condoId]) {
+      this.itensCompartilhados[condoId] = [];
+    }
+
+    this.itensCompartilhados[condoId].unshift(novoItem);
+    this.saveToStorage();
+    syncItemCompartilhadoToFirestore(novoItem).catch((err) =>
+      console.warn('Sync Item Compartilhado error:', err)
+    );
+    this.notify();
+
+    return novoItem;
+  }
+
+  public updateItemCompartilhado(
+    condoId: string,
+    itemId: string,
+    data: Partial<ItemCompartilhado>
+  ): boolean {
+    const list = this.itensCompartilhados[condoId] || [];
+    const item = list.find((i) => i.id === itemId);
+    if (!item) return false;
+
+    Object.assign(item, data);
+    this.saveToStorage();
+    syncItemCompartilhadoToFirestore(item).catch((err) =>
+      console.warn('Sync Update Item Compartilhado error:', err)
+    );
+    this.notify();
+    return true;
+  }
+
+  public deleteItemCompartilhado(condoId: string, itemId: string): boolean {
+    if (!this.itensCompartilhados[condoId]) return false;
+    this.itensCompartilhados[condoId] = this.itensCompartilhados[condoId].filter(
+      (i) => i.id !== itemId
+    );
+    this.saveToStorage();
+    deleteItemCompartilhadoFromFirestore(condoId, itemId).catch((err) =>
+      console.warn('Delete Item Compartilhado error:', err)
+    );
+    this.notify();
+    return true;
+  }
+
+  // Morador Reserva Item (Gera Código de 6 Dígitos com 5 Minutos de Tolerância)
+  public reservarItemCompartilhado(
+    condoId: string,
+    itemId: string,
+    moradorId: string
+  ): {
+    success: boolean;
+    message: string;
+    item?: ItemCompartilhado;
+    codigoResgate?: string;
+    expiraEm?: string;
+  } {
+    const morador = this.getMorador(condoId, moradorId);
+    if (!morador) {
+      return { success: false, message: 'Morador não encontrado.' };
+    }
+
+    const item = (this.itensCompartilhados[condoId] || []).find((i) => i.id === itemId);
+    if (!item) {
+      return { success: false, message: 'Equipamento ou item não encontrado.' };
+    }
+
+    if (item.status === 'em_uso') {
+      return {
+        success: false,
+        message: `O item "${item.nome}" já está em uso por ${item.usoAtual?.moradorNome || 'outro morador'}.`,
+      };
+    }
+
+    if (item.status === 'reservado') {
+      return {
+        success: false,
+        message: `O item "${item.nome}" já está reservado por ${item.reservaAtual?.moradorNome || 'outro morador'} aguardando retirada.`,
+      };
+    }
+
+    if (item.status === 'manutencao') {
+      return {
+        success: false,
+        message: `O item "${item.nome}" está em manutenção ou revisão.`,
+      };
+    }
+
+    // Gerar código de resgate de 6 dígitos numéricos
+    const codigo6Digitos = Math.floor(100000 + Math.random() * 900000).toString();
+    const agora = Date.now();
+    const expiraEmTimestamp = agora + 5 * 60 * 1000;
+    const expiraEmIso = new Date(expiraEmTimestamp).toISOString();
+
+    item.status = 'reservado';
+    item.reservaAtual = {
+      moradorId: morador.id,
+      moradorNome: morador.nome,
+      unidade: `Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto}`,
+      codigoResgate: codigo6Digitos,
+      expiraEm: expiraEmIso,
+      expiraEmTimestamp,
+      reservadoEm: agora,
+    };
+
+    this.saveToStorage();
+    syncItemCompartilhadoToFirestore(item).catch((err) =>
+      console.warn('Sync Reserva Item error:', err)
+    );
+
+    // Notificação geral para a Portaria e Síndico
+    this.addNotification({
+      condominioId: condoId,
+      titulo: `📦 Reserva de Equipamento: ${item.nome}`,
+      mensagem: `${morador.nome} (${item.reservaAtual.unidade}) reservou ${item.nome} (${item.codigoIdentificador}). Código de Liberação: ${codigo6Digitos}. Tolerância: 5 minutos.`,
+      tipo: 'sistema',
+    });
+
+    this.notify();
+
+    return {
+      success: true,
+      message: `Reserva confirmada! Apresente o código ${codigo6Digitos} na portaria ou zeladoria em até 5 minutos para retirar o equipamento.`,
+      item,
+      codigoResgate: codigo6Digitos,
+      expiraEm: expiraEmIso,
+    };
+  }
+
+  // Cancelar Reserva do Item
+  public cancelarReservaItemCompartilhado(
+    condoId: string,
+    itemId: string,
+    moradorId?: string
+  ): { success: boolean; message: string } {
+    const item = (this.itensCompartilhados[condoId] || []).find((i) => i.id === itemId);
+    if (!item) {
+      return { success: false, message: 'Item não encontrado.' };
+    }
+
+    if (moradorId && item.reservaAtual && item.reservaAtual.moradorId !== moradorId) {
+      return { success: false, message: 'Você só pode cancelar reservas feitas por você.' };
+    }
+
+    item.status = 'disponivel';
+    item.reservaAtual = null;
+
+    this.saveToStorage();
+    syncItemCompartilhadoToFirestore(item).catch((err) =>
+      console.warn('Sync Cancelar Reserva error:', err)
+    );
+    this.notify();
+
+    return { success: true, message: `Reserva do item "${item.nome}" cancelada com sucesso.` };
+  }
+
+  // Porteiro ou Síndico Valida Código e Registra a Saída / Retirada do Equipamento
+  public liberarRetiradaItemPortaria(
+    condoId: string,
+    codigoOrId: string,
+    operadorNome: string = 'Portaria / Síndico'
+  ): { success: boolean; message: string; item?: ItemCompartilhado } {
+    const list = this.itensCompartilhados[condoId] || [];
+    const cleanSearch = (codigoOrId || '').trim().toUpperCase();
+
+    const item = list.find((i) => {
+      if (i.id === codigoOrId) return true;
+      if (i.codigoIdentificador && i.codigoIdentificador.toUpperCase() === cleanSearch) return true;
+      if (i.reservaAtual && i.reservaAtual.codigoResgate === cleanSearch) return true;
+      return false;
+    });
+
+    if (!item) {
+      return {
+        success: false,
+        message: `Item ou código "${codigoOrId}" não localizado no sistema.`,
+      };
+    }
+
+    if (item.status === 'em_uso') {
+      return {
+        success: false,
+        message: `O item "${item.nome}" já está em uso por ${item.usoAtual?.moradorNome || 'outro morador'}.`,
+        item,
+      };
+    }
+
+    const moradorId = item.reservaAtual?.moradorId || 'morador_avulso';
+    const moradorNome = item.reservaAtual?.moradorNome || 'Morador';
+    const moradorUnidade = item.reservaAtual?.unidade || 'Unidade';
+
+    const agora = Date.now();
+    const tempoMaxMs = (item.tempoMaximoUsoHoras || 4) * 3600 * 1000;
+    const devolucaoPrevistaEm = agora + tempoMaxMs;
+
+    item.status = 'em_uso';
+    item.usoAtual = {
+      moradorId,
+      moradorNome,
+      unidade: moradorUnidade,
+      retiradoEm: agora,
+      devolucaoPrevistaEm,
+      liberadoPor: operadorNome,
+    };
+    item.reservaAtual = null;
+
+    this.saveToStorage();
+    syncItemCompartilhadoToFirestore(item).catch((err) =>
+      console.warn('Sync Liberação Item error:', err)
+    );
+
+    this.addNotification({
+      condominioId: condoId,
+      titulo: `✅ Retirada de Equipamento: ${item.nome}`,
+      mensagem: `${moradorNome} (${moradorUnidade}) retirou ${item.nome} (${item.codigoIdentificador}). Liberado por: ${operadorNome}. Prazo de devolução: ${item.tempoMaximoUsoHoras}h.`,
+      tipo: 'sistema',
+    });
+
+    this.notify();
+
+    return {
+      success: true,
+      message: `Item "${item.nome}" liberado com sucesso para ${moradorNome} (${moradorUnidade})!`,
+      item,
+    };
+  }
+
+  // Devolução do Equipamento
+  public receberDevolucaoItem(
+    condoId: string,
+    itemId: string,
+    dados: {
+      operadorNome?: string;
+      observacoes?: string;
+    } = {}
+  ): { success: boolean; message: string; item?: ItemCompartilhado } {
+    const list = this.itensCompartilhados[condoId] || [];
+    const item = list.find((i) => i.id === itemId);
+    if (!item) {
+      return { success: false, message: 'Item não encontrado.' };
+    }
+
+    const agora = Date.now();
+    const operador = dados.operadorNome || 'Portaria / Zeladoria';
+
+    if (item.usoAtual) {
+      if (!item.historicoUso) item.historicoUso = [];
+      item.historicoUso.unshift({
+        id: `hist_item_${Date.now()}`,
+        moradorId: item.usoAtual.moradorId,
+        moradorNome: item.usoAtual.moradorNome,
+        unidade: item.usoAtual.unidade,
+        retiradaEm: item.usoAtual.retiradoEm,
+        devolucaoEm: agora,
+        operador,
+        observacoes: dados.observacoes,
+      });
+    }
+
+    item.status = 'disponivel';
+    item.usoAtual = null;
+    item.reservaAtual = null;
+
+    this.saveToStorage();
+    syncItemCompartilhadoToFirestore(item).catch((err) =>
+      console.warn('Sync Devolução Item error:', err)
+    );
+
+    this.addNotification({
+      condominioId: condoId,
+      titulo: `📥 Devolução de Equipamento: ${item.nome}`,
+      mensagem: `O item ${item.nome} (${item.codigoIdentificador}) foi devolvido e conferido por ${operador}. Status: Disponível.`,
+      tipo: 'sistema',
+    });
+
+    this.notify();
+
+    return {
+      success: true,
+      message: `Devolução de "${item.nome}" registrada com sucesso!`,
+      item,
     };
   }
 
@@ -2505,135 +3034,6 @@ class MockCondoStore {
     this.saveToStorage();
     this.notify();
     return { success: true, message: `Reserva da bicicleta #${bikeCodigo} foi cancelada.` };
-  }
-
-  public verificarExpiracaoReservas5Min() {
-    const LIMITE_MS = 5 * 60 * 1000; // 5 minutos exatos
-    const agora = Date.now();
-    let mudou = false;
-
-    Object.keys(this.bikes).forEach((condoId) => {
-      const list = this.bikes[condoId] || [];
-      list.forEach((b) => {
-        if (b.status === 'reservada_5min' && b.reserva5minTimestamp) {
-          const decorrido = agora - b.reserva5minTimestamp;
-          if (decorrido > LIMITE_MS) {
-            // Expirou! Auto-cancelamento
-            const moradorId = b.reservaMoradorId;
-            const moradorNome = b.reservaMoradorNome || 'Morador';
-            const bikeCodigo = b.codigo;
-
-            b.status = 'disponivel';
-            b.reserva5minTimestamp = null;
-            b.reservaMoradorId = null;
-            b.reservaMoradorNome = null;
-            b.reservaMoradorUnidade = null;
-            b.reservaCodigo = null;
-
-            syncBikeToFirestore(b).catch((err) => console.warn('Sync Expired Bike error:', err));
-            mudou = true;
-
-            if (moradorId) {
-              const morador = this.getMorador(condoId, moradorId);
-              this.addNotification({
-                condominioId: condoId,
-                paraMoradorId: moradorId,
-                titulo: `⏰ Reserva Expirada: Bike #${bikeCodigo}`,
-                mensagem: `O prazo de 5 minutos para retirada na portaria esgotou. A bicicleta voltou a ficar disponível para todos.`,
-                tipo: 'bike',
-              });
-
-              if (morador) {
-                whatsappService.notificarMorador({
-                  condominioId: condoId,
-                  condominioNome: 'Condomínio',
-                  morador,
-                  tipo: 'bike_reserva_expirada',
-                  titulo: `⏰ Prazo de 5 Minutos Expirado: Bike #${bikeCodigo}`,
-                  corpoMensagem: `Olá ${moradorNome}, o tempo limite de 5 minutos para retirar a bicicleta *#${bikeCodigo}* na portaria expirou. A reserva foi cancelada automaticamente.`,
-                });
-              }
-            }
-          }
-        }
-      });
-    });
-
-    if (mudou) {
-      this.saveToStorage();
-      this.notify();
-    }
-  }
-
-  public confirmarRetiradaPortaria(
-    condoId: string,
-    bikeIdOrCode: string,
-    porteiroNome: string = 'Portaria Central'
-  ): { success: boolean; message: string; bike?: Bicicleta; lockPassword?: string } {
-    const bike = this.getBike(condoId, bikeIdOrCode);
-    if (!bike) {
-      return { success: false, message: 'Bicicleta ou código não localizado.' };
-    }
-
-    if (bike.status !== 'reservada_5min' && bike.status !== 'disponivel') {
-      return {
-        success: false,
-        message: `Esta bicicleta não pode ser retirada (status atual: ${bike.status}).`,
-      };
-    }
-
-    const moradorId = bike.reservaMoradorId || bike.usuarioAtualId;
-    if (!moradorId) {
-      return {
-        success: false,
-        message: 'Nenhum morador associado a esta retirada. Faça a reserva pelo app primeiro.',
-      };
-    }
-
-    const morador = this.getMorador(condoId, moradorId);
-    if (!morador) {
-      return { success: false, message: 'Morador não localizado.' };
-    }
-
-    // Passa para 'em_uso'
-    bike.status = 'em_uso';
-    bike.usuarioAtualId = morador.id;
-    bike.usuarioAtualNome = morador.nome;
-    bike.usuarioAtualUnidade = `Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto}`;
-    bike.inicioUsoTimestamp = Date.now();
-    bike.localizacaoAtual = 'Em trânsito com morador';
-    bike.reserva5minTimestamp = null;
-    bike.reservaCodigo = null;
-
-    syncBikeToFirestore(bike).catch((err) => console.warn('Sync Bike checkout error:', err));
-
-    this.addNotification({
-      condominioId: condoId,
-      paraMoradorId: morador.id,
-      titulo: `🚲 Bike #${bike.codigo} Retirada na Portaria`,
-      mensagem: `Retirada autorizada por ${porteiroNome}. Senha do cadeado: ${bike.lockPassword}. Tempo de pedalada iniciado!`,
-      tipo: 'bike',
-    });
-
-    const condo = this.getCondominio(condoId);
-    whatsappService.notificarMorador({
-      condominioId: condoId,
-      condominioNome: condo?.nome || 'Condomínio',
-      morador,
-      tipo: 'bike_retirada',
-      titulo: `🚲 Retirada Confirmada: Bike #${bike.codigo}`,
-      corpoMensagem: `Retirada da bike *#${bike.codigo}* confirmada na portaria!\n\n🔑 *Senha do Cadeado:* \`${bike.lockPassword}\`\n⏱️ *Tempo Máximo Sugerido:* 60 min\n👮 *Confirmado por:* ${porteiroNome}\n\nBom passeio! Lembre-se de trancar o cadeado ao estacionar.`,
-    });
-
-    this.saveToStorage();
-    this.notify();
-
-    return {
-      success: true,
-      message: `Retirada da bicicleta #${bike.codigo} liberada com sucesso para ${morador.nome}!`,
-      bike,
-      lockPassword: bike.lockPassword,
-    };
   }
 
   // --- MÓDULO 3: SEGURANÇA, VISITANTES E CÂMERAS ---
@@ -3812,6 +4212,124 @@ class MockCondoStore {
           status: 'pendente',
           criadoEm: Date.now() - 2 * 3600 * 1000,
           observacoes: 'Vaga de visitante solicitada',
+        },
+      ];
+    }
+
+    // 12. Itens e Equipamentos Compartilhados (Ferramentas, Utilidades, Lavanderia, Mobilidade)
+    if (!this.itensCompartilhados[demoCondoId] || this.itensCompartilhados[demoCondoId].length === 0) {
+      this.itensCompartilhados[demoCondoId] = [
+        {
+          id: 'item_1',
+          condominioId: demoCondoId,
+          nome: 'Furadeira de Impacto Bosch GSB 13 RE 650W',
+          categoria: 'ferramentas',
+          codigoIdentificador: 'FER-01',
+          descricao: 'Furadeira de impacto com mandril de 1/2", seletor de velocidade e kit com 5 brocas de alvenaria e madeira.',
+          localArmazenamento: 'Portaria Principal (Armário de Ferramentas)',
+          status: 'disponivel',
+          tempoMaximoUsoHoras: 4,
+          requerAprovacao: false,
+          instrucoesUso: 'Utilizar sempre óculos de proteção. Devolver o kit de brocas completo e o fio devidamente enrolado.',
+          reservaAtual: null,
+          usoAtual: null,
+          historicoUso: [],
+        },
+        {
+          id: 'item_2',
+          condominioId: demoCondoId,
+          nome: 'Escada de Alumínio Articulada 4x3 (12 Degraus)',
+          categoria: 'ferramentas',
+          codigoIdentificador: 'FER-02',
+          descricao: 'Escada multifuncional articulada com travas de segurança reforçadas. Alcança até 3,40m.',
+          localArmazenamento: 'Zeladoria (Subsolo 1)',
+          status: 'disponivel',
+          tempoMaximoUsoHoras: 4,
+          requerAprovacao: false,
+          instrucoesUso: 'Verifique se todas as travas articuladas clicaram antes de subir.',
+          reservaAtual: null,
+          usoAtual: null,
+          historicoUso: [],
+        },
+        {
+          id: 'item_3',
+          condominioId: demoCondoId,
+          nome: 'Parafusadeira e Furadeira sem Fio 12V Bateria',
+          categoria: 'ferramentas',
+          codigoIdentificador: 'FER-03',
+          descricao: 'Parafusadeira a bateria com controle de torque, 2 baterias recarregáveis e jogo de bits Phillips/Fenda.',
+          localArmazenamento: 'Portaria Principal',
+          status: 'disponivel',
+          tempoMaximoUsoHoras: 3,
+          requerAprovacao: false,
+          instrucoesUso: 'Colocar na base de carregamento ao devolver na portaria.',
+          reservaAtual: null,
+          usoAtual: null,
+          historicoUso: [],
+        },
+        {
+          id: 'item_4',
+          condominioId: demoCondoId,
+          nome: 'Carrinho de Compras Dobrável Reforçado 01',
+          categoria: 'utilidades',
+          codigoIdentificador: 'UTI-01',
+          descricao: 'Carrinho metálico para transporte de compras do estacionamento até o apartamento. Capacidade 50kg.',
+          localArmazenamento: 'Hall de Entrada Bloco A',
+          status: 'disponivel',
+          tempoMaximoUsoHoras: 1,
+          requerAprovacao: false,
+          instrucoesUso: 'Devolver no hall imediatamente após descarregar as compras.',
+          reservaAtual: null,
+          usoAtual: null,
+          historicoUso: [],
+        },
+        {
+          id: 'item_5',
+          condominioId: demoCondoId,
+          nome: 'Lavadora de Alta Pressão Kärcher K2 Compact',
+          categoria: 'utilidades',
+          codigoIdentificador: 'UTI-02',
+          descricao: 'Lavadora de pressão 1600 PSI para limpeza de tapetes, varandas e veículos na área de lavagem.',
+          localArmazenamento: 'Zeladoria / Lava-Rápido Condominial',
+          status: 'disponivel',
+          tempoMaximoUsoHoras: 3,
+          requerAprovacao: false,
+          instrucoesUso: 'Não ligar o motor sem a mangueira de água conectada e aberta.',
+          reservaAtual: null,
+          usoAtual: null,
+          historicoUso: [],
+        },
+        {
+          id: 'item_6',
+          condominioId: demoCondoId,
+          nome: 'Lavadora Automática Front Load 13kg (Máquina 01)',
+          categoria: 'lavanderia',
+          codigoIdentificador: 'LAV-01',
+          descricao: 'Lavadora inteligente com dosagem automática e ciclos rápidos para higienização de roupas.',
+          localArmazenamento: 'Lavanderia Coletiva (Térreo Bloco B)',
+          status: 'disponivel',
+          tempoMaximoUsoHoras: 2,
+          requerAprovacao: false,
+          instrucoesUso: 'Respeite a capacidade máxima de 13kg e limpe o dispenser após o uso.',
+          reservaAtual: null,
+          usoAtual: null,
+          historicoUso: [],
+        },
+        {
+          id: 'item_7',
+          condominioId: demoCondoId,
+          nome: 'Secadora de Roupas Elétrica 10kg (Máquina 02)',
+          categoria: 'lavanderia',
+          codigoIdentificador: 'LAV-02',
+          descricao: 'Secadora de roupas por condensação de alta eficiência energética.',
+          localArmazenamento: 'Lavanderia Coletiva (Térreo Bloco B)',
+          status: 'disponivel',
+          tempoMaximoUsoHoras: 2,
+          requerAprovacao: false,
+          instrucoesUso: 'Limpar o filtro de fiapos ao término da secagem.',
+          reservaAtual: null,
+          usoAtual: null,
+          historicoUso: [],
         },
       ];
     }

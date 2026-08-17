@@ -235,6 +235,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           setErrorMsg('A janela de login com o Google foi fechada. Selecione sua conta Google para prosseguir ou use o login com e-mail e senha.');
         } else if (authErr?.code === 'auth/popup-blocked') {
           setErrorMsg('O popup do Google foi bloqueado pelo seu navegador. Por favor, permita popups para este site ou entre com e-mail e senha.');
+        } else if (authErr?.code === 'auth/unauthorized-domain' || authErr?.message?.includes('unauthorized-domain')) {
+          const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'smart-condo-eight.vercel.app';
+          setErrorMsg(
+            `Não foi possível conectar com o Google (auth/unauthorized-domain). O domínio "${currentHost}" precisa ser adicionado no Firebase Console (Authentication > Settings > Authorized Domains). Enquanto isso, utilize seu e-mail e senha cadastrados abaixo.`
+          );
         } else {
           setErrorMsg('Não foi possível conectar com o Google (' + (authErr?.message || 'Tente novamente') + '). Se preferir, utilize seu e-mail e senha cadastrados.');
         }

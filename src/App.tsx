@@ -10,6 +10,7 @@ import { SuperAdminDashboard } from './components/superadmin/SuperAdminDashboard
 import { PwaInstallPrompt } from './components/common/PwaInstallPrompt';
 import { auth, testFirestoreConnection, logoutFirebase } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { APP_VERSION, APP_NAME } from './constants/version';
 
 export default function App() {
   // Subscribe to condoStore reactive updates
@@ -207,9 +208,12 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span className="font-semibold text-slate-700">SmartCondo</span>
+            <span className="font-semibold text-slate-700">{APP_NAME}</span>
             <span className="text-slate-400">•</span>
             <span>Gestão Residencial 100% Integrada</span>
+            <span className="bg-slate-100 text-slate-600 font-mono text-[10px] font-bold px-2 py-0.5 rounded-full border border-slate-200">
+              v{APP_VERSION}
+            </span>
           </div>
           <div className="flex items-center gap-3 text-xs text-slate-500">
             <span>Condomínio: <strong className="text-slate-700">{currentCondo.nome}</strong></span>

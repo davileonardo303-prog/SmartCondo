@@ -32,6 +32,11 @@ import {
   Copy,
   Receipt,
   FileSpreadsheet,
+  KeyRound,
+  Lock,
+  Clock,
+  Shirt,
+  ShoppingBag,
 } from 'lucide-react';
 import {
   Condominio,
@@ -52,6 +57,8 @@ import {
 } from '../../types';
 import { condoStore } from '../../services/mockStorage';
 import { WhatsAppBroadcastPanel } from './WhatsAppBroadcastPanel';
+import { ItensCompartilhadosView } from '../compartilhados/ItensCompartilhadosView';
+import { ScrollableTabsNav } from '../common/ScrollableTabsNav';
 import confetti from 'canvas-confetti';
 
 interface SindicoDashboardProps {
@@ -74,6 +81,8 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<
     | 'moradores'
     | 'frota'
+    | 'equipamentos'
+    | 'liberacoes'
     | 'lazer'
     | 'reservas'
     | 'ocorrencias'
@@ -89,6 +98,10 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
   // Filtro de Moradores
   const [moradorSearch, setMoradorSearch] = useState('');
   const [moradorFilterStatus, setMoradorFilterStatus] = useState<'todos' | 'em_dia' | 'com_pendencia' | 'pendente'>('todos');
+
+  // Liberação Rápida Síndico / Validação de Código e Senhas
+  const [liberacaoSearchCode, setLiberacaoSearchCode] = useState('');
+  const [liberacaoFeedback, setLiberacaoFeedback] = useState<{ success: boolean; message: string } | null>(null);
 
   // Modais de Morador
   const [showAddMoradorModal, setShowAddMoradorModal] = useState(false);
@@ -756,7 +769,7 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
       )}
 
       {/* Abas de Navegação */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
+      <ScrollableTabsNav>
         <button
           onClick={() => setActiveTab('moradores')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
@@ -779,6 +792,37 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
         >
           <Bike className="w-4 h-4" />
           <span>Gestão da Frota ({bikes.length})</span>
+        </button>
+
+        <button
+          id="tab-sindico-liberacoes"
+          onClick={() => setActiveTab('liberacoes')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
+            activeTab === 'liberacoes'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+              : 'text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200'
+          }`}
+        >
+          <KeyRound className="w-4 h-4 text-emerald-600" />
+          <span>Liberação & Senhas ({bikes.filter((b) => b.status === 'reservada_5min').length})</span>
+          {bikes.filter((b) => b.status === 'reservada_5min').length > 0 && (
+            <span className="bg-emerald-600 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full animate-pulse">
+              {bikes.filter((b) => b.status === 'reservada_5min').length}
+            </span>
+          )}
+        </button>
+
+        <button
+          id="tab-sindico-equipamentos"
+          onClick={() => setActiveTab('equipamentos')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
+            activeTab === 'equipamentos'
+              ? 'bg-teal-700 text-white shadow-sm'
+              : 'text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200'
+          }`}
+        >
+          <Wrench className="w-4 h-4" />
+          <span>Itens & Equipamentos</span>
         </button>
 
         <button
@@ -910,7 +954,7 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
           <Settings className="w-4 h-4" />
           <span>Configurações & Regras</span>
         </button>
-      </div>
+      </ScrollableTabsNav>
 
       {/* ========================================================================= */}
       {/* ABA: MORADORES & CADASTROS */}
@@ -1306,8 +1350,209 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* ABA: ÁREAS COMUNS & LAZER */}
+      {/* ABA: CENTRAL DE LIBERAÇÃO E SENHAS DE BIKES & CADEADOS                   */}
       {/* ========================================================================= */}
+      {activeTab === 'liberacoes' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-emerald-800 via-teal-900 to-slate-900 text-white p-6 rounded-3xl shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border border-emerald-500/20">
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+                  Painel do Síndico & Portaria
+                </span>
+                <span className="text-xs text-slate-300">Liberação Sem Sensores Físicos</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2">
+                <KeyRound className="w-6 h-6 text-emerald-400" />
+                <span>Central de Senhas & Liberação de Bicicletas</span>
+              </h2>
+              <p className="text-xs text-slate-300 mt-1 max-w-xl">
+                O morador solicita no app, recebe a senha e tem 5 minutos de tolerância para ir até a portaria/totem.
+                O síndico e o porteiro podem validar o código gerado ou liberar diretamente por esta tela.
+              </p>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/20 text-center min-w-[170px]">
+              <div className="text-2xl font-black text-emerald-400">
+                {bikes.filter((b) => b.status === 'reservada_5min').length}
+              </div>
+              <div className="text-xs font-semibold text-slate-300">Reserva(s) em Andamento</div>
+            </div>
+          </div>
+
+          {/* Validador Rápido de Código de 6 Dígitos */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center gap-2 text-slate-900">
+              <ShieldCheck className="w-5 h-5 text-emerald-600" />
+              <h3 className="font-extrabold text-base">Validar Código de Retirada do Morador</h3>
+            </div>
+            <p className="text-xs text-slate-600">
+              Digite o código de 6 dígitos gerado no app do morador (ex: <strong className="font-mono text-slate-800">849201</strong>) ou o código da bicicleta (ex: <strong className="font-mono text-slate-800">BK-01</strong>):
+            </p>
+
+            {liberacaoFeedback && (
+              <div
+                className={`p-4 rounded-2xl text-xs font-bold flex items-center justify-between ${
+                  liberacaoFeedback.success
+                    ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
+                    : 'bg-rose-50 text-rose-900 border border-rose-200'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {liberacaoFeedback.success ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  )}
+                  <span>{liberacaoFeedback.message}</span>
+                </div>
+                <button onClick={() => setLiberacaoFeedback(null)} className="text-slate-500 hover:text-slate-900 cursor-pointer">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!liberacaoSearchCode.trim()) return;
+                const res = condoStore.confirmarRetiradaPortaria(
+                  condominio.id,
+                  liberacaoSearchCode.trim(),
+                  `${condominio.sindicoNome} (Síndico)`
+                );
+                setLiberacaoFeedback(res);
+                if (res.success) {
+                  confetti({ particleCount: 50, spread: 60 });
+                  setLiberacaoSearchCode('');
+                }
+              }}
+              className="flex flex-col sm:flex-row gap-3"
+            >
+              <input
+                type="text"
+                value={liberacaoSearchCode}
+                onChange={(e) => setLiberacaoSearchCode(e.target.value.toUpperCase())}
+                placeholder="Digite o código (ex: 849201 ou BK-01)"
+                className="flex-1 px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:border-emerald-500 focus:bg-white uppercase"
+              />
+              <button
+                type="submit"
+                className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer active:scale-98"
+              >
+                Validar & Liberar Cadeado
+              </button>
+            </form>
+          </div>
+
+          {/* Lista de Bicicletas com Reserva Ativa de 5 Minutos */}
+          <div className="space-y-4">
+            <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-amber-600 animate-spin" />
+              <span>Bicicletas com Reserva Ativa no Momento (5 Minutos)</span>
+            </h3>
+
+            {bikes.filter((b) => b.status === 'reservada_5min').length === 0 ? (
+              <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-500 text-xs">
+                Nenhuma bicicleta com reserva pendente no momento. As reservas aparecem aqui em tempo real.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {bikes
+                  .filter((b) => b.status === 'reservada_5min')
+                  .map((bike) => (
+                    <div
+                      key={bike.id}
+                      className="p-5 rounded-2xl bg-amber-50/70 border border-amber-200 shadow-sm space-y-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black px-2.5 py-1 rounded-lg bg-slate-900 text-white font-mono">
+                          Bike #{bike.codigo}
+                        </span>
+                        <span className="text-xs font-bold text-amber-900 bg-amber-200/80 px-2.5 py-0.5 rounded-full font-mono">
+                          PIN: {bike.reservaCodigo || 'BK-5MIN'}
+                        </span>
+                      </div>
+
+                      <div>
+                        <h4 className="font-extrabold text-sm text-slate-900">{bike.modelo}</h4>
+                        <p className="text-xs text-slate-600 mt-0.5">
+                          Morador: <strong>{bike.reservaMoradorNome}</strong> ({bike.reservaMoradorUnidade})
+                        </p>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-white border border-amber-200 text-xs flex justify-between items-center">
+                        <span className="text-slate-600 font-semibold">Senha do Cadeado:</span>
+                        <span className="font-mono font-black text-emerald-700 text-base">
+                          {bike.lockPassword}
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          const res = condoStore.confirmarRetiradaPortaria(
+                            condominio.id,
+                            bike.id,
+                            `${condominio.sindicoNome} (Síndico)`
+                          );
+                          setLiberacaoFeedback(res);
+                          if (res.success) {
+                            confetti({ particleCount: 40, spread: 50 });
+                          }
+                        }}
+                        className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>Confirmar Liberação & Destravar</span>
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+
+          {/* Todas as Senhas de Cadeados Cadastradas na Frota */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+              <Lock className="w-5 h-5 text-indigo-600" />
+              <span>Tabela de Senhas de Cadeados de Toda a Frota</span>
+            </h3>
+            <p className="text-xs text-slate-500">
+              Guia oficial para o síndico e portaria consultar a senha de qualquer cadeado físico:
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {bikes.map((bike) => (
+                <div
+                  key={bike.id}
+                  className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs"
+                >
+                  <div>
+                    <div className="font-mono font-black text-slate-800">#{bike.codigo} - {bike.modelo}</div>
+                    <div className="text-[11px] text-slate-500 capitalize">{bike.tipo} • {bike.localizacaoAtual || 'Totem Principal'}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] text-slate-400 font-bold uppercase">Senha</div>
+                    <div className="font-mono font-black text-emerald-700 text-sm">{bike.lockPassword}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ABA: ITENS E EQUIPAMENTOS COMPARTILHADOS                                 */}
+      {/* ========================================================================= */}
+      {activeTab === 'equipamentos' && (
+        <ItensCompartilhadosView
+          condominio={condominio}
+          isStaff={true}
+          operadorNome={`${condominio.sindicoNome} (Síndico)`}
+        />
+      )}
+
       {activeTab === 'lazer' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-7 space-y-4">
