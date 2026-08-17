@@ -168,6 +168,7 @@ const PERMISSOES_INFO: {
 export const GestaoEquipePermissoes: React.FC<GestaoEquipePermissoesProps> = ({ condominio }) => {
   const [showModal, setShowModal] = useState(false);
   const [editingFunc, setEditingFunc] = useState<FuncionarioEquipe | null>(null);
+  const [funcToDelete, setFuncToDelete] = useState<FuncionarioEquipe | null>(null);
   const [filtroCargo, setFiltroCargo] = useState<string>('todos');
 
   // Form State
@@ -214,7 +215,6 @@ export const GestaoEquipePermissoes: React.FC<GestaoEquipePermissoesProps> = ({ 
 
   const handleCargoChange = (newCargo: CargoFuncionario) => {
     setCargo(newCargo);
-    // Sugere as permissões padrão do cargo caso esteja criando novo
     if (!editingFunc) {
       setPermissoes(CARGOS_CONFIG[newCargo].defaultPermissoes);
     }
@@ -253,7 +253,7 @@ export const GestaoEquipePermissoes: React.FC<GestaoEquipePermissoesProps> = ({ 
         telefone: telefone.trim(),
         cargo,
         turnoTrabalho: turno.trim(),
-        senha: senha.trim(),
+        senha: senha.trim() || 'equipe123',
         status,
         permissoes,
       });
@@ -264,11 +264,12 @@ export const GestaoEquipePermissoes: React.FC<GestaoEquipePermissoesProps> = ({ 
     setShowModal(false);
   };
 
-  const handleDelete = (func: FuncionarioEquipe) => {
-    if (window.confirm(`Deseja realmente remover o acesso de ${func.nome}?`)) {
-      condoStore.deleteFuncionario(condominio.id, func.id);
-      setFeedbackMsg({ tipo: 'sucesso', texto: `Funcionário ${func.nome} removido da equipe.` });
-    }
+  const confirmDeleteFunc = () => {
+    if (!funcToDelete) return;
+    const funcNome = funcToDelete.nome;
+    condoStore.deleteFuncionario(condominio.id, funcToDelete.id);
+    setFuncToDelete(null);
+    setFeedbackMsg({ tipo: 'sucesso', texto: `Funcionário "${funcNome}" foi removido da equipe com sucesso.` });
   };
 
   const filteredList = funcionarios.filter((f) => {
@@ -456,21 +457,59 @@ export const GestaoEquipePermissoes: React.FC<GestaoEquipePermissoesProps> = ({ 
                   className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
                   <Edit className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Editar Permissões</span>
+                  <span>Editar / Acessos</span>
                 </button>
 
                 <button
-                  onClick={() => handleDelete(func)}
-                  className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition cursor-pointer"
+                  onClick={() => setFuncToDelete(func)}
+                  className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition cursor-pointer flex items-center gap-1"
                   title="Remover funcionário"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
+                  <span className="text-[11px] font-bold hidden sm:inline">Excluir</span>
                 </button>
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE FUNCIONÁRIO (SEM DEPENDÊNCIA DE WINDOW.CONFIRM) */}
+      {funcToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 p-6 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-black text-slate-900">
+                Remover Acesso do Funcionário?
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Você tem certeza que deseja excluir o funcionário <strong className="text-slate-900">{funcToDelete.nome}</strong> ({CARGOS_CONFIG[funcToDelete.cargo]?.label})? O acesso dele ao sistema será revogado imediatamente.
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setFuncToDelete(null)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteFunc}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs transition shadow-md shadow-rose-600/30 cursor-pointer"
+              >
+                Sim, Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL DE CADASTRO / EDIÇÃO DE FUNCIONÁRIO E PERMISSÕES */}
       {showModal && (

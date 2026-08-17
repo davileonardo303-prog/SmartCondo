@@ -158,12 +158,35 @@ export const Header: React.FC<HeaderProps> = ({
                       {unreadCount > 0 && (
                         <button
                           onClick={handleMarkAllRead}
-                          className="text-[11px] text-emerald-600 hover:text-emerald-700 flex items-center gap-1 font-semibold"
+                          className="text-[11px] text-emerald-600 hover:text-emerald-700 flex items-center gap-1 font-semibold cursor-pointer"
                         >
                           <CheckCheck className="w-3.5 h-3.5" />
                           Marcar lidas
                         </button>
                       )}
+                    </div>
+
+                    {/* Botão de Ativar Push na Barra do Celular/PC */}
+                    <div className="mb-2 p-2 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between gap-2">
+                      <div className="text-[11px] text-amber-900 leading-tight">
+                        <strong>Receber na Barra do Celular/PC</strong>
+                        <div className="text-[10px] text-amber-700">Push Notifications (FCM)</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const { notificationService } = await import('../../services/notificationService');
+                          const ok = await notificationService.solicitarPermissaoPush(currentUser.id);
+                          if (ok) {
+                            notificationService.dispararNotificacaoNativa('🔔 Notificações Ativadas!', {
+                              body: `Você receberá avisos do condomínio ${currentCondo.nome} na barra de tarefas!`,
+                            });
+                          }
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] transition shadow-xs cursor-pointer shrink-0"
+                      >
+                        Ativar Push
+                      </button>
                     </div>
 
                     <div className="max-h-72 overflow-y-auto space-y-2 pr-1">

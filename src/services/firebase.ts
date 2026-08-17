@@ -330,4 +330,68 @@ export async function logoutFirebase(): Promise<void> {
   await signOut(auth);
 }
 
+// ==========================================
+// FIREBASE CLOUD MESSAGING (WEB PUSH PWA)
+// ==========================================
+let messagingInstance: any = null;
+
+export async function requestFCMToken(vapidKey?: string): Promise<string | null> {
+  if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) {
+    console.warn('FCM Push Notifications não são suportadas neste navegador.');
+    return null;
+  }
+
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      console.warn('Permissão de notificação não concedida pelo usuário:', permission);
+      return null;
+    }
+
+    // Registra o Service Worker caso ainda não esteja ativo
+    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    await navigator.serviceWorker.ready;
+
+    const { getMessaging, getToken } = await import('firebase/messaging');
+    if (!messagingInstance) {
+      messagingInstance = getMessaging(app);
+    }
+
+    // Usa a VAPID Key fornecida ou padrão
+    const token = await getToken(messagingInstance, {
+      serviceWorkerRegistration: registration,
+      vapidKey: vapidKey || undefined,
+    });
+
+    if (token) {
+      console.log('✅ Token FCM registrado com sucesso:', token);
+      localStorage.setItem('smartcondo_fcm_token', token);
+      return token;
+    }
+  } catch (error) {
+    console.warn('Nota sobre FCM Push Token (PWA):', error);
+  }
+
+  return null;
+}
+
+export async function saveFCMTokenToFirestore(userId: string, token: string): Promise<void> {
+  try {
+    await setDoc(
+      doc(db, 'fcmTokens', userId),
+      {
+        userId,
+        token,
+        updatedAt: Date.now(),
+        platform: typeof navigator !== 'undefined' ? navigator.userAgent : 'web',
+      },
+      { merge: true }
+    );
+    console.log(`✅ Token FCM salvo no Firestore para o usuário ${userId}`);
+  } catch (error) {
+    console.warn('Erro ao salvar token FCM no Firestore:', error);
+  }
+}
+
+
 

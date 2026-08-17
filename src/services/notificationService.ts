@@ -42,8 +42,8 @@ class NotificationService {
     }
   }
 
-  // 1. PUSH NOTIFICATIONS (BARRA DE NOTIFICAÇÃO DO CELULAR / COMPUTADOR)
-  public async solicitarPermissaoPush(): Promise<boolean> {
+  // 1. PUSH NOTIFICATIONS (BARRA DE NOTIFICAÇÃO DO CELULAR / COMPUTADOR E FCM)
+  public async solicitarPermissaoPush(userId?: string): Promise<boolean> {
     if (typeof window === 'undefined' || !('Notification' in window)) {
       console.warn('Push notifications não são suportadas neste navegador.');
       return false;
@@ -52,7 +52,21 @@ class NotificationService {
     try {
       const permission = await Notification.requestPermission();
       this.pushPermission = permission;
-      return permission === 'granted';
+
+      if (permission === 'granted') {
+        // Tenta registrar o FCM Push Token em background
+        try {
+          const { requestFCMToken, saveFCMTokenToFirestore } = await import('./firebase');
+          const token = await requestFCMToken();
+          if (token && userId) {
+            await saveFCMTokenToFirestore(userId, token);
+          }
+        } catch (fcmErr) {
+          console.warn('FCM registration in background info:', fcmErr);
+        }
+        return true;
+      }
+      return false;
     } catch (err) {
       console.warn('Erro ao solicitar permissão de notificação:', err);
       return false;
@@ -81,10 +95,25 @@ class NotificationService {
 
     if (Notification.permission === 'granted') {
       try {
+        // Se ServiceWorker estiver ativo, prefere o showNotification do ServiceWorker
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.ready.then((registration) => {
+            registration.showNotification(titulo, {
+              body: opcoes.body,
+              icon: opcoes.icon || '/icon-192.svg',
+              badge: '/icon-192.svg',
+              tag: opcoes.tag || `condo-notif-${Date.now()}`,
+              vibrate: [200, 100, 200],
+              ...opcoes,
+            } as any);
+          });
+          return true;
+        }
+
         const notif = new Notification(titulo, {
           body: opcoes.body,
-          icon: opcoes.icon || '/icon-192.png',
-          badge: '/icon-192.png',
+          icon: opcoes.icon || '/icon-192.svg',
+          badge: '/icon-192.svg',
           tag: opcoes.tag || `condo-notif-${Date.now()}`,
           vibrate: [200, 100, 200],
           ...opcoes,
@@ -101,6 +130,7 @@ class NotificationService {
     }
     return false;
   }
+
 
   // 2. DISPARO INTEGRADO PARA CHEGADA DE ENCOMENDA
   public notificarChegadaEncomenda(dados: {
@@ -196,6 +226,23 @@ class NotificationService {
       titulo: '⚠️ Encomenda Encaminhada para a Administração',
       corpoMensagem: msgWhatsApp,
     });
+  }
+
+  // 4. MÉTODOS DE APOIO PARA ENVIO MANUAL E AUTOMÁTICO
+  public gerarMensagemWhatsApp(morador: Morador, encomenda: Encomenda, condominio: Condominio): string {
+    const prazoTexto = encomenda.diasLimiteRetirada ? `${encomenda.diasLimiteRetirada} dias corridos` : '5 dias';
+    return `📦 *NOVA ENCOMENDA NA PORTARIA*\n\nOlá, *${morador.nome}*!\nChegou uma encomenda para a sua unidade (*Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto}*).\n\n🚚 *Transportadora:* ${encomenda.transportadora}\n🏷️ *Rastreio:* ${encomenda.codigoRastreio || 'Volume Registrado'}\n🔐 *CÓDIGO DE RESGATE:* *${encomenda.codigoResgate}*\n⏱️ *Prazo de Retirada:* Retire em até ${prazoTexto} na portaria do ${condominio.nome}.\n\n_Apresente este código de 6 dígitos ao porteiro para retirar seu pacote._`;
+  }
+
+  public gerarLinkWhatsApp(morador: Morador, encomenda: Encomenda, condominio: Condominio): string {
+    const texto = this.gerarMensagemWhatsApp(morador, encomenda, condominio);
+    const cleanPhone = (morador.telefone || '').replace(/\D/g, '');
+    const phoneWithCountry = cleanPhone.length === 10 || cleanPhone.length === 11 ? `55${cleanPhone}` : cleanPhone;
+    return `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(texto)}`;
+  }
+
+  public gerarTextoInstagramDirect(morador: Morador, encomenda: Encomenda, condominio: Condominio): string {
+    return `📦 Olá ${morador.nome} (Apto ${morador.unidade.apto})! Chegou uma encomenda da ${encomenda.transportadora} para você na portaria do ${condominio.nome}. Código de Resgate: ${encomenda.codigoResgate}. Por favor, retire na portaria.`;
   }
 
   public getEmailLogs(): EmailNotificationLog[] {

@@ -8,6 +8,8 @@ import {
   VisitanteLiberado,
 } from '../../types';
 import { condoStore } from '../../services/mockStorage';
+import { notificationService } from '../../services/notificationService';
+import { whatsappService } from '../../services/whatsappService';
 import { ItensCompartilhadosView } from '../compartilhados/ItensCompartilhadosView';
 import { ScrollableTabsNav } from '../common/ScrollableTabsNav';
 import { UniversalQrCodeScanner } from '../common/UniversalQrCodeScanner';
@@ -32,6 +34,13 @@ import {
   AlertTriangle,
   Wrench,
   QrCode,
+  Send,
+  MessageSquare,
+  Share2,
+  Copy,
+  ExternalLink,
+  Bell,
+  Mail,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -51,14 +60,36 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
   historicoLocacoes,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'receber' | 'baixa' | 'bicicletario' | 'equipamentos' | 'visitantes' | 'historico'
+    'receber' | 'baixa' | 'bicicletario' | 'equipamentos' | 'visitantes' | 'interfone' | 'historico'
   >('receber');
 
   // Encomendas: Receber
+  const [cadastroMode, setCadastroMode] = useState<'lista' | 'manual'>('lista');
   const [selectedMoradorId, setSelectedMoradorId] = useState('');
-  const [transportadora, setTransportadora] = useState('');
+  const [manualBloco, setManualBloco] = useState('');
+  const [manualApto, setManualApto] = useState('');
+  const [manualNome, setManualNome] = useState('');
+  const [manualTelefone, setManualTelefone] = useState('');
+  const [transportadora, setTransportadora] = useState('Mercado Livre');
   const [codigoRastreio, setCodigoRastreio] = useState('');
   const [observacao, setObservacao] = useState('');
+  const [searchMoradorInput, setSearchMoradorInput] = useState('');
+  const [searchEncomendaQuery, setSearchEncomendaQuery] = useState('');
+
+  // Interfone & Comunicação Portaria <-> Morador
+  const [interfoneBloco, setInterfoneBloco] = useState('');
+  const [interfoneApto, setInterfoneApto] = useState('');
+  const [interfoneMensagem, setInterfoneMensagem] = useState('');
+  const [interfoneSelectedTipo, setInterfoneSelectedTipo] = useState<'delivery' | 'visitante' | 'veiculo' | 'geral'>('delivery');
+
+  // Notificação Recente de Encomenda
+  const [recemCadastrada, setRecemCadastrada] = useState<{
+    encomenda: Encomenda;
+    morador: Morador;
+  } | null>(null);
+
+  // Copiado feedback
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Encomendas: Baixa
   const [inputRescueCode, setInputRescueCode] = useState('');
@@ -106,34 +137,150 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
     'iFood / Delivery',
   ];
 
-  // Registrar Encomenda
+  // Registrar Encomenda (Modo Lista ou Modo Digitação Rápida Bloco/Apto)
   const handleRegisterPackage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedMoradorId || !transportadora) return;
+    if (!transportadora.trim()) {
+      setActionAlert({ type: 'error', text: 'Informe a transportadora da encomenda.' });
+      return;
+    }
 
-    const morador = moradores.find((m) => m.id === selectedMoradorId);
-    if (!morador) return;
+    let morador: Morador | undefined;
+
+    if (cadastroMode === 'lista') {
+      if (selectedMoradorId) {
+        morador = moradores.find((m) => m.id === selectedMoradorId);
+      } else if (searchMoradorInput.trim()) {
+        // Tenta extrair bloco e apto da busca (ex: "bloco 20 303" ou "20 303" ou "303")
+        const query = searchMoradorInput.trim();
+        const blocoMatch = query.match(/bloco\s*([0-9a-zA-Z]+)/i) || query.match(/^([0-9a-zA-Z]+)\s+([0-9]+)$/i);
+        const aptoMatch = query.match(/apto\s*([0-9a-zA-Z]+)/i) || query.match(/([0-9]+)$/);
+
+        const blocoExtraido = blocoMatch ? blocoMatch[1] : '1';
+        const aptoExtraido = aptoMatch ? aptoMatch[1] : query;
+
+        morador = condoStore.cadastrarOuObterMoradorRapido(condominio.id, {
+          bloco: blocoExtraido,
+          apto: aptoExtraido,
+        });
+      }
+    } else {
+      // Modo Manual
+      if (!manualApto.trim()) {
+        setActionAlert({ type: 'error', text: 'Por favor, informe o número do apartamento.' });
+        return;
+      }
+      morador = condoStore.cadastrarOuObterMoradorRapido(condominio.id, {
+        bloco: manualBloco.trim() || '1',
+        apto: manualApto.trim(),
+        nome: manualNome.trim(),
+        telefone: manualTelefone.trim(),
+      });
+    }
+
+    if (!morador) {
+      setActionAlert({
+        type: 'error',
+        text: 'Selecione um morador da lista ou informe o Bloco e Apartamento.',
+      });
+      return;
+    }
 
     const newEnc = condoStore.addEncomenda(condominio.id, {
       moradorId: morador.id,
-      transportadora,
-      codigoRastreio: codigoRastreio.toUpperCase(),
-      observacao,
+      transportadora: transportadora.trim(),
+      codigoRastreio: codigoRastreio.trim().toUpperCase(),
+      observacao: observacao.trim(),
       recebidoPor: 'Portaria Principal (Plantão)',
+    });
+
+    setRecemCadastrada({
+      encomenda: newEnc,
+      morador,
     });
 
     setActionAlert({
       type: 'success',
-      text: `Encomenda de ${morador.nome} registrada com sucesso! PIN de Resgate: ${newEnc.codigoResgate}`,
+      text: `📦 Encomenda registrada com sucesso para Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto} (${morador.nome})! PIN: ${newEnc.codigoResgate}. Morador notificado.`,
     });
 
-    // Reset
+    // Reset Form
     setSelectedMoradorId('');
-    setTransportadora('');
+    setManualBloco('');
+    setManualApto('');
+    setManualNome('');
+    setManualTelefone('');
+    setTransportadora('Mercado Livre');
     setCodigoRastreio('');
     setObservacao('');
+    setSearchMoradorInput('');
 
     confetti({ particleCount: 50, spread: 60 });
+  };
+
+  // Disparo de Interfone / Chamada Direta Portaria -> Morador
+  const handleEnviarInterfone = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!interfoneApto.trim()) {
+      setActionAlert({ type: 'error', text: 'Informe o apartamento de destino do interfone.' });
+      return;
+    }
+
+    const morador = condoStore.cadastrarOuObterMoradorRapido(condominio.id, {
+      bloco: interfoneBloco.trim() || '1',
+      apto: interfoneApto.trim(),
+    });
+
+    const tipoLabels = {
+      delivery: '🛵 Entregador / Delivery na Portaria',
+      visitante: '👤 Visitante na Portaria Aguardando',
+      veiculo: '🚗 Aviso sobre Veículo / Garagem',
+      geral: '📢 Chamado da Portaria',
+    };
+
+    const titulo = tipoLabels[interfoneSelectedTipo];
+    const mensagemFinal = interfoneMensagem.trim() || `Olá! A Portaria está chamando sua unidade (${morador.unidade.bloco ? `Bloco ${morador.unidade.bloco} - ` : ''}Apto ${morador.unidade.apto}).`;
+
+    // 1. Notificação In-App
+    condoStore.addNotification({
+      condominioId: condominio.id,
+      paraMoradorId: morador.id,
+      titulo,
+      mensagem: mensagemFinal,
+      tipo: 'sistema',
+    });
+
+    // 2. Disparo Push Nativo na Barra
+    notificationService.dispararNotificacaoNativa(`${titulo} - ${condominio.nome}`, {
+      body: mensagemFinal,
+      tag: `interfone-${Date.now()}`,
+    });
+
+    // 3. Disparo WhatsApp se tiver telefone
+    if (morador.telefone) {
+      whatsappService.notificarMorador({
+        condominioId: condominio.id,
+        condominioNome: condominio.nome,
+        morador,
+        tipo: 'aviso_geral',
+        titulo,
+        corpoMensagem: `${titulo}\n\n${mensagemFinal}\n\n_Portaria do ${condominio.nome}_`,
+      });
+    }
+
+    setActionAlert({
+      type: 'success',
+      text: `📞 Interfone acionado com sucesso para Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto}! Morador notificado imediatamente.`,
+    });
+
+    setInterfoneMensagem('');
+    confetti({ particleCount: 40, spread: 50 });
+  };
+
+  const handleCopyText = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2500);
   };
 
   // Dar Baixa em Encomenda com PIN
@@ -362,6 +509,19 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
         </button>
 
         <button
+          id="tab-portaria-interfone"
+          onClick={() => setActiveTab('interfone')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
+            activeTab === 'interfone'
+              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+              : 'text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200'
+          }`}
+        >
+          <PhoneCall className="w-4 h-4 text-indigo-600" />
+          <span>📞 Interfone & Moradores</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('historico')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
             activeTab === 'historico'
@@ -376,144 +536,449 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
 
       {/* ABA 1: RECEBER ENCOMENDA */}
       {activeTab === 'receber' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-7 bg-white border border-slate-200 rounded-3xl p-6 sm:p-7 shadow-sm space-y-4">
-            <div>
-              <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                <Package className="w-5 h-5 text-amber-600" />
-                <span>Cadastrar Encomenda Recebida</span>
-              </h2>
-              <p className="text-xs text-slate-500">
-                O morador receberá automaticamente uma notificação push com o código seguro de 6 dígitos.
-              </p>
-            </div>
+        <div className="space-y-6">
+          {/* Card de Notificação Recente de Encomenda */}
+          {recemCadastrada && (
+            <div className="bg-gradient-to-r from-emerald-900 to-teal-950 text-white rounded-3xl p-6 sm:p-7 border border-emerald-700/50 shadow-xl space-y-4 animate-in fade-in zoom-in-95">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Encomenda Cadastrada com Sucesso!</span>
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-black">
+                    {recemCadastrada.morador.nome} • Bloco {recemCadastrada.morador.unidade.bloco} - Apto {recemCadastrada.morador.unidade.apto}
+                  </h3>
+                  <p className="text-xs text-emerald-200">
+                    Transportadora: <strong>{recemCadastrada.encomenda.transportadora}</strong> • PIN de Resgate: <strong className="text-white text-sm tracking-wider font-mono bg-emerald-800/80 px-2 py-0.5 rounded-lg">{recemCadastrada.encomenda.codigoResgate}</strong>
+                  </p>
+                </div>
 
-            <form onSubmit={handleRegisterPackage} className="space-y-3.5 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Unidade e Morador de Destino:
-                </label>
-                <select
-                  value={selectedMoradorId}
-                  onChange={(e) => setSelectedMoradorId(e.target.value)}
-                  required
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-slate-800 text-xs font-semibold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                <button
+                  onClick={() => setRecemCadastrada(null)}
+                  className="p-1 text-emerald-300 hover:text-white hover:bg-emerald-800/60 rounded-xl transition cursor-pointer"
                 >
-                  <option value="">Selecione o morador...</option>
-                  {moradores.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      Bloco {m.unidade.bloco} - Apto {m.unidade.apto} • {m.nome}
-                    </option>
-                  ))}
-                </select>
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
+              {/* Botões de Notificação Multicanal Imediata */}
+              <div className="pt-2 border-t border-emerald-800/60 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
+                {/* 1. WhatsApp */}
+                <a
+                  href={notificationService.gerarLinkWhatsApp(recemCadastrada.morador, recemCadastrada.encomenda, condominio)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold flex items-center justify-center gap-2 shadow-md transition cursor-pointer"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Notificar no WhatsApp</span>
+                  <ExternalLink className="w-3 h-3 opacity-80" />
+                </a>
+
+                {/* 2. Instagram Direct */}
+                <button
+                  onClick={() => {
+                    const text = notificationService.gerarTextoInstagramDirect(recemCadastrada.morador, recemCadastrada.encomenda, condominio);
+                    handleCopyText(text, `insta_${recemCadastrada.encomenda.id}`);
+                  }}
+                  className="p-3 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-extrabold flex items-center justify-center gap-2 shadow-md transition cursor-pointer"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>
+                    {copiedKey === `insta_${recemCadastrada.encomenda.id}` ? 'Texto Copiado!' : 'Copiar p/ Instagram Direct'}
+                  </span>
+                </button>
+
+                {/* 3. Push / Barra de Tarefas */}
+                <button
+                  onClick={() => {
+                    notificationService.dispararNotificacaoNativa(`📦 Encomenda Chegou! - ${condominio.nome}`, {
+                      body: `Olá ${recemCadastrada.morador.nome}! Pacote da ${recemCadastrada.encomenda.transportadora} disponível na portaria. PIN: ${recemCadastrada.encomenda.codigoResgate}.`,
+                      tag: `enc-${recemCadastrada.encomenda.id}`,
+                    });
+                    setActionAlert({ type: 'success', text: '🔔 Alerta de barra de notificações disparado para o dispositivo!' });
+                  }}
+                  className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-extrabold flex items-center justify-center gap-2 border border-slate-700 transition cursor-pointer"
+                >
+                  <Bell className="w-4 h-4 text-amber-400" />
+                  <span>Disparar Push na Barra</span>
+                </button>
+
+                {/* 4. Copiar PIN e Resumo */}
+                <button
+                  onClick={() => {
+                    const text = `Pacote ${recemCadastrada.encomenda.transportadora} na portaria do ${condominio.nome}. Código de Resgate: ${recemCadastrada.encomenda.codigoResgate}`;
+                    handleCopyText(text, `pin_${recemCadastrada.encomenda.id}`);
+                  }}
+                  className="p-3 rounded-2xl bg-emerald-800/80 hover:bg-emerald-700 text-emerald-100 font-extrabold flex items-center justify-center gap-2 transition cursor-pointer"
+                >
+                  <Copy className="w-4 h-4" />
+                  <span>{copiedKey === `pin_${recemCadastrada.encomenda.id}` ? 'Código Copiado!' : 'Copiar PIN & Dados'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Formulário de Cadastro */}
+            <div className="lg:col-span-7 bg-white border border-slate-200 rounded-3xl p-6 sm:p-7 shadow-sm space-y-4">
               <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Transportadora / Entregador:
-                </label>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {commonCarriers.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setTransportadora(c)}
-                      className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
-                        transportadora === c
-                          ? 'bg-amber-600 text-white'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </div>
-                <input
-                  type="text"
-                  placeholder="Ou digite outra transportadora..."
-                  value={transportadora}
-                  onChange={(e) => setTransportadora(e.target.value)}
-                  required
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-slate-800 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                />
+                <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <Package className="w-5 h-5 text-amber-600" />
+                  <span>Cadastrar Nova Encomenda</span>
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Preencha os dados do pacote. O sistema notificará o morador automaticamente em todos os canais (Barra de Notificações, WhatsApp, Instagram e E-mail).
+                </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Código de Rastreio / NFe:</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: BR123456789"
-                    value={codigoRastreio}
-                    onChange={(e) => setCodigoRastreio(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-slate-800 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Local na Portaria / Observação:</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Prateleira B2, Caixa grande"
-                    value={observacao}
-                    onChange={(e) => setObservacao(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-slate-800 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-3.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-md shadow-amber-600/20 transition active:scale-98"
-              >
-                Gerar PIN de Resgate & Notificar Morador
-              </button>
-            </form>
-          </div>
-
-          {/* Lista de Encomendas Estocadas */}
-          <div className="lg:col-span-5 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-3">
-            <h3 className="font-extrabold text-slate-900 text-base flex items-center justify-between">
-              <span>Aguardando Retirada ({pendingPackages.length})</span>
-            </h3>
-
-            <div className="space-y-2.5 max-h-[440px] overflow-y-auto pr-1">
-              {pendingPackages.length === 0 ? (
-                <p className="text-xs text-slate-500 text-center py-10">Nenhum pacote estocado.</p>
-              ) : (
-                pendingPackages.map((enc) => (
-                  <div
-                    key={enc.id}
-                    className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs flex flex-col justify-between space-y-2"
+              <form onSubmit={handleRegisterPackage} className="space-y-4 text-xs">
+                {/* Seletor de Modo de Identificação do Morador */}
+                <div className="flex rounded-2xl bg-slate-100 p-1 border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setCadastroMode('lista')}
+                    className={`flex-1 py-2 px-3 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      cadastroMode === 'lista'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
                   >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="font-bold text-slate-900">{enc.moradorNome}</div>
-                        <div className="text-amber-800 font-semibold text-xs">
-                          Bloco {enc.unidade.bloco} - Apto {enc.unidade.apto}
-                        </div>
-                        <div className="text-slate-500 text-[11px]">
-                          {enc.transportadora} • {enc.codigoRastreio || 'Sem rastreio'}
-                        </div>
+                    <Users className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Selecionar da Lista ({moradores.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCadastroMode('manual')}
+                    className={`flex-1 py-2 px-3 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      cadastroMode === 'manual'
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Digitar Bloco / Apto na Hora</span>
+                  </button>
+                </div>
+
+                {cadastroMode === 'lista' ? (
+                  /* Modo 1: Busca e Seleção da Lista */
+                  <div className="space-y-2">
+                    <label className="font-bold text-slate-700 block">
+                      Buscar Morador ou Unidade:
+                    </label>
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                      <input
+                        type="text"
+                        placeholder="Filtrar por nome, bloco ou apto (ex: bloco 20 303, Carlos, 101)..."
+                        value={searchMoradorInput}
+                        onChange={(e) => setSearchMoradorInput(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-slate-800 text-xs font-semibold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                      />
+                    </div>
+
+                    {moradores.length > 0 ? (
+                      <select
+                        value={selectedMoradorId}
+                        onChange={(e) => setSelectedMoradorId(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-slate-800 text-xs font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                      >
+                        <option value="">Selecione o morador na lista...</option>
+                        {moradores
+                          .filter((m) => {
+                            if (!searchMoradorInput.trim()) return true;
+                            const q = searchMoradorInput.toLowerCase();
+                            return (
+                              m.nome.toLowerCase().includes(q) ||
+                              m.unidade.apto.toLowerCase().includes(q) ||
+                              m.unidade.bloco.toLowerCase().includes(q) ||
+                              `bloco ${m.unidade.bloco}`.toLowerCase().includes(q) ||
+                              `apto ${m.unidade.apto}`.toLowerCase().includes(q) ||
+                              `bloco ${m.unidade.bloco} ${m.unidade.apto}`.toLowerCase().includes(q) ||
+                              `${m.unidade.bloco} ${m.unidade.apto}`.toLowerCase().includes(q)
+                            );
+                          })
+                          .map((m) => (
+                            <option key={m.id} value={m.id}>
+                              Bloco {m.unidade.bloco} - Apto {m.unidade.apto} • {m.nome} ({m.telefone || 'sem tel'})
+                            </option>
+                          ))}
+                      </select>
+                    ) : (
+                      <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-2">
+                        <span>Nenhum morador pré-cadastrado no condomínio. Use a digitação direta ao lado!</span>
+                        <button
+                          type="button"
+                          onClick={() => setCadastroMode('manual')}
+                          className="px-2.5 py-1 bg-amber-600 text-white rounded-lg font-bold text-[11px] hover:bg-amber-700 shrink-0"
+                        >
+                          Digitar Bloco / Apto
+                        </button>
                       </div>
-                      <span className="font-mono font-black text-amber-900 bg-amber-100 px-2.5 py-1 rounded-xl text-xs">
-                        {enc.codigoResgate}
+                    )}
+
+                    {/* Botão de Atalho se a busca não achar morador existente */}
+                    {searchMoradorInput.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const query = searchMoradorInput.trim();
+                          const blocoMatch = query.match(/bloco\s*([0-9a-zA-Z]+)/i) || query.match(/^([0-9a-zA-Z]+)\s+([0-9]+)$/i);
+                          const aptoMatch = query.match(/apto\s*([0-9a-zA-Z]+)/i) || query.match(/([0-9]+)$/);
+                          setManualBloco(blocoMatch ? blocoMatch[1] : '1');
+                          setManualApto(aptoMatch ? aptoMatch[1] : query);
+                          setManualNome(`Morador Unidade ${query}`);
+                          setCadastroMode('manual');
+                        }}
+                        className="w-full p-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-dashed border-amber-300 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer text-left"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span>Cadastrar encomenda diretamente para: <strong>{searchMoradorInput}</strong></span>
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  /* Modo 2: Digitação Direta Bloco e Apartamento */
+                  <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200/80 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold text-amber-950 text-xs flex items-center gap-1.5">
+                        <Building2 className="w-4 h-4 text-amber-600" />
+                        Identificação Direta da Unidade
+                      </span>
+                      <span className="text-[10px] text-amber-800 font-semibold bg-amber-100/80 px-2 py-0.5 rounded-full">
+                        Criação Ágil na Portaria
                       </span>
                     </div>
 
-                    <button
-                      onClick={() => {
-                        setInputRescueCode(enc.codigoResgate);
-                        setActiveTab('baixa');
-                      }}
-                      className="w-full py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center justify-center gap-1 shadow-sm transition"
-                    >
-                      <span>Validar Baixa Direta</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Bloco / Torre:</label>
+                        <input
+                          type="text"
+                          placeholder="Ex: 20 ou A"
+                          value={manualBloco}
+                          onChange={(e) => setManualBloco(e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-800 text-xs font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Apartamento / Unidade *:</label>
+                        <input
+                          type="text"
+                          placeholder="Ex: 303"
+                          value={manualApto}
+                          onChange={(e) => setManualApto(e.target.value)}
+                          required={cadastroMode === 'manual'}
+                          className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-800 text-xs font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">Nome do Morador (opcional):</label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Davi Leonardo"
+                          value={manualNome}
+                          onChange={(e) => setManualNome(e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-800 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">WhatsApp / Telefone (opcional):</label>
+                        <input
+                          type="text"
+                          placeholder="Ex: (11) 99999-8888"
+                          value={manualTelefone}
+                          onChange={(e) => setManualTelefone(e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-slate-800 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
                   </div>
-                ))
-              )}
+                )}
+
+                {/* Transportadora */}
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Transportadora / Entregador:
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {commonCarriers.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setTransportadora(c)}
+                        className={`px-3 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
+                          transportadora === c
+                            ? 'bg-amber-600 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Ou digite outra transportadora..."
+                    value={transportadora}
+                    onChange={(e) => setTransportadora(e.target.value)}
+                    required
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-slate-800 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Rastreio & Observação */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Código de Rastreio / NFe:</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: BR123456789 (opcional)"
+                      value={codigoRastreio}
+                      onChange={(e) => setCodigoRastreio(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-slate-800 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Local na Portaria / Observação:</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Prateleira B2, Caixa grande"
+                      value={observacao}
+                      onChange={(e) => setObservacao(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-slate-800 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-md shadow-amber-600/20 transition active:scale-98 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>Cadastrar & Notificar Morador (Push + WhatsApp + Instagram)</span>
+                </button>
+              </form>
+            </div>
+
+            {/* Lista de Encomendas Estocadas */}
+            <div className="lg:col-span-5 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="font-extrabold text-slate-900 text-base">
+                  Aguardando Retirada ({pendingPackages.length})
+                </h3>
+              </div>
+
+              {/* Busca na lista de pendentes */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Buscar na lista (nome, apto, PIN)..."
+                  value={searchEncomendaQuery}
+                  onChange={(e) => setSearchEncomendaQuery(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="space-y-2.5 max-h-[440px] overflow-y-auto pr-1">
+                {pendingPackages.length === 0 ? (
+                  <p className="text-xs text-slate-500 text-center py-10">Nenhum pacote estocado na portaria.</p>
+                ) : (
+                  pendingPackages
+                    .filter((enc) => {
+                      if (!searchEncomendaQuery.trim()) return true;
+                      const q = searchEncomendaQuery.toLowerCase();
+                      return (
+                        enc.moradorNome.toLowerCase().includes(q) ||
+                        enc.codigoResgate.includes(q) ||
+                        enc.unidade.apto.toLowerCase().includes(q) ||
+                        enc.unidade.bloco.toLowerCase().includes(q) ||
+                        enc.transportadora.toLowerCase().includes(q)
+                      );
+                    })
+                    .map((enc) => {
+                      const m = moradores.find((x) => x.id === enc.moradorId) || {
+                        id: enc.moradorId,
+                        condominioId: condominio.id,
+                        nome: enc.moradorNome,
+                        email: '',
+                        telefone: '',
+                        unidade: enc.unidade,
+                        statusAdimplencia: 'em_dia' as const,
+                        statusCadastro: 'ativo' as const,
+                      };
+
+                      return (
+                        <div
+                          key={enc.id}
+                          className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs flex flex-col justify-between space-y-2.5"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="font-extrabold text-slate-900">{enc.moradorNome}</div>
+                              <div className="text-amber-800 font-bold text-xs">
+                                Bloco {enc.unidade.bloco} - Apto {enc.unidade.apto}
+                              </div>
+                              <div className="text-slate-500 text-[11px]">
+                                {enc.transportadora} • {enc.codigoRastreio || 'Sem rastreio'}
+                              </div>
+                            </div>
+                            <span className="font-mono font-black text-amber-900 bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-xl text-xs shrink-0">
+                              PIN: {enc.codigoResgate}
+                            </span>
+                          </div>
+
+                          {/* Ações Rápidas por Encomenda */}
+                          <div className="flex flex-wrap gap-1.5 pt-1 border-t border-slate-200/60">
+                            {/* WhatsApp */}
+                            <a
+                              href={notificationService.gerarLinkWhatsApp(m, enc, condominio)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-2.5 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-[11px] flex items-center gap-1 transition cursor-pointer"
+                              title="Notificar no WhatsApp"
+                            >
+                              <MessageSquare className="w-3 h-3 text-emerald-700" />
+                              <span>WhatsApp</span>
+                            </a>
+
+                            {/* Instagram Direct */}
+                            <button
+                              onClick={() => {
+                                const text = notificationService.gerarTextoInstagramDirect(m, enc, condominio);
+                                handleCopyText(text, `insta_list_${enc.id}`);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-900 font-bold text-[11px] flex items-center gap-1 transition cursor-pointer"
+                              title="Copiar texto para Instagram Direct"
+                            >
+                              <Send className="w-3 h-3 text-purple-700" />
+                              <span>{copiedKey === `insta_list_${enc.id}` ? 'Copiado!' : 'Instagram'}</span>
+                            </button>
+
+                            {/* Baixa Imediata */}
+                            <button
+                              onClick={() => {
+                                setInputRescueCode(enc.codigoResgate);
+                                setActiveTab('baixa');
+                              }}
+                              className="flex-1 py-1 px-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] flex items-center justify-center gap-1 shadow-xs transition cursor-pointer"
+                            >
+                              <span>Dar Baixa</span>
+                              <ArrowRight className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                )}
+              </div>
             </div>
           </div>
         </div>
