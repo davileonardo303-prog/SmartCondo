@@ -60,8 +60,10 @@ import { condoStore } from '../../services/mockStorage';
 import { WhatsAppBroadcastPanel } from './WhatsAppBroadcastPanel';
 import { GestaoEquipePermissoes } from './GestaoEquipePermissoes';
 import { RegrasEncomendasPanel } from './RegrasEncomendasPanel';
+import { RelatorioMensalAssembleiaModal } from './RelatorioMensalAssembleiaModal';
 import { ItensCompartilhadosView } from '../compartilhados/ItensCompartilhadosView';
 import { ScrollableTabsNav } from '../common/ScrollableTabsNav';
+import { TrendingUp } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface SindicoDashboardProps {
@@ -203,6 +205,9 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
   const [novoDocCategoria, setNovoDocCategoria] = useState<DocumentoCondominio['categoria']>('regulamento');
   const [novoDocDescricao, setNovoDocDescricao] = useState('');
   const [novoDocTamanho, setNovoDocTamanho] = useState('2.4 MB');
+
+  // Relatório Mensal Assembleia
+  const [showRelatorioModal, setShowRelatorioModal] = useState(false);
 
   // Sincroniza formulário de configurações quando o condomínio for alterado ou carregado
   useEffect(() => {
@@ -730,6 +735,15 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
             >
               <UserPlus className="w-4 h-4" />
               <span>+ Cadastrar Morador</span>
+            </button>
+
+            <button
+              id="btn-sindico-header-relatorio"
+              onClick={() => setShowRelatorioModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm shadow-emerald-600/20 transition active:scale-98 cursor-pointer"
+            >
+              <TrendingUp className="w-4 h-4" />
+              <span>Relatório de Assembleia</span>
             </button>
 
             <button
@@ -3907,6 +3921,13 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal: Relatório Mensal Executivo para Assembleia */}
+      <RelatorioMensalAssembleiaModal
+        isOpen={showRelatorioModal}
+        onClose={() => setShowRelatorioModal(false)}
+        condominio={condominio}
+      />
     </div>
   );
 };

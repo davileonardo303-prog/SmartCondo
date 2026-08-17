@@ -82,6 +82,9 @@ import { BikeLockModal } from '../common/BikeLockModal';
 import { BikeReturnModal } from '../common/BikeReturnModal';
 import { BikeSelectionModal } from '../common/BikeSelectionModal';
 import { ItensCompartilhadosView } from '../compartilhados/ItensCompartilhadosView';
+import { SmartPassModal } from '../common/SmartPassModal';
+import { SmartOcorrenciaModal } from '../common/SmartOcorrenciaModal';
+import { SmartMuralView } from '../common/SmartMuralView';
 import { ScrollableTabsNav } from '../common/ScrollableTabsNav';
 import { Wrench } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -1757,147 +1760,7 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
       {/* MÓDULO 7: COMUNIDADE, MURAL, ENQUETES E SUGESTÕES                  */}
       {/* ==================================================================== */}
       {activeTab === 'mural' && (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-extrabold text-slate-900">Mural & Comunidade</h3>
-              <p className="text-xs text-slate-500">Trocas, classificados, enquetes condominiais e canal com a administração.</p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsNovaSugestaoModalOpen(true)}
-                className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition"
-              >
-                Enviar Sugestão
-              </button>
-              <button
-                onClick={() => setIsNovoPostModalOpen(true)}
-                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 flex items-center gap-2 transition"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Publicar Anúncio</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Enquetes Ativas */}
-          {enquetes.length > 0 && (
-            <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-lg space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Vote className="w-5 h-5 text-amber-400" />
-                  <h4 className="font-extrabold text-base">Enquete Condominial Oficial</h4>
-                </div>
-                <span className="text-xs text-amber-300 font-bold bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-500/30">
-                  {enquetes[0].totalVotos} votos registrados
-                </span>
-              </div>
-
-              <div>
-                <h5 className="text-lg font-bold text-white">{enquetes[0].titulo}</h5>
-                <p className="text-xs text-slate-300 mt-1">{enquetes[0].descricao}</p>
-              </div>
-
-              <div className="space-y-2 pt-2">
-                {enquetes[0].opcoes.map((opcao) => {
-                  const percent =
-                    enquetes[0].totalVotos > 0
-                      ? Math.round((opcao.votosCount / enquetes[0].totalVotos) * 100)
-                      : 0;
-                  const voted = opcao.votantesIds.includes(morador.id);
-
-                  return (
-                    <button
-                      key={opcao.id}
-                      onClick={() => handleVotarEnquete(enquetes[0].id, opcao.id)}
-                      className={`w-full p-3.5 rounded-2xl border text-left flex items-center justify-between text-xs transition ${
-                        voted
-                          ? 'bg-emerald-600/40 border-emerald-400 font-bold'
-                          : 'bg-white/10 hover:bg-white/15 border-white/20'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">{opcao.texto}</span>
-                        {voted && (
-                          <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full">
-                            Seu Voto
-                          </span>
-                        )}
-                      </div>
-                      <span className="font-mono font-bold text-slate-200">
-                        {opcao.votosCount} votos ({percent}%)
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Posts do Mural */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {muralPosts.map((post) => (
-              <div key={post.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-3 flex flex-col justify-between">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                      {post.tipo.replace('_', ' ')}
-                    </span>
-                    <span className="text-xs text-slate-400">
-                      {new Date(post.criadoEm).toLocaleDateString('pt-BR')}
-                    </span>
-                  </div>
-
-                  <h4 className="text-base font-extrabold text-slate-900">{post.titulo}</h4>
-                  <p className="text-xs sm:text-sm text-slate-600">{post.conteudo}</p>
-
-                  {post.valor && (
-                    <div className="text-emerald-700 font-black text-base">
-                      R$ {post.valor.toFixed(2)}
-                    </div>
-                  )}
-
-                  <div className="text-xs text-slate-500 font-semibold pt-1">
-                    Anunciado por: {post.autorNome} ({post.autorUnidade})
-                  </div>
-                </div>
-
-                {/* Ações e Contato */}
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                  <button
-                    onClick={() => condoStore.curtirMuralPost(condominio.id, post.id, morador.id)}
-                    className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-emerald-600 transition"
-                  >
-                    <ThumbsUp
-                      className={`w-4 h-4 ${
-                        post.curtidas.includes(morador.id) ? 'fill-emerald-600 text-emerald-600' : ''
-                      }`}
-                    />
-                    <span>{post.curtidas.length} Curtidas</span>
-                  </button>
-
-                  {post.contatoTelefone && (
-                    <a
-                      href={`https://api.whatsapp.com/send?phone=55${post.contatoTelefone.replace(
-                        /\D/g,
-                        ''
-                      )}&text=Ol%C3%A1%20${encodeURIComponent(post.autorNome)},%20vi%20seu%20an%C3%BAncio%20"${encodeURIComponent(
-                        post.titulo
-                      )}"%20no%20SmartCondo!`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5" />
-                      <span>Conversar</span>
-                    </a>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <SmartMuralView condominio={condominio} moradorAtual={morador} />
       )}
 
       {/* ==================================================================== */}
@@ -2049,189 +1912,33 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
         />
       )}
 
-      {/* Modal: Novo Visitante */}
-      {isNovoVisitanteModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h3 className="font-black text-lg text-slate-900">Liberar Visitante / Prestador</h3>
-              <button
-                onClick={() => setIsNovoVisitanteModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {/* Modal: SmartPass - Novo Visitante com QR Code */}
+      <SmartPassModal
+        isOpen={isNovoVisitanteModalOpen}
+        onClose={() => setIsNovoVisitanteModalOpen(false)}
+        condominio={condominio}
+        morador={morador}
+        onSuccess={(vis) => {
+          setAlertMessage({
+            type: 'success',
+            text: `Convite gerado com sucesso para ${vis.nomeVisitante}!`,
+          });
+        }}
+      />
 
-            <form onSubmit={handleCriarVisitante} className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Nome Completo</label>
-                <input
-                  type="text"
-                  placeholder="Ex: Carlos Eduardo"
-                  value={visNome}
-                  onChange={(e) => setVisNome(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Tipo</label>
-                  <select
-                    value={visTipo}
-                    onChange={(e: any) => setVisTipo(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  >
-                    <option value="visitante">Visitante / Amigo</option>
-                    <option value="prestador">Prestador de Serviço</option>
-                    <option value="entrega">Entrega / Delivery</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Placa do Carro (opcional)</label>
-                  <input
-                    type="text"
-                    placeholder="ABC-1234"
-                    value={visPlaca}
-                    onChange={(e) => setVisPlaca(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Empresa / Descrição (se prestador)</label>
-                <input
-                  type="text"
-                  placeholder="Ex: Técnico de Internet Claro"
-                  value={visEmpresa}
-                  onChange={(e) => setVisEmpresa(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Data</label>
-                  <input
-                    type="date"
-                    value={visData}
-                    onChange={(e) => setVisData(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Período</label>
-                  <select
-                    value={visPeriodo}
-                    onChange={(e) => setVisPeriodo(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  >
-                    <option value="Dia Inteiro">Dia Inteiro</option>
-                    <option value="Manhã (08h às 12h)">Manhã (08h às 12h)</option>
-                    <option value="Tarde (12h às 18h)">Tarde (12h às 18h)</option>
-                    <option value="Noite (18h às 23h)">Noite (18h às 23h)</option>
-                  </select>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition"
-              >
-                Gerar Autorização & Código
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Nova Ocorrência */}
-      {isNovaOcorrenciaModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h3 className="font-black text-lg text-slate-900">Registrar Ocorrência</h3>
-              <button
-                onClick={() => setIsNovaOcorrenciaModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCriarOcorrencia} className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Título do Chamado</label>
-                <input
-                  type="text"
-                  placeholder="Ex: Vazamento no corredor do 3º andar"
-                  value={ocorrTitulo}
-                  onChange={(e) => setOcorrTitulo(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Categoria</label>
-                  <select
-                    value={ocorrCategoria}
-                    onChange={(e: any) => setOcorrCategoria(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none"
-                  >
-                    <option value="manutencao">Manutenção Predial</option>
-                    <option value="barulho">Barulho / Silêncio</option>
-                    <option value="limpeza">Limpeza & Conservação</option>
-                    <option value="pets">Animais / Pets</option>
-                    <option value="seguranca">Segurança / Portaria</option>
-                    <option value="outros">Outros</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Prioridade</label>
-                  <select
-                    value={ocorrPrioridade}
-                    onChange={(e: any) => setOcorrPrioridade(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none"
-                  >
-                    <option value="baixa">Baixa</option>
-                    <option value="media">Média</option>
-                    <option value="alta">Alta</option>
-                    <option value="urgente">Urgente</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Descrição Detalhada</label>
-                <textarea
-                  rows={4}
-                  placeholder="Relate o ocorrido com clareza..."
-                  value={ocorrDescricao}
-                  onChange={(e) => setOcorrDescricao(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none"
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-md shadow-rose-600/20 transition"
-              >
-                Enviar Ocorrência à Administração
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Modal: SmartOcorrência - Chamado com Fotos e Localização */}
+      <SmartOcorrenciaModal
+        isOpen={isNovaOcorrenciaModalOpen}
+        onClose={() => setIsNovaOcorrenciaModalOpen(false)}
+        condominio={condominio}
+        morador={morador}
+        onSuccess={(ocorr) => {
+          setAlertMessage({
+            type: 'success',
+            text: `Chamado "${ocorr.titulo}" aberto com sucesso!`,
+          });
+        }}
+      />
 
       {/* Modal: Novo Post no Mural */}
       {isNovoPostModalOpen && (

@@ -10,6 +10,7 @@ import {
 import { condoStore } from '../../services/mockStorage';
 import { ItensCompartilhadosView } from '../compartilhados/ItensCompartilhadosView';
 import { ScrollableTabsNav } from '../common/ScrollableTabsNav';
+import { UniversalQrCodeScanner } from '../common/UniversalQrCodeScanner';
 import {
   Package,
   Bike,
@@ -30,6 +31,7 @@ import {
   Phone,
   AlertTriangle,
   Wrench,
+  QrCode,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -73,6 +75,9 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
   const [returnDetalhesDefeito, setReturnDetalhesDefeito] = useState<string>('');
   const [returnLocal, setReturnLocal] = useState<string>('Totem da Portaria Principal');
   const [returnOperador, setReturnOperador] = useState<string>('Porteiro de Plantão');
+
+  // Scanner Universal
+  const [showUniversalScanner, setShowUniversalScanner] = useState(false);
 
   // Busca geral
   const [searchQuery, setSearchQuery] = useState('');
@@ -262,13 +267,21 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
           </div>
         </div>
 
-        {/* Métricas Rápidas */}
+        {/* Métricas Rápidas & Scanner */}
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl text-center border border-white/10 min-w-[100px]">
+          <button
+            id="btn-portaria-scanner-universal"
+            onClick={() => setShowUniversalScanner(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 transition active:scale-98 cursor-pointer"
+          >
+            <QrCode className="w-4 h-4" />
+            <span>⚡ Scanner Universal (QR & PIN)</span>
+          </button>
+          <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl text-center border border-white/10 min-w-[90px]">
             <span className="text-[10px] uppercase font-bold text-slate-400 block">Na Portaria</span>
             <span className="text-xl font-black text-amber-400 font-mono">{pendingPackages.length}</span>
           </div>
-          <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl text-center border border-white/10 min-w-[100px]">
+          <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl text-center border border-white/10 min-w-[90px]">
             <span className="text-[10px] uppercase font-bold text-slate-400 block">Bikes em 5min</span>
             <span className="text-xl font-black text-emerald-400 font-mono">{reservedBikes.length}</span>
           </div>
@@ -1067,6 +1080,17 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal: Scanner Universal de QR Code & PINs */}
+      <UniversalQrCodeScanner
+        isOpen={showUniversalScanner}
+        onClose={() => setShowUniversalScanner(false)}
+        condominioId={condominio.id}
+        operadorNome="Porteiro de Plantão"
+        onSuccess={() => {
+          // Os listeners do condoStore atualizam o estado automaticamente
+        }}
+      />
     </div>
   );
 };
