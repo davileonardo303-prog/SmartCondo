@@ -1918,7 +1918,8 @@ Condomínio: ${billingCondo.nome}
             <form onSubmit={handleSalvarConfigPlanos} className="space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-1">
                 {(['Teste', 'Smart', 'Plus', 'Pro', 'Enterprise'] as const).map((pKey) => {
-                  const item = editablePlanos[pKey] || {
+                  const item: PlanoConfigItem = editablePlanos[pKey] || {
+                    id: pKey,
                     nome: pKey,
                     valor: 0,
                     unidades: '',
@@ -2029,7 +2030,7 @@ Condomínio: ${billingCondo.nome}
                             onChange={(e) =>
                               setEditablePlanos({
                                 ...editablePlanos,
-                                [pKey]: { ...item, periodoMesesTeste: Number(e.target.value) },
+                                [pKey]: { ...item, id: (item.id || pKey) as PlanoTipo, periodoMesesTeste: Number(e.target.value) },
                               })
                             }
                             className="w-full sm:w-1/3 bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-cyan-800 focus:outline-none focus:border-cyan-500"

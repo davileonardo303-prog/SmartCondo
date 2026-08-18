@@ -1546,7 +1546,7 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
                     <div>
                       <h4 className="font-extrabold text-slate-900">{bike.modelo}</h4>
                       <p className="text-xs text-slate-600">
-                        Morador: <strong>{bike.emUsoPorMoradorNome || 'Morador'}</strong>
+                        Morador: <strong>{bike.usuarioAtualNome || bike.reservaMoradorNome || 'Morador'}</strong>
                       </p>
                       {bike.inicioUsoTimestamp && (
                         <p className="text-[11px] text-slate-500 mt-0.5">
@@ -1724,7 +1724,7 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
               <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Morador Responsável:</span>
-                  <strong className="text-slate-900">{selectedBikeForReturn.emUsoPorMoradorNome || 'Morador'}</strong>
+                  <strong className="text-slate-900">{selectedBikeForReturn.usuarioAtualNome || selectedBikeForReturn.reservaMoradorNome || 'Morador'}</strong>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Modelo da Bike:</span>

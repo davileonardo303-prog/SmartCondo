@@ -12,6 +12,8 @@ import { auth, testFirestoreConnection, logoutFirebase } from './services/fireba
 import { onAuthStateChanged } from 'firebase/auth';
 import { APP_VERSION, APP_NAME } from './constants/version';
 
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+
 export default function App() {
   // Subscribe to condoStore reactive updates
   useSyncExternalStore(
@@ -93,7 +95,7 @@ export default function App() {
   const bikes = condoStore.getBikes(currentCondo.id);
   const encomendas = condoStore.getEncomendas(
     currentCondo.id,
-    currentUser?.role === 'morador' ? currentMorador.id : undefined
+    currentUser?.role === 'morador' ? currentMorador : undefined
   );
   const allEncomendasCondo = condoStore.getEncomendas(currentCondo.id);
   const areasLazer = condoStore.getAreasLazer(currentCondo.id);
@@ -122,7 +124,7 @@ export default function App() {
   // Se não houver usuário conectado, exibe a tela de login / primeiro acesso
   if (!currentUser) {
     return (
-      <>
+      <ErrorBoundary fallbackTitle="Erro ao carregar a tela de login">
         <AuthScreen
           condominios={condominios}
           onLoginSuccess={(user) => {
@@ -136,7 +138,7 @@ export default function App() {
           }}
         />
         <PwaInstallPrompt />
-      </>
+      </ErrorBoundary>
     );
   }
 
@@ -154,53 +156,55 @@ export default function App() {
 
       {/* Conteúdo Principal com base no Perfil Logado */}
       <main className="flex-1 pb-16">
-        {currentUser.role === 'morador' && (
-          <MoradorDashboard
-            condominio={currentCondo}
-            morador={currentMorador}
-            bikes={bikes}
-            encomendas={encomendas}
-            areasLazer={areasLazer}
-            reservas={reservas}
-            avisos={avisos}
-            historicoLocacoes={historicoLocacoes}
-          />
-        )}
+        <ErrorBoundary fallbackTitle="Erro ao carregar o painel do usuário">
+          {currentUser.role === 'morador' && (
+            <MoradorDashboard
+              condominio={currentCondo}
+              morador={currentMorador}
+              bikes={bikes}
+              encomendas={encomendas}
+              areasLazer={areasLazer}
+              reservas={reservas}
+              avisos={avisos}
+              historicoLocacoes={historicoLocacoes}
+            />
+          )}
 
-        {currentUser.role === 'portaria' && (
-          <PortariaDashboard
-            condominio={currentCondo}
-            moradores={moradores}
-            encomendas={allEncomendasCondo}
-            bikes={bikes}
-            historicoLocacoes={historicoLocacoes}
-          />
-        )}
+          {currentUser.role === 'portaria' && (
+            <PortariaDashboard
+              condominio={currentCondo}
+              moradores={moradores}
+              encomendas={allEncomendasCondo}
+              bikes={bikes}
+              historicoLocacoes={historicoLocacoes}
+            />
+          )}
 
-        {currentUser.role === 'sindico' && (
-          <SindicoDashboard
-            condominio={currentCondo}
-            moradores={moradores}
-            bikes={bikes}
-            areasLazer={areasLazer}
-            reservas={reservas}
-            avisos={avisos}
-          />
-        )}
+          {currentUser.role === 'sindico' && (
+            <SindicoDashboard
+              condominio={currentCondo}
+              moradores={moradores}
+              bikes={bikes}
+              areasLazer={areasLazer}
+              reservas={reservas}
+              avisos={avisos}
+            />
+          )}
 
-        {currentUser.role === 'super_admin' && (
-          <SuperAdminDashboard
-            condominios={condominios}
-            onSelectCondo={(id) => {
-              setSelectedCondoId(id);
-            }}
-            setCurrentRole={(role) => {
-              if (role !== 'super_admin') {
-                setCurrentUser((prev) => (prev ? { ...prev, role } : null));
-              }
-            }}
-          />
-        )}
+          {currentUser.role === 'super_admin' && (
+            <SuperAdminDashboard
+              condominios={condominios}
+              onSelectCondo={(id) => {
+                setSelectedCondoId(id);
+              }}
+              setCurrentRole={(role) => {
+                if (role !== 'super_admin') {
+                  setCurrentUser((prev) => (prev ? { ...prev, role } : null));
+                }
+              }}
+            />
+          )}
+        </ErrorBoundary>
       </main>
 
       {/* Rodapé do Sistema */}

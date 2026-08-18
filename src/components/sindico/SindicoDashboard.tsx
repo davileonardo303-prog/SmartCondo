@@ -3695,7 +3695,7 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
                 <div>
                   <h3 className="text-base font-bold text-slate-900">Responder Chamado #{selectedOcorrencia.id.slice(-4)}</h3>
                   <p className="text-[11px] text-slate-500">
-                    {selectedOcorrencia.moradorNome} • {selectedOcorrencia.unidade}
+                    {selectedOcorrencia.moradorNome} • {typeof selectedOcorrencia.unidade === 'object' ? `Bloco ${selectedOcorrencia.unidade?.bloco || '1'} - Apto ${selectedOcorrencia.unidade?.apto || '-'}` : selectedOcorrencia.unidade}
                   </p>
                 </div>
               </div>

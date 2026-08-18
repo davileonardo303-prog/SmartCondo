@@ -882,13 +882,9 @@ export const RegrasEncomendasPanel: React.FC<RegrasEncomendasPanelProps> = ({ co
           setSelectedEncomendaForEntrega(null);
         }}
         encomenda={selectedEncomendaForEntrega}
-        condoId={condominio.id}
-        onSuccessDelivery={(method) => {
-          setFeedback(
-            `✓ Encomenda da unidade Bloco ${selectedEncomendaForEntrega?.unidade.bloco} - Apto ${selectedEncomendaForEntrega?.unidade.apto} entregue com sucesso via ${
-              method === 'pin' ? 'Código PIN' : 'Documento + Rúbrica'
-            }!`
-          );
+        condominio={condominio}
+        onSuccess={(msg) => {
+          setFeedback(msg || 'Encomenda entregue com sucesso!');
           confetti({ particleCount: 60, spread: 60 });
         }}
       />

@@ -96,6 +96,7 @@ export interface PlanoConfigItem {
   bikes: string;
   desc: string;
   duracaoMeses?: number;
+  periodoMesesTeste?: number;
   isTesteGratuito?: boolean;
   destaque?: boolean;
   ativo?: boolean;

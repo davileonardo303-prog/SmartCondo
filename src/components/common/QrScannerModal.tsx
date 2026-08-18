@@ -5,17 +5,18 @@ import { Bicicleta, Morador } from '../../types';
 interface QrScannerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  availableBikes: Bicicleta[];
-  onScanSuccess: (bike: Bicicleta, lockPassword: string) => void;
-  onScanError: (errorMessage: string) => void;
-  currentMorador: Morador | undefined;
-  onDirectCheckout: (bikeCodeOrToken: string) => void;
+  availableBikes?: Bicicleta[];
+  onScanSuccess?: (bikeCodeOrToken: any, lockPassword?: string) => void;
+  onScanError?: (errorMessage: string) => void;
+  currentMorador?: Morador | undefined;
+  onDirectCheckout?: (bikeCodeOrToken: string) => void;
 }
 
 export const QrScannerModal: React.FC<QrScannerModalProps> = ({
   isOpen,
   onClose,
-  availableBikes,
+  availableBikes = [],
+  onScanSuccess,
   currentMorador,
   onDirectCheckout,
 }) => {
@@ -23,14 +24,22 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleCheckout = (code: string) => {
+    if (onDirectCheckout) {
+      onDirectCheckout(code);
+    } else if (onScanSuccess) {
+      onScanSuccess(code);
+    }
+  };
+
   const handleQuickSelect = (bike: Bicicleta) => {
-    onDirectCheckout(bike.codigo);
+    handleCheckout(bike.codigo);
   };
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualCode.trim()) return;
-    onDirectCheckout(manualCode.trim().toUpperCase());
+    handleCheckout(manualCode.trim().toUpperCase());
   };
 
   const availableBikesList = (availableBikes || []).filter((b) => b.status === 'disponivel');
