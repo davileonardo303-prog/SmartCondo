@@ -48,6 +48,9 @@ import {
   syncAvisoToFirestore,
   syncReservaToFirestore,
   syncEncomendaToFirestore,
+  deleteEncomendaFromFirestore,
+  limparSubcolecaoFirestore,
+  limparBikesEncomendasFerramentasFirestore,
   syncCobrancaToFirestore,
   deleteCobrancaFromFirestore,
   syncPlanoConfigToFirestore,
@@ -56,7 +59,7 @@ import {
 } from './firebase';
 import { collection, onSnapshot, doc, getDocs } from 'firebase/firestore';
 
-const STORAGE_KEY_PREFIX = 'smartcondo_clean_v7';
+const STORAGE_KEY_PREFIX = 'smartcondo_clean_v8_zero';
 
 export const DEFAULT_PLANOS_CONFIG: Record<PlanoTipo, PlanoConfigItem> = {
   Teste: {
@@ -199,8 +202,19 @@ class MockCondoStore {
 
   constructor() {
     this.loadFromStorage();
+    // Garante que Encomendas, Bicicletas e Ferramentas iniciem 100% zeradas para novos cadastros do zero
+    this.bikes = {};
+    this.encomendas = {};
+    this.itensCompartilhados = {};
+    this.historicoLocacoes = {};
+    this.saveToStorage();
+
     this.initFirestoreListeners();
-    this.bootstrapFromFirestore();
+    this.bootstrapFromFirestore().then(() => {
+      const condoIds = this.condominios.map((c) => c.id);
+      if (condoIds.length === 0) condoIds.push('condo_park_avenue');
+      limparBikesEncomendasFerramentasFirestore(condoIds).catch(() => {});
+    });
     this.initializeSampleData();
 
     // Verificação contínua do Timer de 5 Minutos da Reserva de Bicicletas e Itens e Prazos de Encomendas
@@ -781,6 +795,32 @@ class MockCondoStore {
     whatsappService.limparHistorico();
     this.saveToStorage();
     this.notify();
+  }
+
+  // Limpeza explícita para início de cadastros do zero (Encomendas, Bicicletas, Ferramentas/Itens Compartilhados)
+  public async limparEncomendasBikesFerramentas(condoId?: string) {
+    if (condoId) {
+      this.bikes[condoId] = [];
+      this.encomendas[condoId] = [];
+      this.itensCompartilhados[condoId] = [];
+      this.historicoLocacoes[condoId] = [];
+    } else {
+      this.bikes = {};
+      this.encomendas = {};
+      this.itensCompartilhados = {};
+      this.historicoLocacoes = {};
+    }
+    this.saveToStorage();
+    this.notify();
+
+    try {
+      const condoIds = condoId ? [condoId] : this.condominios.map((c) => c.id);
+      if (condoIds.length === 0) condoIds.push('condo_park_avenue');
+      await limparBikesEncomendasFerramentasFirestore(condoIds);
+      console.log('✅ Banco de dados limpo para novos cadastros (Encomendas, Bikes e Ferramentas).');
+    } catch (e) {
+      console.warn('Erro ao limpar Firestore:', e);
+    }
   }
 
   public getVersion(): number {
@@ -4571,81 +4611,9 @@ class MockCondoStore {
       ];
     }
 
-    // 3. Bicicletas Compartilhadas (Módulo 4.1 - Exclusivo Novolar)
-    if (!this.bikes[demoCondoId] || this.bikes[demoCondoId].length === 0) {
-      this.bikes[demoCondoId] = [
-        {
-          id: 'bike_1',
-          condominioId: demoCondoId,
-          codigo: '101',
-          modelo: 'Novolar Urban Comfort 26"',
-          tipo: 'urbana',
-          status: 'disponivel',
-          usuarioAtualId: null,
-          qrToken: 'QR_NOVOLAR_101',
-          lockPassword: '482',
-          localizacaoAtual: 'Totem Central Novolar - Vaga 01',
-          ultimaRevisao: '12/08/2026',
-        },
-        {
-          id: 'bike_2',
-          condominioId: demoCondoId,
-          codigo: '102',
-          modelo: 'Novolar E-Bike Boost Pro',
-          tipo: 'e-bike',
-          status: 'disponivel',
-          usuarioAtualId: null,
-          qrToken: 'QR_NOVOLAR_102',
-          lockPassword: '915',
-          localizacaoAtual: 'Totem Central Novolar - Vaga 02 (Carregando 95%)',
-          nivelBateria: 95,
-          ultimaRevisao: '10/08/2026',
-        },
-        {
-          id: 'bike_3',
-          condominioId: demoCondoId,
-          codigo: '103',
-          modelo: 'Novolar Trail Mountain 29"',
-          tipo: 'mountain',
-          status: 'disponivel',
-          usuarioAtualId: null,
-          qrToken: 'QR_NOVOLAR_103',
-          lockPassword: '730',
-          localizacaoAtual: 'Totem Central Novolar - Vaga 03',
-          ultimaRevisao: '05/08/2026',
-        },
-        {
-          id: 'bike_4',
-          condominioId: demoCondoId,
-          codigo: '104',
-          modelo: 'Novolar E-Bike Urban Flow',
-          tipo: 'e-bike',
-          status: 'em_uso',
-          usuarioAtualId: 'morador_demo_2',
-          usuarioAtualNome: 'Rodrigo Santoro Maia',
-          usuarioAtualUnidade: 'Bloco B - Apto 104',
-          qrToken: 'QR_NOVOLAR_104',
-          lockPassword: '341',
-          localizacaoAtual: 'Em trânsito no condomínio',
-          nivelBateria: 78,
-          ultimaRevisao: '01/08/2026',
-          inicioUsoTimestamp: Date.now() - 18 * 60 * 1000, // 18 minutos atrás
-        },
-        {
-          id: 'bike_5',
-          condominioId: demoCondoId,
-          codigo: '105',
-          modelo: 'Novolar Urban Comfort 26"',
-          tipo: 'urbana',
-          status: 'manutencao',
-          usuarioAtualId: null,
-          qrToken: 'QR_NOVOLAR_105',
-          lockPassword: '119',
-          localizacaoAtual: 'Oficina Técnica (Aguardando troca de pastilha)',
-          ultimaRevisao: '14/08/2026',
-          avariasAtuais: ['Troca de pastilha do freio dianteiro agendada'],
-        },
-      ];
+    // 3. Bicicletas Compartilhadas - Iniciadas zeradas para cadastro do zero
+    if (!this.bikes[demoCondoId]) {
+      this.bikes[demoCondoId] = [];
     }
 
     // 4. Áreas de Lazer
@@ -4758,38 +4726,9 @@ class MockCondoStore {
       ];
     }
 
-    // 6. Encomendas
-    if (!this.encomendas[demoCondoId] || this.encomendas[demoCondoId].length === 0) {
-      this.encomendas[demoCondoId] = [
-        {
-          id: 'enc_1',
-          condominioId: demoCondoId,
-          moradorId: 'morador_demo_1',
-          moradorNome: 'Juliana Paes Silveira',
-          unidade: { bloco: 'A', apto: '302' },
-          transportadora: 'Mercado Livre Express',
-          codigoRastreio: 'ML98421045BR',
-          codigoResgate: '492815',
-          status: 'na_portaria',
-          recebidoEm: Date.now() - 3 * 3600 * 1000,
-          recebidoPor: 'Porteiro Marcos',
-          observacao: 'Pacote médio - Caixa lacrada',
-        },
-        {
-          id: 'enc_2',
-          condominioId: demoCondoId,
-          moradorId: 'morador_demo_1',
-          moradorNome: 'Juliana Paes Silveira',
-          unidade: { bloco: 'A', apto: '302' },
-          transportadora: 'Amazon Prime',
-          codigoRastreio: 'AMZ7719203BR',
-          codigoResgate: '810344',
-          status: 'na_portaria',
-          recebidoEm: Date.now() - 5 * 3600 * 1000,
-          recebidoPor: 'Porteiro Marcos',
-          observacao: 'Envelope com livro/documentos',
-        },
-      ];
+    // 6. Encomendas - Iniciadas zeradas para cadastro do zero
+    if (!this.encomendas[demoCondoId]) {
+      this.encomendas[demoCondoId] = [];
     }
 
     // 7. Boletos Financeiros
@@ -4960,122 +4899,9 @@ class MockCondoStore {
       ];
     }
 
-    // 12. Itens e Equipamentos Compartilhados (Ferramentas, Utilidades, Lavanderia, Mobilidade)
-    if (!this.itensCompartilhados[demoCondoId] || this.itensCompartilhados[demoCondoId].length === 0) {
-      this.itensCompartilhados[demoCondoId] = [
-        {
-          id: 'item_1',
-          condominioId: demoCondoId,
-          nome: 'Furadeira de Impacto Bosch GSB 13 RE 650W',
-          categoria: 'ferramentas',
-          codigoIdentificador: 'FER-01',
-          descricao: 'Furadeira de impacto com mandril de 1/2", seletor de velocidade e kit com 5 brocas de alvenaria e madeira.',
-          localArmazenamento: 'Portaria Principal (Armário de Ferramentas)',
-          status: 'disponivel',
-          tempoMaximoUsoHoras: 4,
-          requerAprovacao: false,
-          instrucoesUso: 'Utilizar sempre óculos de proteção. Devolver o kit de brocas completo e o fio devidamente enrolado.',
-          reservaAtual: null,
-          usoAtual: null,
-          historicoUso: [],
-        },
-        {
-          id: 'item_2',
-          condominioId: demoCondoId,
-          nome: 'Escada de Alumínio Articulada 4x3 (12 Degraus)',
-          categoria: 'ferramentas',
-          codigoIdentificador: 'FER-02',
-          descricao: 'Escada multifuncional articulada com travas de segurança reforçadas. Alcança até 3,40m.',
-          localArmazenamento: 'Zeladoria (Subsolo 1)',
-          status: 'disponivel',
-          tempoMaximoUsoHoras: 4,
-          requerAprovacao: false,
-          instrucoesUso: 'Verifique se todas as travas articuladas clicaram antes de subir.',
-          reservaAtual: null,
-          usoAtual: null,
-          historicoUso: [],
-        },
-        {
-          id: 'item_3',
-          condominioId: demoCondoId,
-          nome: 'Parafusadeira e Furadeira sem Fio 12V Bateria',
-          categoria: 'ferramentas',
-          codigoIdentificador: 'FER-03',
-          descricao: 'Parafusadeira a bateria com controle de torque, 2 baterias recarregáveis e jogo de bits Phillips/Fenda.',
-          localArmazenamento: 'Portaria Principal',
-          status: 'disponivel',
-          tempoMaximoUsoHoras: 3,
-          requerAprovacao: false,
-          instrucoesUso: 'Colocar na base de carregamento ao devolver na portaria.',
-          reservaAtual: null,
-          usoAtual: null,
-          historicoUso: [],
-        },
-        {
-          id: 'item_4',
-          condominioId: demoCondoId,
-          nome: 'Carrinho de Compras Dobrável Reforçado 01',
-          categoria: 'utilidades',
-          codigoIdentificador: 'UTI-01',
-          descricao: 'Carrinho metálico para transporte de compras do estacionamento até o apartamento. Capacidade 50kg.',
-          localArmazenamento: 'Hall de Entrada Bloco A',
-          status: 'disponivel',
-          tempoMaximoUsoHoras: 1,
-          requerAprovacao: false,
-          instrucoesUso: 'Devolver no hall imediatamente após descarregar as compras.',
-          reservaAtual: null,
-          usoAtual: null,
-          historicoUso: [],
-        },
-        {
-          id: 'item_5',
-          condominioId: demoCondoId,
-          nome: 'Lavadora de Alta Pressão Kärcher K2 Compact',
-          categoria: 'utilidades',
-          codigoIdentificador: 'UTI-02',
-          descricao: 'Lavadora de pressão 1600 PSI para limpeza de tapetes, varandas e veículos na área de lavagem.',
-          localArmazenamento: 'Zeladoria / Lava-Rápido Condominial',
-          status: 'disponivel',
-          tempoMaximoUsoHoras: 3,
-          requerAprovacao: false,
-          instrucoesUso: 'Não ligar o motor sem a mangueira de água conectada e aberta.',
-          reservaAtual: null,
-          usoAtual: null,
-          historicoUso: [],
-        },
-        {
-          id: 'item_6',
-          condominioId: demoCondoId,
-          nome: 'Lavadora Automática Front Load 13kg (Máquina 01)',
-          categoria: 'lavanderia',
-          codigoIdentificador: 'LAV-01',
-          descricao: 'Lavadora inteligente com dosagem automática e ciclos rápidos para higienização de roupas.',
-          localArmazenamento: 'Lavanderia Coletiva (Térreo Bloco B)',
-          status: 'disponivel',
-          tempoMaximoUsoHoras: 2,
-          requerAprovacao: false,
-          instrucoesUso: 'Respeite a capacidade máxima de 13kg e limpe o dispenser após o uso.',
-          reservaAtual: null,
-          usoAtual: null,
-          historicoUso: [],
-        },
-        {
-          id: 'item_7',
-          condominioId: demoCondoId,
-          nome: 'Secadora de Roupas Elétrica 10kg (Máquina 02)',
-          categoria: 'lavanderia',
-          codigoIdentificador: 'LAV-02',
-          descricao: 'Secadora de roupas por condensação de alta eficiência energética.',
-          localArmazenamento: 'Lavanderia Coletiva (Térreo Bloco B)',
-          status: 'disponivel',
-          tempoMaximoUsoHoras: 2,
-          requerAprovacao: false,
-          instrucoesUso: 'Limpar o filtro de fiapos ao término da secagem.',
-          reservaAtual: null,
-          usoAtual: null,
-          historicoUso: [],
-        },
-      ];
+    // 12. Itens e Equipamentos Compartilhados (Ferramentas, Utilidades) - Iniciados zerados para cadastro do zero
+    if (!this.itensCompartilhados[demoCondoId]) {
+      this.itensCompartilhados[demoCondoId] = [];
     }
 
     this.saveToStorage();

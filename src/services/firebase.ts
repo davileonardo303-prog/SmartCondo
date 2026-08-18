@@ -257,6 +257,37 @@ export async function syncReservaToFirestore(reserva: Reserva): Promise<void> {
   }
 }
 
+export async function deleteEncomendaFromFirestore(condoId: string, encomendaId: string): Promise<void> {
+  const path = `condominios/${condoId}/encomendas/${encomendaId}`;
+  try {
+    await deleteDoc(doc(db, 'condominios', condoId, 'encomendas', encomendaId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export async function limparSubcolecaoFirestore(condoId: string, subcolecao: string): Promise<void> {
+  try {
+    const colRef = collection(db, 'condominios', condoId, subcolecao);
+    const snap = await getDocs(colRef);
+    const deletePromises = snap.docs.map((docSnap) => deleteDoc(docSnap.ref));
+    await Promise.all(deletePromises);
+    console.log(`[Firestore] Subcoleção '${subcolecao}' do condomínio '${condoId}' foi limpa.`);
+  } catch (err) {
+    console.warn(`[Firestore] Aviso ao limpar subcoleção ${subcolecao} de ${condoId}:`, err);
+  }
+}
+
+export async function limparBikesEncomendasFerramentasFirestore(condoIds: string[]): Promise<void> {
+  for (const condoId of condoIds) {
+    if (!condoId) continue;
+    await limparSubcolecaoFirestore(condoId, 'encomendas');
+    await limparSubcolecaoFirestore(condoId, 'bikes');
+    await limparSubcolecaoFirestore(condoId, 'itens_compartilhados');
+    await limparSubcolecaoFirestore(condoId, 'historicoLocacoes');
+  }
+}
+
 export async function syncEncomendaToFirestore(encomenda: Encomenda): Promise<void> {
   const path = `condominios/${encomenda.condominioId}/encomendas/${encomenda.id}`;
   try {
