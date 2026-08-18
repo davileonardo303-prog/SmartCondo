@@ -741,62 +741,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                       <span>Acessar o Sistema</span>
                     </button>
                   </form>
-
-                  {/* Acesso Rápido / Perfis de Demonstração */}
-                  <div className="pt-2 space-y-2 border-t border-slate-100">
-                    <p className="text-[11px] font-bold text-slate-500 text-center">
-                      ⚡ Acesso Rápido com 1 Toque:
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLoginEmail('davileonardo@gmail.com');
-                          setLoginSenha('equipe123');
-                          const res = condoStore.autenticarUsuario('davileonardo@gmail.com', 'equipe123');
-                          if (res.success && res.user) {
-                            onLoginSuccess(res.user);
-                          }
-                        }}
-                        className="p-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-900 text-left transition cursor-pointer"
-                      >
-                        <div className="text-[10px] font-black uppercase text-indigo-600">Portaria</div>
-                        <div className="text-xs font-extrabold truncate">Porteiro Davi</div>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLoginEmail('davileonardo303@gmail.com');
-                          setLoginSenha('Perfumaria20');
-                          const res = condoStore.autenticarUsuario('davileonardo303@gmail.com', 'Perfumaria20');
-                          if (res.success && res.user) {
-                            onLoginSuccess(res.user);
-                          }
-                        }}
-                        className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-900 text-left transition cursor-pointer"
-                      >
-                        <div className="text-[10px] font-black uppercase text-emerald-600">Síndico / Admin</div>
-                        <div className="text-xs font-extrabold truncate">Davi Leonardo</div>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLoginEmail('carlos.silva@email.com');
-                          setLoginSenha('morador123');
-                          const res = condoStore.autenticarUsuario('carlos.silva@email.com', 'morador123');
-                          if (res.success && res.user) {
-                            onLoginSuccess(res.user);
-                          }
-                        }}
-                        className="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-left transition cursor-pointer"
-                      >
-                        <div className="text-[10px] font-black uppercase text-amber-600">Morador</div>
-                        <div className="text-xs font-extrabold truncate">Carlos Silva (101)</div>
-                      </button>
-                    </div>
-                  </div>
                 </div>
               ) : (
                 /* ABA 2: CADASTRAR-SE / SOLICITAR ACESSO */
