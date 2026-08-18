@@ -45,6 +45,7 @@ export const RegrasEncomendasPanel: React.FC<RegrasEncomendasPanelProps> = ({ co
   );
 
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Estados para Lançamento Rápido de Encomenda pelo Síndico / Administração
   const [selectedMoradorId, setSelectedMoradorId] = useState<string>('');
@@ -58,6 +59,7 @@ export const RegrasEncomendasPanel: React.FC<RegrasEncomendasPanelProps> = ({ co
   const [codigoRastreio, setCodigoRastreio] = useState('');
   const [observacao, setObservacao] = useState('');
   const [fotoUrl, setFotoUrl] = useState<string | undefined>(undefined);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Baixa com PIN / Modal de Entrega pelo Síndico
   const [rescuePinInput, setRescuePinInput] = useState('');
@@ -111,8 +113,10 @@ export const RegrasEncomendasPanel: React.FC<RegrasEncomendasPanelProps> = ({ co
 
   const handleCadastrarEncomenda = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
     if (!transportadora.trim()) {
-      setFeedback('Informe a transportadora da encomenda.');
+      setFormError('Por favor, informe a transportadora da encomenda (Ex: Mercado Livre, Correios, Shopee).');
       return;
     }
 
@@ -123,20 +127,32 @@ export const RegrasEncomendasPanel: React.FC<RegrasEncomendasPanelProps> = ({ co
         morador = moradores.find((m) => m.id === selectedMoradorId);
       } else if (searchMoradorInput.trim()) {
         const query = searchMoradorInput.trim();
-        const blocoMatch = query.match(/bloco\s*([0-9a-zA-Z]+)/i) || query.match(/^([0-9a-zA-Z]+)\s+([0-9]+)$/i);
-        const aptoMatch = query.match(/apto\s*([0-9a-zA-Z]+)/i) || query.match(/([0-9]+)$/);
+        // Tenta encontrar morador existente pelo nome, apto ou bloco
+        const matchingMorador = moradores.find((m) =>
+          m.nome.toLowerCase().includes(query.toLowerCase()) ||
+          m.unidade.apto.toLowerCase() === query.toLowerCase() ||
+          `${m.unidade.bloco} ${m.unidade.apto}`.toLowerCase().includes(query.toLowerCase()) ||
+          `bloco ${m.unidade.bloco} apto ${m.unidade.apto}`.toLowerCase().includes(query.toLowerCase())
+        );
 
-        const blocoExtraido = blocoMatch ? blocoMatch[1] : '1';
-        const aptoExtraido = aptoMatch ? aptoMatch[1] : query;
+        if (matchingMorador) {
+          morador = matchingMorador;
+        } else {
+          const blocoMatch = query.match(/bloco\s*([0-9a-zA-Z]+)/i) || query.match(/^([0-9a-zA-Z]+)\s+([0-9]+)$/i);
+          const aptoMatch = query.match(/apto\s*([0-9a-zA-Z]+)/i) || query.match(/([0-9]+)$/);
 
-        morador = condoStore.cadastrarOuObterMoradorRapido(condominio.id, {
-          bloco: blocoExtraido,
-          apto: aptoExtraido,
-        });
+          const blocoExtraido = blocoMatch ? blocoMatch[1] : '1';
+          const aptoExtraido = aptoMatch ? aptoMatch[1] : query;
+
+          morador = condoStore.cadastrarOuObterMoradorRapido(condominio.id, {
+            bloco: blocoExtraido,
+            apto: aptoExtraido,
+          });
+        }
       }
     } else {
       if (!manualApto.trim()) {
-        setFeedback('Por favor, informe o número do apartamento.');
+        setFormError('Por favor, informe o número do apartamento para entrega.');
         return;
       }
       morador = condoStore.cadastrarOuObterMoradorRapido(condominio.id, {
@@ -148,46 +164,70 @@ export const RegrasEncomendasPanel: React.FC<RegrasEncomendasPanelProps> = ({ co
     }
 
     if (!morador) {
-      setFeedback('Selecione um morador da lista ou informe o Bloco e Apartamento.');
+      setFormError('⚠️ Por favor, selecione para qual Morador/Apartamento a encomenda se destina no campo acima.');
       return;
     }
 
-    const newEnc = condoStore.addEncomenda(condominio.id, {
-      moradorId: morador.id,
-      transportadora: transportadora.trim(),
-      codigoRastreio: codigoRastreio.trim().toUpperCase(),
-      observacao: observacao.trim(),
-      recebidoPor: 'Administração / Síndico',
-      diasLimiteCustomizado: diasLimite,
-      fotoUrl: fotoUrl,
-    });
+    setIsSubmitting(true);
 
-    // Disparo 100% Automático via Gateway de Segundo Plano
-    whatsappService.notificarChegadaEncomendaAutomatica({
-      condominio,
-      morador,
-      encomenda: newEnc,
-    }).catch(() => {});
+    try {
+      const newEnc = condoStore.addEncomenda(condominio.id, {
+        moradorId: morador.id,
+        transportadora: transportadora.trim(),
+        codigoRastreio: codigoRastreio.trim().toUpperCase(),
+        observacao: observacao.trim(),
+        recebidoPor: 'Administração / Síndico',
+        diasLimiteCustomizado: diasLimite,
+        fotoUrl: fotoUrl,
+      });
 
-    setRecemCadastrada({
-      encomenda: newEnc,
-      morador,
-    });
+      // 1. Notificação In-App ao Morador
+      condoStore.addNotification({
+        condominioId: condominio.id,
+        paraMoradorId: morador.id,
+        titulo: '📦 Nova Encomenda Recebida na Portaria',
+        mensagem: `Uma encomenda da ${newEnc.transportadora} chegou para o Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto}! Seu PIN de retirada é ${newEnc.codigoResgate}.`,
+        tipo: 'encomenda',
+      });
 
-    setFeedback(`🚀 Encomenda cadastrada com sucesso! Notificação com o PIN [ ${newEnc.codigoResgate} ] enviada 100% automaticamente para o WhatsApp de ${morador.nome} (${morador.telefone}) e sincronizada no App do Morador!`);
-    confetti({ particleCount: 70, spread: 70 });
+      // 2. Disparo Push no Navegador
+      notificationService.dispararNotificacaoNativa(`📦 Encomenda na Portaria! - ${condominio.nome}`, {
+        body: `Olá ${morador.nome}! Pacote da ${newEnc.transportadora} disponível. PIN de Resgate: ${newEnc.codigoResgate}.`,
+        tag: `enc-${newEnc.id}`,
+      });
 
-    // Reset Form
-    setSelectedMoradorId('');
-    setManualBloco('');
-    setManualApto('');
-    setManualNome('');
-    setManualTelefone('');
-    setTransportadora('Mercado Livre');
-    setCodigoRastreio('');
-    setObservacao('');
-    setFotoUrl(undefined);
-    setSearchMoradorInput('');
+      // 3. Disparo 100% Automático via WhatsApp Gateway
+      whatsappService.notificarChegadaEncomendaAutomatica({
+        condominio,
+        morador,
+        encomenda: newEnc,
+      }).catch((err) => console.warn('[WhatsApp Sindico Dispatch]:', err));
+
+      const payload = {
+        encomenda: newEnc,
+        morador,
+      };
+
+      setRecemCadastrada(payload);
+      setFeedback(`🚀 Encomenda cadastrada com sucesso! Notificação com o PIN [ ${newEnc.codigoResgate} ] enviada para ${morador.nome} (Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto})!`);
+      confetti({ particleCount: 70, spread: 70 });
+
+      // Reset Form
+      setSelectedMoradorId('');
+      setManualBloco('');
+      setManualApto('');
+      setManualNome('');
+      setManualTelefone('');
+      setCodigoRastreio('');
+      setObservacao('');
+      setFotoUrl(undefined);
+      setSearchMoradorInput('');
+      setFormError(null);
+    } catch (err: any) {
+      setFormError(`Erro ao lançar encomenda: ${err?.message || 'Tente novamente.'}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleDarBaixaPIN = (e: React.FormEvent) => {
@@ -375,18 +415,26 @@ export const RegrasEncomendasPanel: React.FC<RegrasEncomendasPanelProps> = ({ co
 
           <form onSubmit={handleCadastrarEncomenda} className="space-y-4">
             {cadastroMode === 'lista' ? (
-              <div className="space-y-3">
+              <div className={`space-y-3 p-3 rounded-2xl transition border ${formError && !selectedMoradorId && !searchMoradorInput.trim() ? 'border-rose-400 bg-rose-50/30 ring-2 ring-rose-200' : 'border-slate-100 bg-slate-50/50'}`}>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Morador / Unidade Destino
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Morador / Unidade Destino <span className="text-rose-500">*</span>
+                    </label>
+                    {selectedMoradorId && (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">
+                        ✓ Selecionado
+                      </span>
+                    )}
+                  </div>
                   <select
                     value={selectedMoradorId}
                     onChange={(e) => {
                       setSelectedMoradorId(e.target.value);
                       setSearchMoradorInput('');
+                      setFormError(null);
                     }}
-                    className="w-full p-3 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-amber-500 focus:outline-none bg-slate-50"
+                    className="w-full p-3 rounded-xl border border-slate-300 text-xs font-semibold focus:ring-2 focus:ring-amber-500 focus:outline-none bg-white cursor-pointer"
                   >
                     <option value="">Selecionar morador cadastrado...</option>
                     {moradores.map((m) => (
@@ -397,12 +445,45 @@ export const RegrasEncomendasPanel: React.FC<RegrasEncomendasPanelProps> = ({ co
                   </select>
                 </div>
 
+                {/* Seleção Rápida de Moradores em Chips */}
+                {moradores.length > 0 && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1.5">
+                      Toque rápido na unidade:
+                    </label>
+                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                      {moradores.slice(0, 10).map((m) => {
+                        const isSelected = selectedMoradorId === m.id;
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedMoradorId(m.id);
+                              setSearchMoradorInput('');
+                              setFormError(null);
+                            }}
+                            className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                              isSelected
+                                ? 'bg-amber-600 text-white shadow-sm'
+                                : 'bg-white text-slate-700 border border-slate-200 hover:bg-amber-50 hover:border-amber-300'
+                            }`}
+                          >
+                            <span>Bl {m.unidade.bloco} - {m.unidade.apto}</span>
+                            <span className="opacity-75 text-[10px]">({m.nome.split(' ')[0]})</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 mb-1">
                     Ou busque digitando número do bloco e apartamento:
                   </label>
                   <div className="relative">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                     <input
                       type="text"
                       placeholder="Ex: Bloco 20 303 ou 303..."
@@ -410,21 +491,25 @@ export const RegrasEncomendasPanel: React.FC<RegrasEncomendasPanelProps> = ({ co
                       onChange={(e) => {
                         setSearchMoradorInput(e.target.value);
                         setSelectedMoradorId('');
+                        setFormError(null);
                       }}
-                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                      className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none bg-white"
                     />
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+              <div className={`grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-2xl border ${formError && !manualApto.trim() ? 'border-rose-400 bg-rose-50/30 ring-2 ring-rose-200' : 'border-slate-200 bg-slate-50'}`}>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">Bloco (rápido)</label>
                   <input
                     type="text"
                     placeholder="Ex: 20"
                     value={manualBloco}
-                    onChange={(e) => setManualBloco(e.target.value)}
+                    onChange={(e) => {
+                      setManualBloco(e.target.value);
+                      setFormError(null);
+                    }}
                     className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-bold bg-white"
                   />
                 </div>
@@ -435,7 +520,10 @@ export const RegrasEncomendasPanel: React.FC<RegrasEncomendasPanelProps> = ({ co
                     placeholder="Ex: 303"
                     required
                     value={manualApto}
-                    onChange={(e) => setManualApto(e.target.value)}
+                    onChange={(e) => {
+                      setManualApto(e.target.value);
+                      setFormError(null);
+                    }}
                     className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-bold bg-white"
                   />
                 </div>
@@ -470,7 +558,10 @@ export const RegrasEncomendasPanel: React.FC<RegrasEncomendasPanelProps> = ({ co
                   <button
                     key={c}
                     type="button"
-                    onClick={() => setTransportadora(c)}
+                    onClick={() => {
+                      setTransportadora(c);
+                      setFormError(null);
+                    }}
                     className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
                       transportadora === c
                         ? 'bg-amber-600 text-white'
@@ -485,7 +576,10 @@ export const RegrasEncomendasPanel: React.FC<RegrasEncomendasPanelProps> = ({ co
                 type="text"
                 required
                 value={transportadora}
-                onChange={(e) => setTransportadora(e.target.value)}
+                onChange={(e) => {
+                  setTransportadora(e.target.value);
+                  setFormError(null);
+                }}
                 placeholder="Ex: Mercado Livre, Correios, Shopee..."
                 className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
               />
@@ -523,13 +617,48 @@ export const RegrasEncomendasPanel: React.FC<RegrasEncomendasPanelProps> = ({ co
               />
             </div>
 
+            {/* Banner de Erro Inline Imediato */}
+            {formError && (
+              <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-300 text-rose-800 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{formError}</span>
+              </div>
+            )}
+
+            {/* Sucesso Inline com PIN */}
+            {recemCadastrada && (
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs font-bold flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in">
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <div>
+                    <p className="font-extrabold text-emerald-900">
+                      ✓ Encomenda Lançada: Bloco {recemCadastrada.morador.unidade.bloco} - Apto {recemCadastrada.morador.unidade.apto} ({recemCadastrada.morador.nome})
+                    </p>
+                    <p className="text-[11px] text-emerald-700 font-normal">
+                      PIN de Resgate gerado e enviado via WhatsApp: <strong className="font-mono font-bold text-emerald-900">{recemCadastrada.encomenda.codigoResgate}</strong>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(recemCadastrada.encomenda.codigoResgate);
+                    setFeedback('🔐 Código PIN copiado com sucesso!');
+                  }}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shrink-0 cursor-pointer shadow-sm"
+                >
+                  Copiar PIN
+                </button>
+              </div>
+            )}
+
             <button
               type="submit"
-              onClick={(e) => handleCadastrarEncomenda(e)}
-              className="w-full py-3.5 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs shadow-lg shadow-amber-600/20 transition active:scale-98 cursor-pointer flex items-center justify-center gap-2"
+              disabled={isSubmitting}
+              className="w-full py-3.5 rounded-2xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-black text-xs shadow-lg shadow-amber-600/20 transition active:scale-98 cursor-pointer flex items-center justify-center gap-2"
             >
               <Send className="w-4 h-4" />
-              <span>⚡ Lançar Encomenda & Notificar Morador (PIN: 6 Dígitos)</span>
+              <span>{isSubmitting ? 'Lançando Encomenda...' : '⚡ Lançar Encomenda & Notificar Morador (PIN: 6 Dígitos)'}</span>
             </button>
           </form>
         </div>
