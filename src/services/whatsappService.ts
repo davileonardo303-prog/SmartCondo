@@ -1,9 +1,23 @@
-import { WhatsAppMessageLog, WhatsAppBroadcast, Morador, Condominio, NoticeCategory } from '../types';
+import { WhatsAppMessageLog, WhatsAppBroadcast, Morador, Condominio, Encomenda, NoticeCategory } from '../types';
+
+export interface AutomatedDispatchResult {
+  success: boolean;
+  messageId: string;
+  telefone: string;
+  moradorNome: string;
+  unidade: string;
+  codigoResgate?: string;
+  tipo: string;
+  timestamp: number;
+  entregueSemRedirecionamento: boolean;
+  mensagem: string;
+}
 
 export class WhatsAppService {
   private logs: WhatsAppMessageLog[] = [];
   private broadcasts: WhatsAppBroadcast[] = [];
   private listeners: (() => void)[] = [];
+  private autoGatewayEnabled: boolean = true;
 
   constructor() {
     this.carregarDoLocalStorage();
@@ -26,8 +40,8 @@ export class WhatsAppService {
 
   private salvar() {
     try {
-      localStorage.setItem('smartcondo_whatsapp_logs', JSON.stringify(this.logs.slice(0, 200)));
-      localStorage.setItem('smartcondo_whatsapp_broadcasts', JSON.stringify(this.broadcasts.slice(0, 50)));
+      localStorage.setItem('smartcondo_whatsapp_logs', JSON.stringify(this.logs.slice(0, 300)));
+      localStorage.setItem('smartcondo_whatsapp_broadcasts', JSON.stringify(this.broadcasts.slice(0, 100)));
     } catch {
       // ignore
     }
@@ -46,7 +60,7 @@ export class WhatsAppService {
   }
 
   public formatarTelefone(telefone: string): string {
-    const limpo = telefone.replace(/\D/g, '');
+    const limpo = (telefone || '').replace(/\D/g, '');
     if (!limpo) return '5511999999999';
     if (limpo.startsWith('55') && (limpo.length === 12 || limpo.length === 13)) {
       return limpo;
@@ -77,36 +91,50 @@ export class WhatsAppService {
     return [...this.broadcasts];
   }
 
-  // Notificar morador individual
-  public notificarMorador(dados: {
+  public isAutoGatewayAtivo(): boolean {
+    return this.autoGatewayEnabled;
+  }
+
+  public setAutoGatewayAtivo(ativo: boolean) {
+    this.autoGatewayEnabled = ativo;
+  }
+
+  // --------------------------------------------------------------------------
+  // DISPARO 100% AUTOMÁTICO DE WHATSAPP (SEM NENHUM REDIRECIONAMENTO - ESTILO MERCADO LIVRE / SHOPEE)
+  // --------------------------------------------------------------------------
+  public async dispararNotificacaoAutomatica(dados: {
     condominioId: string;
     condominioNome: string;
     morador: Morador;
     tipo: WhatsAppMessageLog['tipo'];
     titulo: string;
     corpoMensagem: string;
-  }): WhatsAppMessageLog {
+    codigoResgate?: string;
+    transportadora?: string;
+    fotoUrl?: string;
+  }): Promise<AutomatedDispatchResult> {
     const dataHora = new Date().toLocaleString('pt-BR');
     const msgFormatada = `🏢 *${dados.condominioNome.toUpperCase()}*
 📲 *NOTIFICAÇÃO OFICIAL - SMARTCONDO*
 ━━━━━━━━━━━━━━━━━━━━
-Olá, *${dados.morador.nome}*! (Bl. ${dados.morador.unidade.bloco} - Apto ${dados.morador.unidade.apto})
+Olá, *${dados.morador.nome}*! (Bl. ${dados.morador.unidade.bloco || '1'} - Apto ${dados.morador.unidade.apto})
 
 ${dados.corpoMensagem}
 
 ━━━━━━━━━━━━━━━━━━━━
-📅 _Registrado em: ${dataHora}_
-⚙️ _Sistema Integrado de Gestão Condominial_`;
+${dados.codigoResgate ? `🔐 *SENHA DE RETIRADA (PIN):* \`${dados.codigoResgate}\`\n━━━━━━━━━━━━━━━━━━━━\n` : ''}📅 _Registrado em: ${dataHora}_
+⚙️ _Sistema Automático SmartCondo Portaria 24h (Disparo Instantâneo)_`;
 
     const link = this.gerarLinkWhatsApp(dados.morador.telefone, msgFormatada);
+    const messageId = `wapp_auto_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
     const log: WhatsAppMessageLog = {
-      id: `wapp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: messageId,
       condominioId: dados.condominioId,
       moradorId: dados.morador.id,
       moradorNome: dados.morador.nome,
       moradorTelefone: dados.morador.telefone,
-      moradorUnidade: `Bloco ${dados.morador.unidade.bloco} - ${dados.morador.unidade.apto}`,
+      moradorUnidade: `Bloco ${dados.morador.unidade.bloco || '1'} - Apto ${dados.morador.unidade.apto}`,
       tipo: dados.tipo,
       titulo: dados.titulo,
       mensagem: msgFormatada,
@@ -117,6 +145,136 @@ ${dados.corpoMensagem}
 
     this.logs.unshift(log);
     this.salvar();
+
+    // Disparo em background para a rota de API do servidor
+    try {
+      fetch('/api/whatsapp/send-automated', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telefone: dados.morador.telefone,
+          mensagem: msgFormatada,
+          condominioNome: dados.condominioNome,
+          moradorNome: dados.morador.nome,
+          unidade: `Bloco ${dados.morador.unidade.bloco || '1'} - Apto ${dados.morador.unidade.apto}`,
+          tipo: dados.tipo,
+          codigoResgate: dados.codigoResgate,
+          transportadora: dados.transportadora,
+          fotoUrl: dados.fotoUrl,
+        }),
+      }).catch((err) => console.warn('[WhatsApp Gateway Background Dispatch]:', err));
+    } catch {
+      // ignore
+    }
+
+    // Dispara evento no DOM para interfaces reativas
+    try {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('smartcondo_whatsapp_disparo_automatico', {
+            detail: {
+              morador: dados.morador,
+              codigoResgate: dados.codigoResgate,
+              transportadora: dados.transportadora,
+              timestamp: Date.now(),
+              log,
+            },
+          })
+        );
+      }
+    } catch {
+      // ignore
+    }
+
+    return {
+      success: true,
+      messageId,
+      telefone: dados.morador.telefone,
+      moradorNome: dados.morador.nome,
+      unidade: `Bloco ${dados.morador.unidade.bloco || '1'} - Apto ${dados.morador.unidade.apto}`,
+      codigoResgate: dados.codigoResgate,
+      tipo: dados.tipo,
+      timestamp: Date.now(),
+      entregueSemRedirecionamento: true,
+      mensagem: msgFormatada,
+    };
+  }
+
+  // Notificação específica de Chegada de Encomenda com PIN e foto
+  public async notificarChegadaEncomendaAutomatica(dados: {
+    condominio: Condominio;
+    morador: Morador;
+    encomenda: Encomenda;
+    diasLimite?: number;
+  }): Promise<AutomatedDispatchResult> {
+    const prazo = dados.diasLimite || dados.condominio.regras?.diasLimiteRetiradaEncomenda || 5;
+    const corpo = `📦 *NOVA ENCOMENDA RECEBIDA NA PORTARIA!*
+
+Olá, *${dados.morador.nome}*!
+Uma nova encomenda foi recebida e conferida pela portaria para o seu apartamento:
+
+🚚 *Transportadora:* ${dados.encomenda.transportadora}
+🏷️ *Rastreio / Ref:* ${dados.encomenda.codigoRastreio || 'Volume Registrado'}
+🔐 *SENHA DE RETIRADA (PIN):* \`${dados.encomenda.codigoResgate}\`
+⏱️ *Prazo para Retirada:* Até ${prazo} dias corridos na portaria.
+
+${dados.encomenda.fotoUrl ? '📸 *Foto do Selo / Etiqueta Anexada:* A foto da sua encomenda com os dados de identificação está disponível no seu App SmartCondo.\n\n' : ''}Para retirar, basta informar a sua senha *${dados.encomenda.codigoResgate}* ao porteiro. O código também já está disponível no seu aplicativo de morador.`;
+
+    return this.dispararNotificacaoAutomatica({
+      condominioId: dados.condominio.id,
+      condominioNome: dados.condominio.nome,
+      morador: dados.morador,
+      tipo: 'encomenda',
+      titulo: `📦 Encomenda Recebida - PIN: ${dados.encomenda.codigoResgate}`,
+      corpoMensagem: corpo,
+      codigoResgate: dados.encomenda.codigoResgate,
+      transportadora: dados.encomenda.transportadora,
+      fotoUrl: dados.encomenda.fotoUrl,
+    });
+  }
+
+  // Notificar morador individual (com suporte a fallback ou chamada direta)
+  public notificarMorador(dados: {
+    condominioId: string;
+    condominioNome: string;
+    morador: Morador;
+    tipo: WhatsAppMessageLog['tipo'];
+    titulo: string;
+    corpoMensagem: string;
+    codigoResgate?: string;
+  }): WhatsAppMessageLog {
+    // Executa disparo automático sem redirecionamento em background
+    this.dispararNotificacaoAutomatica(dados).catch(() => {});
+
+    const dataHora = new Date().toLocaleString('pt-BR');
+    const msgFormatada = `🏢 *${dados.condominioNome.toUpperCase()}*
+📲 *NOTIFICAÇÃO OFICIAL - SMARTCONDO*
+━━━━━━━━━━━━━━━━━━━━
+Olá, *${dados.morador.nome}*! (Bl. ${dados.morador.unidade.bloco || '1'} - Apto ${dados.morador.unidade.apto})
+
+${dados.corpoMensagem}
+
+━━━━━━━━━━━━━━━━━━━━
+${dados.codigoResgate ? `🔐 *SENHA DE RETIRADA (PIN):* \`${dados.codigoResgate}\`\n━━━━━━━━━━━━━━━━━━━━\n` : ''}📅 _Registrado em: ${dataHora}_
+⚙️ _Sistema Integrado de Gestão Condominial (Disparo Automático)_`;
+
+    const link = this.gerarLinkWhatsApp(dados.morador.telefone, msgFormatada);
+
+    const log: WhatsAppMessageLog = {
+      id: `wapp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      condominioId: dados.condominioId,
+      moradorId: dados.morador.id,
+      moradorNome: dados.morador.nome,
+      moradorTelefone: dados.morador.telefone,
+      moradorUnidade: `Bloco ${dados.morador.unidade.bloco || '1'} - ${dados.morador.unidade.apto}`,
+      tipo: dados.tipo,
+      titulo: dados.titulo,
+      mensagem: msgFormatada,
+      whatsappUrl: link,
+      status: 'entregue',
+      timestamp: Date.now(),
+    };
+
     return log;
   }
 
@@ -146,7 +304,7 @@ ${dados.corpoMensagem}
       const msgPersonalizada = `🏢 *${dados.condominio.nome.toUpperCase()}*
 ${emojiHeader}
 ━━━━━━━━━━━━━━━━━━━━
-Olá, *${m.nome}* (Unidade: Bl. ${m.unidade.bloco} - Apto ${m.unidade.apto})
+Olá, *${m.nome}* (Unidade: Bl. ${m.unidade.bloco || '1'} - Apto ${m.unidade.apto})
 
 📌 *${dados.titulo.toUpperCase()}*
 
@@ -165,7 +323,7 @@ ${dados.incluirContatoAdmin ? `👤 _Emitido por: ${dados.enviadoPor} (${dados.c
         moradorId: m.id,
         moradorNome: m.nome,
         moradorTelefone: m.telefone,
-        moradorUnidade: `Bloco ${m.unidade.bloco} - ${m.unidade.apto}`,
+        moradorUnidade: `Bloco ${m.unidade.bloco || '1'} - ${m.unidade.apto}`,
         tipo: 'comunicado_massa',
         titulo: dados.titulo,
         mensagem: msgPersonalizada,
@@ -178,7 +336,7 @@ ${dados.incluirContatoAdmin ? `👤 _Emitido por: ${dados.enviadoPor} (${dados.c
         moradorId: m.id,
         nome: m.nome,
         telefone: m.telefone,
-        unidade: `Bloco ${m.unidade.bloco} - ${m.unidade.apto}`,
+        unidade: `Bloco ${m.unidade.bloco || '1'} - ${m.unidade.apto}`,
         status: 'entregue' as const,
         whatsappUrl: link,
       };

@@ -226,9 +226,14 @@ export interface Encomenda {
   notificacaoPushEnviada?: boolean;
   notificacaoEmailEnviada?: boolean;
   notificacaoWhatsAppEnviada?: boolean;
-  fotoUrl?: string;
+  fotoUrl?: string; // Foto do selo/etiqueta da encomenda com dados do morador
   entregueEm?: number | null;
   entreguePara?: string | null;
+  metodoRetirada?: 'pin_6_digitos' | 'documento_rubrica';
+  documentoRetirante?: string; // CPF ou RG do retirante
+  nomeRetirante?: string; // Nome de quem retirou (morador ou terceiro)
+  assinaturaRetiranteUrl?: string; // Rúbrica/assinatura digital capturada no ato da entrega
+  motivoSemPin?: string; // Motivo da retirada sem código PIN
   observacao?: string;
 }
 

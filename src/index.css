@@ -1,10 +1,78 @@
 @import "tailwindcss";
 
 @layer base {
+  :root {
+    --bg-main: #f8fafc;
+    --bg-card: #ffffff;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --border-color: #e2e8f0;
+  }
+
+  html.dark, body.dark-mode-active {
+    --bg-main: #0f172a;
+    --bg-card: #1e293b;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --border-color: #334155;
+    background-color: #0f172a !important;
+    color: #f8fafc !important;
+  }
+
   body {
-    background-color: #f8fafc;
-    color: #334155;
+    background-color: var(--bg-main);
+    color: var(--text-main);
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  /* Dark mode overrides for common components */
+  html.dark .bg-white,
+  body.dark-mode-active .bg-white {
+    background-color: #1e293b !important;
+    color: #f8fafc !important;
+    border-color: #334155 !important;
+  }
+
+  html.dark .bg-slate-50,
+  body.dark-mode-active .bg-slate-50 {
+    background-color: #0f172a !important;
+    color: #f1f5f9 !important;
+  }
+
+  html.dark .bg-slate-100,
+  body.dark-mode-active .bg-slate-100 {
+    background-color: #1e293b !important;
+    color: #f8fafc !important;
+  }
+
+  html.dark .text-slate-900,
+  html.dark .text-slate-800,
+  html.dark .text-slate-700,
+  body.dark-mode-active .text-slate-900,
+  body.dark-mode-active .text-slate-800,
+  body.dark-mode-active .text-slate-700 {
+    color: #f8fafc !important;
+  }
+
+  html.dark .text-slate-600,
+  html.dark .text-slate-500,
+  body.dark-mode-active .text-slate-600,
+  body.dark-mode-active .text-slate-500 {
+    color: #94a3b8 !important;
+  }
+
+  html.dark .border-slate-200,
+  html.dark .border-slate-300,
+  body.dark-mode-active .border-slate-200,
+  body.dark-mode-active .border-slate-300 {
+    border-color: #334155 !important;
+  }
+
+  html.dark header,
+  body.dark-mode-active header {
+    background-color: #0f172a !important;
+    border-color: #334155 !important;
   }
 }
 
@@ -18,9 +86,19 @@
   background: #f1f5f9;
 }
 
+html.dark ::-webkit-scrollbar-track,
+body.dark-mode-active ::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 6px;
+}
+
+html.dark ::-webkit-scrollbar-thumb,
+body.dark-mode-active ::-webkit-scrollbar-thumb {
+  background: #475569;
 }
 
 ::-webkit-scrollbar-thumb:hover {

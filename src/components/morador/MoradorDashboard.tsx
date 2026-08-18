@@ -186,6 +186,9 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
   // Copiado feedback
   const [copiadoKey, setCopiadoKey] = useState<string | null>(null);
 
+  // Modal de Foto da Encomenda / Selo em Alta Resolução
+  const [modalFotoEncomenda, setModalFotoEncomenda] = useState<{ url: string; titulo: string; rastreio?: string } | null>(null);
+
   // Dados reativos carregados do store
   const visitantes = condoStore.getVisitantes(condominio.id, morador.id);
   const cameras = condoStore.getCameras(condominio.id);
@@ -1813,9 +1816,21 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
       {/* ==================================================================== */}
       {activeTab === 'encomendas' && (
         <div className="space-y-6">
-          <div>
-            <h3 className="text-xl font-extrabold text-slate-900">Suas Encomendas</h3>
-            <p className="text-xs text-slate-500">Acompanhe pacotes recebidos pela portaria e apresente o PIN de resgate.</p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <h3 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+                <Package className="w-6 h-6 text-amber-600" />
+                <span>Suas Encomendas</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Acompanhe pacotes recebidos pela portaria, confira a foto da etiqueta e resgate com seu PIN.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                {pendingPackages.length} aguardando na portaria
+              </span>
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -1823,43 +1838,186 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
               encomendas.map((enc) => (
                 <div
                   key={enc.id}
-                  className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4"
+                  className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4 hover:border-amber-200 transition"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Package className="w-5 h-5 text-amber-600" />
-                      <span className="font-extrabold text-slate-900 text-base">{enc.transportadora}</span>
+                  {/* Topo do Card */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 flex items-center justify-center font-bold shrink-0">
+                        <Package className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-extrabold text-slate-900 text-base">{enc.transportadora}</div>
+                        <div className="text-[11px] text-slate-500 font-mono">
+                          {enc.codigoRastreio ? `Rastreio: ${enc.codigoRastreio}` : 'Sem código de rastreio'}
+                        </div>
+                      </div>
                     </div>
 
                     <span
-                      className={`text-xs font-black px-3 py-1 rounded-full ${
+                      className={`text-xs font-black px-3 py-1 rounded-full border ${
                         enc.status === 'na_portaria'
-                          ? 'bg-amber-500 text-white animate-pulse'
-                          : 'bg-emerald-100 text-emerald-800'
+                          ? 'bg-amber-500 text-white border-amber-600 animate-pulse'
+                          : 'bg-emerald-100 text-emerald-800 border-emerald-300'
                       }`}
                     >
-                      {enc.status === 'na_portaria' ? 'Aguardando Retirada' : 'Entregue'}
+                      {enc.status === 'na_portaria' ? '📦 Aguardando Retirada' : '✅ Entregue'}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-600">
-                    <div>Código de Rastreio: <strong className="text-slate-900">{enc.codigoRastreio || 'N/A'}</strong></div>
-                    <div>Recebido por: <strong className="text-slate-900">{enc.recebidoPor}</strong></div>
-                    <div>Data de Entrada: <strong className="text-slate-900">{new Date(enc.recebidoEm).toLocaleString('pt-BR')}</strong></div>
-                    {enc.observacao && <div>Nota: <strong className="text-slate-900">{enc.observacao}</strong></div>}
-                  </div>
+                  {/* Foto do Selo / Etiqueta e Informações Detalhadas */}
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start bg-slate-50/80 p-4 rounded-2xl border border-slate-100">
+                    {/* Imagem do Selo / Pacote */}
+                    <div className="md:col-span-4 flex flex-col items-center">
+                      {enc.fotoUrl ? (
+                        <div className="w-full space-y-2">
+                          <div
+                            onClick={() =>
+                              setModalFotoEncomenda({
+                                url: enc.fotoUrl!,
+                                titulo: `Selo da Encomenda - ${enc.transportadora}`,
+                                rastreio: enc.codigoRastreio,
+                              })
+                            }
+                            className="relative w-full h-36 rounded-xl overflow-hidden border-2 border-amber-300 bg-slate-900 cursor-pointer group shadow-xs"
+                            title="Clique para ampliar a foto do selo"
+                          >
+                            <img
+                              src={enc.fotoUrl}
+                              alt="Selo da Encomenda"
+                              className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end justify-between p-2.5">
+                              <span className="text-[10px] font-bold text-white flex items-center gap-1">
+                                <Camera className="w-3.5 h-3.5 text-amber-400" />
+                                <span>Selo Registrado</span>
+                              </span>
+                              <span className="text-[10px] font-bold bg-white/20 text-white backdrop-blur-xs px-2 py-0.5 rounded-md">
+                                Ampliar 🔍
+                              </span>
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-slate-500 text-center leading-tight">
+                            Foto tirada na portaria. Confira seu nome e bloco na etiqueta.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="w-full h-28 rounded-xl border border-dashed border-slate-300 bg-white flex flex-col items-center justify-center text-slate-400 text-xs p-3 text-center">
+                          <Camera className="w-6 h-6 mb-1 text-slate-300" />
+                          <span>Foto do selo não anexada na portaria</span>
+                        </div>
+                      )}
+                    </div>
 
-                  {enc.status === 'na_portaria' && (
-                    <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-between">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-amber-900">PIN de Resgate na Portaria</span>
-                        <div className="text-2xl font-mono font-black text-amber-800 tracking-wider">
-                          {enc.codigoResgate}
+                    {/* Detalhes de Entrada */}
+                    <div className="md:col-span-8 space-y-2 text-xs text-slate-700">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <span className="text-slate-400 text-[11px] block">Destinatário:</span>
+                          <strong className="text-slate-900">{enc.moradorNome}</strong>
+                          <div className="text-[11px] text-amber-800 font-semibold">
+                            Bloco {enc.unidade.bloco} - Apto {enc.unidade.apto}
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-slate-400 text-[11px] block">Recebido na Portaria:</span>
+                          <strong className="text-slate-900">
+                            {new Date(enc.recebidoEm).toLocaleString('pt-BR')}
+                          </strong>
+                          <div className="text-[11px] text-slate-500">Por: {enc.recebidoPor}</div>
                         </div>
                       </div>
-                      <span className="text-xs text-amber-800 font-semibold max-w-xs text-right">
-                        Informe este código ao porteiro para retirar seu pacote.
-                      </span>
+
+                      {enc.observacao && (
+                        <div className="pt-1">
+                          <span className="text-slate-400 text-[11px] block">Local / Observação:</span>
+                          <span className="text-slate-800 font-medium">{enc.observacao}</span>
+                        </div>
+                      )}
+
+                      {enc.status === 'entregue' && (
+                        <div className="pt-2 border-t border-slate-200 mt-2">
+                          <span className="text-[11px] font-bold text-emerald-800 block mb-1">
+                            Comprovante de Retirada:
+                          </span>
+                          <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl text-emerald-950 flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <div>
+                                Retirado por: <strong>{enc.nomeRetirante || enc.entreguePara || enc.moradorNome}</strong>
+                              </div>
+                              <div className="text-[11px] text-emerald-800">
+                                Método:{' '}
+                                <strong>
+                                  {enc.metodoRetirada === 'documento_rubrica'
+                                    ? 'Documento com Foto + Rúbrica'
+                                    : 'Código PIN de 6 Dígitos'}
+                                </strong>
+                                {enc.documentoRetirante && ` (Doc: ${enc.documentoRetirante})`}
+                              </div>
+                              {enc.entregueEm && (
+                                <div className="text-[10px] text-emerald-700">
+                                  Em: {new Date(enc.entregueEm).toLocaleString('pt-BR')}
+                                </div>
+                              )}
+                            </div>
+
+                            {enc.assinaturaRetiranteUrl && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setModalFotoEncomenda({
+                                    url: enc.assinaturaRetiranteUrl!,
+                                    titulo: `Rúbrica de Retirada - ${enc.nomeRetirante || enc.moradorNome}`,
+                                  })
+                                }
+                                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition"
+                              >
+                                <span>Ver Rúbrica</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Box de PIN para Encomendas Pendentes */}
+                  {enc.status === 'na_portaria' && (
+                    <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 text-white flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md shadow-amber-500/20">
+                      <div className="text-center sm:text-left">
+                        <span className="text-[11px] uppercase tracking-wider font-extrabold text-amber-100 block">
+                          🔑 Seu Código PIN de Resgate na Portaria
+                        </span>
+                        <div className="text-3xl font-mono font-black tracking-widest text-white mt-0.5">
+                          {enc.codigoResgate}
+                        </div>
+                        <p className="text-[11px] text-amber-100 mt-1 max-w-md">
+                          Apresente este código de 6 dígitos ao porteiro. Sem o código, a retirada só poderá ser feita mediante apresentação de documento com foto e assinatura.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(enc.codigoResgate);
+                          setCopiadoKey(`pin_${enc.id}`);
+                          setTimeout(() => setCopiadoKey(null), 2500);
+                        }}
+                        className="px-4 py-2.5 rounded-xl bg-white text-amber-900 font-extrabold text-xs hover:bg-amber-50 transition active:scale-95 shadow-sm shrink-0 flex items-center gap-1.5 cursor-pointer"
+                      >
+                        {copiadoKey === `pin_${enc.id}` ? (
+                          <>
+                            <Check className="w-4 h-4 text-emerald-600" />
+                            <span>Copiado!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4 text-amber-700" />
+                            <span>Copiar PIN</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   )}
                 </div>
@@ -2083,6 +2241,54 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
           });
         }}
       />
+
+      {/* Modal: Visualizador da Foto do Selo / Etiqueta em Alta Resolução */}
+      {modalFotoEncomenda && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm p-4 flex flex-col items-center justify-center animate-in fade-in">
+          <div className="bg-white rounded-3xl p-5 max-w-lg w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="font-black text-slate-900 text-sm block">
+                  {modalFotoEncomenda.titulo}
+                </span>
+                {modalFotoEncomenda.rastreio && (
+                  <span className="text-[11px] font-mono text-slate-500">
+                    Rastreio: {modalFotoEncomenda.rastreio}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalFotoEncomenda(null)}
+                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="rounded-2xl overflow-hidden border-2 border-amber-300 bg-slate-950 max-h-[65vh] flex items-center justify-center">
+              <img
+                src={modalFotoEncomenda.url}
+                alt="Foto da Encomenda"
+                className="max-h-[60vh] w-full object-contain"
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-1 text-xs">
+              <span className="text-slate-500 text-[11px]">
+                🔍 Verifique se os dados e bloco correspondem à sua compra.
+              </span>
+              <button
+                type="button"
+                onClick={() => setModalFotoEncomenda(null)}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-black text-white font-extrabold text-xs"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

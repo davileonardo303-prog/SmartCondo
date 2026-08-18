@@ -148,17 +148,13 @@ class NotificationService {
       tag: `encomenda-${encomenda.id}`,
     });
 
-    // B. Notificação por WhatsApp
-    const msgWhatsApp = `📦 *NOVA ENCOMENDA NA PORTARIA*\n\nOlá, *${morador.nome}*!\nChegou uma encomenda para a sua unidade (*Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto}*).\n\n🚚 *Transportadora:* ${encomenda.transportadora}\n🏷️ *Rastreio / Ref:* ${encomenda.codigoRastreio || 'Volume Registrado'}\n🔐 *CÓDIGO DE RESGATE:* \`${encomenda.codigoResgate}\`\n⏱️ *Regra do Condomínio:* Por favor, retire seu pacote na portaria em até *${prazoTexto}*.\n\n⚠️ _Caso não retire em ${prazoTexto}, o pacote será encaminhado para a Administração do Condomínio._`;
-
-    whatsappService.notificarMorador({
-      condominioId: condominio.id,
-      condominioNome: condominio.nome,
+    // B. Notificação 100% Automática por WhatsApp (Gateway Background sem redirecionar)
+    whatsappService.notificarChegadaEncomendaAutomatica({
+      condominio,
       morador,
-      tipo: 'encomenda',
-      titulo: '📦 Chegada de Encomenda na Portaria',
-      corpoMensagem: msgWhatsApp,
-    });
+      encomenda,
+      diasLimite,
+    }).catch((err) => console.warn('Erro no envio automático de WhatsApp:', err));
 
     // C. Notificação por E-mail
     const emailLog: EmailNotificationLog = {

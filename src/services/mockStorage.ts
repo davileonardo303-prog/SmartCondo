@@ -2462,13 +2462,36 @@ class MockCondoStore {
   }
 
   // --- Encomendas & Portaria ---
-  public getEncomendas(condoId: string, moradorId?: string): Encomenda[] {
+  public getEncomendas(condoId: string, moradorIdOrObj?: string | Morador): Encomenda[] {
     if (condoId) {
       this.ensureCondoSubscribed(condoId);
     }
     const list = this.encomendas[condoId] || [];
-    if (moradorId) {
-      return list.filter((e) => e.moradorId === moradorId);
+    if (moradorIdOrObj) {
+      if (typeof moradorIdOrObj === 'string') {
+        const moradorId = moradorIdOrObj;
+        const moradorObj = this.getMorador(condoId, moradorId);
+        return list.filter((e) => {
+          if (e.moradorId === moradorId) return true;
+          if (moradorObj && e.unidade && moradorObj.unidade) {
+            const sameApto = String(e.unidade.apto || '').toLowerCase().trim() === String(moradorObj.unidade.apto || '').toLowerCase().trim();
+            const sameBloco = !e.unidade.bloco || !moradorObj.unidade.bloco || String(e.unidade.bloco || '').toLowerCase().trim() === String(moradorObj.unidade.bloco || '').toLowerCase().trim();
+            return sameApto && sameBloco;
+          }
+          return false;
+        });
+      } else {
+        const morador = moradorIdOrObj;
+        return list.filter((e) => {
+          if (e.moradorId === morador.id) return true;
+          if (e.unidade && morador.unidade) {
+            const sameApto = String(e.unidade.apto || '').toLowerCase().trim() === String(morador.unidade.apto || '').toLowerCase().trim();
+            const sameBloco = !e.unidade.bloco || !morador.unidade.bloco || String(e.unidade.bloco || '').toLowerCase().trim() === String(morador.unidade.bloco || '').toLowerCase().trim();
+            return sameApto && sameBloco;
+          }
+          return false;
+        });
+      }
     }
     return [...list];
   }
@@ -2537,6 +2560,7 @@ class MockCondoStore {
       observacao?: string;
       fotoUrl?: string;
       diasLimiteCustomizado?: number;
+      codigoResgateCustomizado?: string;
     }
   ): Encomenda {
     const morador = this.getMorador(condoId, data.moradorId);
@@ -2547,11 +2571,28 @@ class MockCondoStore {
     const agora = Date.now();
     const dataLimite = agora + diasLimite * 24 * 60 * 60 * 1000;
 
-    // Gerar código de 6 dígitos numéricos aleatório
-    const codigo6Digitos = Math.floor(100000 + Math.random() * 900000).toString();
+    // Regra Inteligente de Unidade: Reutiliza o PIN ativo do apartamento se já houver encomenda aguardando
+    let codigo6Digitos = data.codigoResgateCustomizado;
+    if (!codigo6Digitos) {
+      const pendingSameUnit = (this.encomendas[condoId] || []).find(
+        (e) =>
+          e.status === 'na_portaria' &&
+          e.unidade &&
+          morador.unidade &&
+          String(e.unidade.apto).trim().toLowerCase() === String(morador.unidade.apto).trim().toLowerCase() &&
+          (!e.unidade.bloco || !morador.unidade.bloco || String(e.unidade.bloco).trim().toLowerCase() === String(morador.unidade.bloco).trim().toLowerCase()) &&
+          e.codigoResgate
+      );
+
+      if (pendingSameUnit) {
+        codigo6Digitos = pendingSameUnit.codigoResgate;
+      } else {
+        codigo6Digitos = Math.floor(100000 + Math.random() * 900000).toString();
+      }
+    }
 
     const novaEnc: Encomenda = {
-      id: `enc_${Date.now()}`,
+      id: `enc_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
       condominioId: condoId,
       moradorId: morador.id,
       moradorNome: morador.nome,
@@ -2582,7 +2623,7 @@ class MockCondoStore {
       condominioId: condoId,
       paraMoradorId: morador.id,
       titulo: '📦 Nova Encomenda Recebida na Portaria',
-      mensagem: `${data.transportadora} entregou um pacote para sua unidade (${morador.unidade.bloco ? `Bloco ${morador.unidade.bloco} - ` : ''}Apto ${morador.unidade.apto}). Código de Resgate: ${codigo6Digitos}. Retire em até ${diasLimite} dias.`,
+      mensagem: `${data.transportadora} entregou um pacote para sua unidade (${morador.unidade.bloco ? `Bloco ${morador.unidade.bloco} - ` : ''}Apto ${morador.unidade.apto}). Código PIN: ${codigo6Digitos}. Destinatário: ${morador.nome}.`,
       tipo: 'encomenda',
     });
 
@@ -2598,6 +2639,125 @@ class MockCondoStore {
 
     this.notify();
     return novaEnc;
+  }
+
+  // Cadastro de Múltiplas Encomendas para o Mesmo Apartamento (Bloco + Apto) com PIN Unificado
+  public addMultiplasEncomendas(
+    condoId: string,
+    dados: {
+      moradorId: string;
+      recebidoPor: string;
+      pacotes: Array<{
+        transportadora: string;
+        destinatarioNome?: string;
+        codigoRastreio?: string;
+        observacao?: string;
+        fotoUrl?: string;
+      }>;
+      diasLimiteCustomizado?: number;
+    }
+  ): { encomendas: Encomenda[]; codigoResgate: string; morador: Morador } {
+    const morador = this.getMorador(condoId, dados.moradorId);
+    if (!morador) throw new Error('Morador não encontrado');
+
+    const condo = this.getCondominio(condoId);
+    const diasLimite = dados.diasLimiteCustomizado ?? condo?.regras?.diasLimiteRetiradaEncomenda ?? 5;
+    const agora = Date.now();
+    const dataLimite = agora + diasLimite * 24 * 60 * 60 * 1000;
+
+    // Busca PIN ativo do apartamento ou gera um novo de 6 dígitos
+    const pendingSameUnit = (this.encomendas[condoId] || []).find(
+      (e) =>
+        e.status === 'na_portaria' &&
+        e.unidade &&
+        morador.unidade &&
+        String(e.unidade.apto).trim().toLowerCase() === String(morador.unidade.apto).trim().toLowerCase() &&
+        (!e.unidade.bloco || !morador.unidade.bloco || String(e.unidade.bloco).trim().toLowerCase() === String(morador.unidade.bloco).trim().toLowerCase()) &&
+        e.codigoResgate
+    );
+
+    const pinUnificado = pendingSameUnit
+      ? pendingSameUnit.codigoResgate
+      : Math.floor(100000 + Math.random() * 900000).toString();
+
+    const criadas: Encomenda[] = [];
+
+    if (!this.encomendas[condoId]) this.encomendas[condoId] = [];
+
+    dados.pacotes.forEach((p, idx) => {
+      const nomeFinal = p.destinatarioNome?.trim() || morador.nome;
+      const novaEnc: Encomenda = {
+        id: `enc_${Date.now()}_${idx}_${Math.floor(Math.random() * 1000)}`,
+        condominioId: condoId,
+        moradorId: morador.id,
+        moradorNome: nomeFinal,
+        unidade: morador.unidade,
+        transportadora: p.transportadora.trim() || 'Mercado Livre',
+        codigoRastreio: p.codigoRastreio?.trim().toUpperCase() || `BR${Math.floor(100000000 + Math.random() * 900000000)}`,
+        codigoResgate: pinUnificado,
+        status: 'na_portaria',
+        recebidoEm: agora,
+        recebidoPor: dados.recebidoPor,
+        diasLimiteRetirada: diasLimite,
+        dataLimiteRetirada: dataLimite,
+        notificacaoPushEnviada: true,
+        notificacaoEmailEnviada: true,
+        notificacaoWhatsAppEnviada: true,
+        fotoUrl: p.fotoUrl,
+        observacao: p.observacao || '',
+      };
+
+      this.encomendas[condoId].unshift(novaEnc);
+      syncEncomendaToFirestore(novaEnc).catch(() => {});
+      criadas.push(novaEnc);
+    });
+
+    this.saveToStorage();
+
+    // Notificação In-App de Lote
+    const listaNomes = criadas.map((e) => `${e.moradorNome} (${e.transportadora})`).join(', ');
+    this.addNotification({
+      condominioId: condoId,
+      paraMoradorId: morador.id,
+      titulo: `📦 ${criadas.length} Encomendas Recebidas na Portaria`,
+      mensagem: `${criadas.length} encomendas recebidas para Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto} [${listaNomes}]. PIN Único de Retirada: ${pinUnificado}.`,
+      tipo: 'encomenda',
+    });
+
+    // Notificação WhatsApp e Push de Lote
+    if (criadas.length > 0 && condo) {
+      whatsappService.notificarChegadaEncomendaAutomatica({
+        condominio: condo,
+        morador,
+        encomenda: criadas[0],
+      }).catch(() => {});
+
+      notificationService.dispararNotificacaoNativa(`📦 ${criadas.length} Encomendas Chegaram! - ${condo?.nome || 'Condomínio'}`, {
+        body: `Olá ${morador.nome}! Chegaram ${criadas.length} pacotes para seu apartamento. PIN de Retirada: ${pinUnificado}.`,
+        tag: `enc-lote-${morador.unidade.bloco}-${morador.unidade.apto}`,
+      });
+    }
+
+    this.notify();
+    return { encomendas: criadas, codigoResgate: pinUnificado, morador };
+  }
+
+  // Buscar todas as encomendas pendentes de uma unidade específica (Bloco + Apto)
+  public getEncomendasPendentesUnidade(
+    condoId: string,
+    bloco: string,
+    apto: string
+  ): Encomenda[] {
+    const list = this.encomendas[condoId] || [];
+    const bClean = (bloco || '').trim().toLowerCase().replace(/bloco\s*/i, '');
+    const aClean = (apto || '').trim().toLowerCase().replace(/apto\s*/i, '').replace(/apartamento\s*/i, '');
+
+    return list.filter((e) => {
+      if (e.status !== 'na_portaria' && e.status !== 'encaminhada_administracao') return false;
+      const eb = (e.unidade?.bloco || '1').trim().toLowerCase().replace(/bloco\s*/i, '');
+      const ea = (e.unidade?.apto || '').trim().toLowerCase().replace(/apto\s*/i, '').replace(/apartamento\s*/i, '');
+      return ea === aClean && (!bClean || eb === bClean);
+    });
   }
 
   // Encaminhar manualmente para a administração antes ou após o prazo
@@ -2641,6 +2801,150 @@ class MockCondoStore {
     condoId: string,
     encomendaIdOrCode: string,
     operadorNome: string
+  ): { success: boolean; message: string; encomenda?: Encomenda; totalEntregues?: number } {
+    const list = this.encomendas[condoId] || [];
+    const cleanSearch = (encomendaIdOrCode || '').trim();
+
+    // Busca todas as encomendas pendentes que batem com este PIN ou Código de Rastreio ou ID
+    const matchingPending = list.filter(
+      (e) =>
+        (e.status === 'na_portaria' || e.status === 'encaminhada_administracao') &&
+        (e.id === cleanSearch ||
+          e.codigoResgate === cleanSearch ||
+          e.codigoRastreio.toLowerCase() === cleanSearch.toLowerCase())
+    );
+
+    if (matchingPending.length === 0) {
+      // Verifica se já foi entregue
+      const alreadyDelivered = list.find(
+        (e) =>
+          e.id === cleanSearch ||
+          e.codigoResgate === cleanSearch ||
+          e.codigoRastreio.toLowerCase() === cleanSearch.toLowerCase()
+      );
+      if (alreadyDelivered) {
+        return {
+          success: false,
+          message: `Esta encomenda já foi entregue anteriormente para ${alreadyDelivered.entreguePara || 'o morador'}.`,
+        };
+      }
+      return { success: false, message: 'Código PIN ou encomenda não encontrada na portaria.' };
+    }
+
+    const agora = Date.now();
+    const condo = this.getCondominio(condoId);
+    const condoNome = condo ? condo.nome : 'Condomínio Residencial';
+
+    matchingPending.forEach((enc) => {
+      enc.status = 'entregue';
+      enc.entregueEm = agora;
+      enc.metodoRetirada = 'pin_6_digitos';
+      enc.nomeRetirante = enc.moradorNome;
+      enc.entreguePara = `${enc.moradorNome} (PIN ${enc.codigoResgate} Validado por ${operadorNome})`;
+      syncEncomendaToFirestore(enc).catch(() => {});
+    });
+
+    this.saveToStorage();
+
+    const primeira = matchingPending[0];
+    const morador = this.getMorador(condoId, primeira.moradorId);
+
+    // 1. Notificação In-App
+    this.addNotification({
+      condominioId: condoId,
+      paraMoradorId: primeira.moradorId,
+      titulo: matchingPending.length > 1 ? `✅ ${matchingPending.length} Encomendas Retiradas com PIN` : '✅ Encomenda Retirada com PIN',
+      mensagem: `${matchingPending.length} pacote(s) entregue(s) para Bloco ${primeira.unidade.bloco} - Apto ${primeira.unidade.apto}. PIN: ${primeira.codigoResgate}.`,
+      tipo: 'encomenda',
+    });
+
+    // 2. Notificação WhatsApp
+    if (morador) {
+      const listaPacotesTxt = matchingPending.map((e) => `• ${e.transportadora} (Para: ${e.moradorNome})`).join('\n');
+      whatsappService.notificarMorador({
+        condominioId: condoId,
+        condominioNome: condoNome,
+        morador,
+        tipo: 'encomenda_baixa',
+        titulo: '✅ Encomenda(s) Retirada(s) na Portaria (PIN Validado)',
+        corpoMensagem: `Sua(s) *${matchingPending.length} encomenda(s)* foram retiradas com sucesso!\n\n${listaPacotesTxt}\n\n🔑 *PIN de Segurança Validado:* \`${primeira.codigoResgate}\`\n👮 *Entregue por:* ${operadorNome}\n📅 *Data/Hora:* ${new Date().toLocaleString('pt-BR')}`,
+      });
+    }
+
+    this.notify();
+    return {
+      success: true,
+      message: matchingPending.length > 1
+        ? `✅ ${matchingPending.length} encomendas entregues com sucesso para Bloco ${primeira.unidade.bloco} - Apto ${primeira.unidade.apto}!`
+        : `Baixa confirmada via PIN para ${primeira.moradorNome} (Bloco ${primeira.unidade.bloco} - ${primeira.unidade.apto})!`,
+      encomenda: primeira,
+      totalEntregues: matchingPending.length,
+    };
+  }
+
+  // Baixa em Lote por Seleção ou por Unidade (Bloco + Apto)
+  public darBaixaMultiplasPorIds(
+    condoId: string,
+    encomendaIds: string[],
+    operadorNome: string,
+    dadosDoc?: {
+      nomeRetirante: string;
+      documentoRetirante: string;
+      assinaturaRetiranteUrl?: string;
+      motivoSemPin?: string;
+    }
+  ): { success: boolean; message: string; totalEntregues: number } {
+    const list = this.encomendas[condoId] || [];
+    const targetEncs = list.filter(
+      (e) =>
+        encomendaIds.includes(e.id) &&
+        (e.status === 'na_portaria' || e.status === 'encaminhada_administracao')
+    );
+
+    if (targetEncs.length === 0) {
+      return { success: false, message: 'Nenhuma encomenda pendente encontrada para dar baixa.', totalEntregues: 0 };
+    }
+
+    const agora = Date.now();
+    targetEncs.forEach((enc) => {
+      enc.status = 'entregue';
+      enc.entregueEm = agora;
+      if (dadosDoc) {
+        enc.metodoRetirada = 'documento_rubrica';
+        enc.nomeRetirante = dadosDoc.nomeRetirante.trim();
+        enc.documentoRetirante = dadosDoc.documentoRetirante.trim();
+        enc.assinaturaRetiranteUrl = dadosDoc.assinaturaRetiranteUrl;
+        enc.motivoSemPin = dadosDoc.motivoSemPin;
+        enc.entreguePara = `${dadosDoc.nomeRetirante.trim()} (Doc: ${dadosDoc.documentoRetirante.trim()} - Autorizado por ${operadorNome})`;
+      } else {
+        enc.metodoRetirada = 'pin_6_digitos';
+        enc.nomeRetirante = enc.moradorNome;
+        enc.entreguePara = `${enc.moradorNome} (Entregue em Lote por ${operadorNome})`;
+      }
+      syncEncomendaToFirestore(enc).catch(() => {});
+    });
+
+    this.saveToStorage();
+    this.notify();
+
+    return {
+      success: true,
+      message: `✅ ${targetEncs.length} encomenda(s) entregue(s) com sucesso na portaria!`,
+      totalEntregues: targetEncs.length,
+    };
+  }
+
+  // Baixa de Encomenda de Contingência: Morador sem PIN (Exige Documento CPF/RG e Rúbrica/Assinatura)
+  public darBaixaEncomendaComDocumento(
+    condoId: string,
+    encomendaIdOrCode: string,
+    dados: {
+      nomeRetirante: string;
+      documentoRetirante: string; // CPF ou RG
+      assinaturaRetiranteUrl?: string; // Rúbrica capturada em canvas
+      motivoSemPin: string;
+      operadorNome: string;
+    }
   ): { success: boolean; message: string; encomenda?: Encomenda } {
     const list = this.encomendas[condoId] || [];
     const enc = list.find(
@@ -2651,7 +2955,7 @@ class MockCondoStore {
     );
 
     if (!enc) {
-      return { success: false, message: 'Código de resgate ou encomenda não encontrada.' };
+      return { success: false, message: 'Encomenda não encontrada.' };
     }
 
     if (enc.status === 'entregue') {
@@ -2661,18 +2965,32 @@ class MockCondoStore {
       };
     }
 
+    if (!dados.documentoRetirante || dados.documentoRetirante.trim().length < 5) {
+      return { success: false, message: 'O documento (CPF ou RG) do retirante é estritamente obrigatório.' };
+    }
+
+    if (!dados.nomeRetirante || dados.nomeRetirante.trim().length < 3) {
+      return { success: false, message: 'Informe o nome completo de quem está retirando a encomenda.' };
+    }
+
+    const agora = Date.now();
     enc.status = 'entregue';
-    enc.entregueEm = Date.now();
-    enc.entreguePara = `${enc.moradorNome} (Código ${enc.codigoResgate} Validado por ${operadorNome})`;
+    enc.entregueEm = agora;
+    enc.metodoRetirada = 'documento_rubrica';
+    enc.nomeRetirante = dados.nomeRetirante.trim();
+    enc.documentoRetirante = dados.documentoRetirante.trim();
+    enc.assinaturaRetiranteUrl = dados.assinaturaRetiranteUrl;
+    enc.motivoSemPin = dados.motivoSemPin || 'Morador sem acesso ao celular/PIN no momento';
+    enc.entreguePara = `${dados.nomeRetirante.trim()} (Doc: ${dados.documentoRetirante.trim()} - Rúbrica Coletada por ${dados.operadorNome})`;
 
     this.saveToStorage();
-    syncEncomendaToFirestore(enc).catch((err) => console.warn('Sync Encomenda baixa error:', err));
+    syncEncomendaToFirestore(enc).catch((err) => console.warn('Sync Encomenda baixa com documento error:', err));
 
     this.addNotification({
       condominioId: condoId,
       paraMoradorId: enc.moradorId,
-      titulo: '✅ Encomenda Retirada',
-      mensagem: `A encomenda da ${enc.transportadora} foi entregue com sucesso.`,
+      titulo: '⚠️ Encomenda Retirada por Documento & Rúbrica',
+      mensagem: `A encomenda da ${enc.transportadora} foi retirada por ${dados.nomeRetirante} (Doc: ${dados.documentoRetirante}) com assinatura digital registrada.`,
       tipo: 'encomenda',
     });
 
@@ -2685,15 +3003,15 @@ class MockCondoStore {
         condominioNome: condoNome,
         morador,
         tipo: 'encomenda_baixa',
-        titulo: '✅ Encomenda Retirada com Sucesso',
-        corpoMensagem: `Sua encomenda da transportadora *${enc.transportadora}* foi retirada.\n\nCódigo validado: *${enc.codigoResgate}*\nEntregue por: *${operadorNome}*`,
+        titulo: '⚠️ Retirada de Encomenda (Documento & Assinatura)',
+        corpoMensagem: `Sua encomenda da transportadora *${enc.transportadora}* foi entregue na portaria mediante identificação documental e rúbrica.\n\n👤 *Retirado por:* ${dados.nomeRetirante}\n📄 *Documento registrado:* ${dados.documentoRetirante}\n📝 *Motivo:* ${enc.motivoSemPin}\n👮 *Atendido por:* ${dados.operadorNome}\n📅 *Data/Hora:* ${new Date().toLocaleString('pt-BR')}`,
       });
     }
 
     this.notify();
     return {
       success: true,
-      message: `Baixa confirmada para ${enc.moradorNome} (Bloco ${enc.unidade.bloco} - ${enc.unidade.apto})!`,
+      message: `Baixa com Documento e Rúbrica registrada com sucesso para ${dados.nomeRetirante}!`,
       encomenda: enc,
     };
   }
