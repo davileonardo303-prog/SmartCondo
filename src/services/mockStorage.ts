@@ -31,6 +31,7 @@ import {
   PermissoesFuncionario,
   UserRole,
   InterfoneMensagem,
+  ChamadaInterfone,
 } from '../types';
 import { whatsappService } from './whatsappService';
 import { notificationService } from './notificationService';
@@ -205,6 +206,7 @@ class MockCondoStore {
   private itensCompartilhados: Record<string, ItemCompartilhado[]> = {};
   private funcionarios: Record<string, FuncionarioEquipe[]> = {};
   private interfoneMensagens: Record<string, InterfoneMensagem[]> = {};
+  private chamadasInterfone: Record<string, ChamadaInterfone[]> = {};
   private listeners: Set<Listener> = new Set();
   private subUnsubscribers: Record<string, (() => void)[]> = {};
   private version = 0;
@@ -821,6 +823,7 @@ class MockCondoStore {
         this.itensCompartilhados = parsed.itensCompartilhados || {};
         this.funcionarios = parsed.funcionarios || {};
         this.interfoneMensagens = parsed.interfoneMensagens || {};
+        this.chamadasInterfone = parsed.chamadasInterfone || {};
         this.planosConfig = parsed.planosConfig
           ? { ...DEFAULT_PLANOS_CONFIG, ...parsed.planosConfig }
           : { ...DEFAULT_PLANOS_CONFIG };
@@ -897,6 +900,7 @@ class MockCondoStore {
         itensCompartilhados: this.itensCompartilhados,
         funcionarios: this.funcionarios,
         interfoneMensagens: this.interfoneMensagens,
+        chamadasInterfone: this.chamadasInterfone,
       };
       localStorage.setItem(STORAGE_KEY_PREFIX, JSON.stringify(data));
     } catch {
@@ -4326,6 +4330,155 @@ class MockCondoStore {
     const list = this.interfoneMensagens[condoId] || [];
     list.forEach((m) => deleteInterfoneFromFirestore(condoId, m.id).catch(() => {}));
     this.interfoneMensagens[condoId] = [];
+    this.saveToStorage();
+    this.notify();
+  }
+
+  // ==========================================
+  // CHAMADAS DE INTERFONE EM TEMPO REAL (ÁUDIO / VÍDEO DUPLEX ESTILO WHATSAPP / INSTAGRAM)
+  // ==========================================
+  public iniciarChamada(data: Omit<ChamadaInterfone, 'id' | 'status' | 'startedAt'>): ChamadaInterfone {
+    const list = this.chamadasInterfone[data.condominioId] || [];
+
+    // Encerra chamadas anteriores ativas deste usuário ou destino
+    list.forEach((c) => {
+      if (c.status === 'calling' || c.status === 'ringing' || c.status === 'connected') {
+        c.status = 'ended';
+        c.endedAt = Date.now();
+      }
+    });
+
+    const nova: ChamadaInterfone = {
+      ...data,
+      id: `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      status: 'ringing',
+      startedAt: Date.now(),
+    };
+
+    list.unshift(nova);
+    this.chamadasInterfone[data.condominioId] = list;
+
+    // Dispara notificação in-app
+    this.addNotification({
+      condominioId: data.condominioId,
+      paraMoradorId: data.receiverId !== 'portaria' && data.receiverId !== 'sindico' ? data.receiverId : undefined,
+      titulo: `📞 Chamada em tempo real de ${data.callerName}`,
+      mensagem: `${data.callerName} está te ligando via interfone digital. Clique para atender.`,
+      tipo: 'seguranca',
+    });
+
+    this.saveToStorage();
+    this.notify();
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('smartcondo_incoming_call', { detail: nova }));
+    }
+
+    return nova;
+  }
+
+  public atenderChamada(condoId: string, chamadaId: string): ChamadaInterfone | null {
+    const list = this.chamadasInterfone[condoId] || [];
+    const chamada = list.find((c) => c.id === chamadaId);
+    if (chamada && (chamada.status === 'ringing' || chamada.status === 'calling')) {
+      chamada.status = 'connected';
+      chamada.connectedAt = Date.now();
+      this.saveToStorage();
+      this.notify();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('smartcondo_call_status_change', { detail: chamada }));
+      }
+      return chamada;
+    }
+    return null;
+  }
+
+  public recusarChamada(condoId: string, chamadaId: string): ChamadaInterfone | null {
+    const list = this.chamadasInterfone[condoId] || [];
+    const chamada = list.find((c) => c.id === chamadaId);
+    if (chamada) {
+      chamada.status = 'rejected';
+      chamada.endedAt = Date.now();
+      this.saveToStorage();
+      this.notify();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('smartcondo_call_status_change', { detail: chamada }));
+      }
+      return chamada;
+    }
+    return null;
+  }
+
+  public encerrarChamada(condoId: string, chamadaId: string): ChamadaInterfone | null {
+    const list = this.chamadasInterfone[condoId] || [];
+    const chamada = list.find((c) => c.id === chamadaId);
+    if (chamada) {
+      chamada.status = 'ended';
+      chamada.endedAt = Date.now();
+      if (chamada.connectedAt) {
+        chamada.duracaoSegundos = Math.max(1, Math.round((chamada.endedAt - chamada.connectedAt) / 1000));
+      }
+      this.saveToStorage();
+      this.notify();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('smartcondo_call_status_change', { detail: chamada }));
+      }
+      return chamada;
+    }
+    return null;
+  }
+
+  public getChamadaAtiva(
+    condoId: string,
+    userId: string,
+    userRole: UserRole,
+    userUnidade?: Unidade
+  ): ChamadaInterfone | null {
+    const list = this.chamadasInterfone[condoId] || [];
+    const active = list.find((c) => {
+      if (c.status !== 'calling' && c.status !== 'ringing' && c.status !== 'connected') {
+        return false;
+      }
+      // Se eu sou quem iniciou a chamada
+      if (c.callerId === userId) return true;
+
+      // Se eu sou o destinatário direto
+      if (c.receiverId === userId) return true;
+
+      // Se foi enviado para a portaria e meu papel é portaria/super_admin
+      if (c.receiverId === 'portaria' && (userRole === 'portaria' || userRole === 'super_admin')) {
+        return true;
+      }
+
+      // Se foi enviado para o síndico e meu papel é síndico
+      if (c.receiverId === 'sindico' && userRole === 'sindico') {
+        return true;
+      }
+
+      // Se foi enviado para a minha unidade
+      if (
+        userUnidade &&
+        c.receiverUnidade &&
+        userUnidade.apto === c.receiverUnidade.apto &&
+        (!userUnidade.bloco || !c.receiverUnidade.bloco || userUnidade.bloco === c.receiverUnidade.bloco)
+      ) {
+        return true;
+      }
+
+      return false;
+    });
+
+    return active || null;
+  }
+
+  public getHistoricoChamadas(condoId: string, userId?: string): ChamadaInterfone[] {
+    const list = this.chamadasInterfone[condoId] || [];
+    if (!userId) return list;
+    return list.filter((c) => c.callerId === userId || c.receiverId === userId || c.receiverId === 'portaria');
+  }
+
+  public limparHistoricoChamadas(condoId: string): void {
+    this.chamadasInterfone[condoId] = [];
     this.saveToStorage();
     this.notify();
   }

@@ -540,6 +540,27 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
     confetti({ particleCount: 30, spread: 50 });
   };
 
+  // Iniciar Ligação de Voz em Tempo Real (WhatsApp / Instagram Style)
+  const iniciarLigacaoTempoReal = (target: {
+    receiverId: string;
+    receiverName: string;
+    receiverRole: UserRole;
+    receiverUnidade?: Unidade;
+  }) => {
+    condoStore.iniciarChamada({
+      condominioId: condominio.id,
+      callerId: currentMorador?.id || (isPortariaOrStaff ? 'portaria_central' : 'user_id'),
+      callerName: isPortariaOrStaff ? 'Portaria Central' : currentMorador?.nome || currentUserName,
+      callerRole: currentUserRole,
+      callerUnidade: currentMorador?.unidade,
+      receiverId: target.receiverId,
+      receiverName: target.receiverName,
+      receiverRole: target.receiverRole,
+      receiverUnidade: target.receiverUnidade,
+      tipo: 'audio',
+    });
+  };
+
   // Filtragem da Lista de Moradores
   const filteredMoradores = useMemo(() => {
     const q = searchMoradorQuery.trim().toLowerCase();
@@ -657,6 +678,84 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
               className="text-[10px] bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-md cursor-pointer"
             >
               Ativar
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* BARRA DE CHAMADAS AO VIVO EM TEMPO REAL (ESTILO WHATSAPP / INSTAGRAM) */}
+      <div className="bg-gradient-to-r from-emerald-600 via-teal-700 to-indigo-800 text-white p-4 rounded-2xl shadow-lg border border-emerald-400/30 flex flex-col md:flex-row items-center justify-between gap-3 animate-in fade-in">
+        <div className="flex items-center gap-3 text-left w-full md:w-auto">
+          <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shrink-0 shadow-inner">
+            <PhoneCall className="w-5 h-5 animate-pulse text-emerald-200" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-black tracking-tight text-white">
+                Ligação de Voz em Tempo Real (Duplex)
+              </h4>
+              <span className="bg-emerald-400/30 text-emerald-100 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-300/40">
+                Ao Vivo
+              </span>
+            </div>
+            <p className="text-xs text-emerald-100/90 font-medium">
+              Conexão direta sem atraso • Toca na tela de quem recebe com ringtone instantâneo
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+          {!isPortariaOrStaff && (
+            <button
+              type="button"
+              onClick={() => {
+                iniciarLigacaoTempoReal({
+                  receiverId: 'portaria',
+                  receiverName: 'Portaria Central 24h',
+                  receiverRole: 'portaria',
+                });
+              }}
+              className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-950 text-xs font-black flex items-center gap-1.5 shadow-md transition cursor-pointer"
+            >
+              <Building2 className="w-4 h-4 text-slate-950" />
+              <span>Ligar p/ Portaria</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              const sindicoUser = todosMoradores.find(
+                (m) => m.tipoMorador === 'proprietario' || m.nome.toLowerCase().includes('síndico')
+              );
+              iniciarLigacaoTempoReal({
+                receiverId: sindicoUser ? sindicoUser.id : 'sindico',
+                receiverName: sindicoUser ? `${sindicoUser.nome} (Síndico)` : 'Carlos Mendes (Síndico)',
+                receiverRole: 'sindico',
+                receiverUnidade: sindicoUser?.unidade,
+              });
+            }}
+            className="px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 active:scale-95 text-white text-xs font-black flex items-center gap-1.5 border border-white/30 backdrop-blur-md shadow-md transition cursor-pointer"
+          >
+            <Shield className="w-4 h-4 text-emerald-300" />
+            <span>Ligar p/ Síndico</span>
+          </button>
+
+          {selectedMoradorTarget && (
+            <button
+              type="button"
+              onClick={() => {
+                iniciarLigacaoTempoReal({
+                  receiverId: selectedMoradorTarget.id,
+                  receiverName: selectedMoradorTarget.nome,
+                  receiverRole: 'morador',
+                  receiverUnidade: selectedMoradorTarget.unidade,
+                });
+              }}
+              className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 text-xs font-black flex items-center gap-1.5 shadow-md transition cursor-pointer"
+            >
+              <Phone className="w-4 h-4" />
+              <span>Ligar p/ {selectedMoradorTarget.nome.split(' ')[0]}</span>
             </button>
           )}
         </div>
@@ -1460,7 +1559,23 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
                   </div>
 
                   {/* Ações Rápidas com o Morador */}
-                  <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-200/80">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-2 border-t border-slate-200/80">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        iniciarLigacaoTempoReal({
+                          receiverId: morador.id,
+                          receiverName: morador.nome,
+                          receiverRole: 'morador',
+                          receiverUnidade: morador.unidade,
+                        });
+                      }}
+                      className="py-1.5 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] flex items-center justify-center gap-1 shadow-sm transition cursor-pointer active:scale-95"
+                    >
+                      <PhoneCall className="w-3 h-3 text-emerald-200 animate-pulse" />
+                      <span>Ligar Agora</span>
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => {
@@ -1497,9 +1612,9 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
                       )},%20sou%20seu%20vizinho%20do%20condom%C3%ADnio%20${encodeURIComponent(condominio.nome)}.`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="py-1.5 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] flex items-center justify-center gap-1 shadow-xs transition"
+                      className="py-1.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-[10px] flex items-center justify-center gap-1 shadow-xs transition"
                     >
-                      <Phone className="w-3 h-3" />
+                      <Phone className="w-3 h-3 text-emerald-400" />
                       <span>WhatsApp</span>
                     </a>
                   </div>

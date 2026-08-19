@@ -58,6 +58,7 @@ import {
   KeyRound,
   Radio,
   Mic,
+  PhoneCall,
 } from 'lucide-react';
 import {
   Condominio,
@@ -690,6 +691,28 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
 
         {/* Botão de Interfone PTT e Contato com Portaria */}
         <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+          <button
+            id="btn-header-ligar-portaria-ao-vivo"
+            type="button"
+            onClick={() => {
+              condoStore.iniciarChamada({
+                condominioId: condominio.id,
+                callerId: morador.id,
+                callerName: morador.nome,
+                callerRole: 'morador',
+                callerUnidade: morador.unidade,
+                receiverId: 'portaria',
+                receiverName: 'Portaria Central 24h',
+                receiverRole: 'portaria',
+                tipo: 'audio',
+              });
+            }}
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md shadow-emerald-600/30 transition active:scale-98 cursor-pointer"
+          >
+            <PhoneCall className="w-4 h-4 text-emerald-200 animate-pulse" />
+            <span>📞 Ligar Portaria (Ao Vivo)</span>
+          </button>
+
           <button
             id="btn-header-interfone-morador"
             type="button"

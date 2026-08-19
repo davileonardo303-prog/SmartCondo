@@ -8,6 +8,7 @@ import { PortariaDashboard } from './components/portaria/PortariaDashboard';
 import { SindicoDashboard } from './components/sindico/SindicoDashboard';
 import { SuperAdminDashboard } from './components/superadmin/SuperAdminDashboard';
 import { PwaInstallPrompt } from './components/common/PwaInstallPrompt';
+import { LiveCallModal } from './components/interfone/LiveCallModal';
 import { auth, testFirestoreConnection, logoutFirebase } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { APP_VERSION, APP_NAME } from './constants/version';
@@ -226,6 +227,13 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* Modal de Chamada de Interfone em Tempo Real (Estilo WhatsApp / Instagram / Face) */}
+      <LiveCallModal
+        condominio={currentCondo}
+        currentUser={currentUser}
+        currentMorador={currentMorador}
+      />
 
       {/* Modal / Prompt de Instalação PWA (Dispositivos Móveis, Tablets, Desktops, iPhones, iPads) */}
       <PwaInstallPrompt />

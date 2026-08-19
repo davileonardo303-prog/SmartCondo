@@ -1,6 +1,31 @@
-export type UserRole = 'super_admin' | 'sindico' | 'portaria' | 'morador';// Módulo de Interfonia Digital / Walkie-Talkie Push-to-Talk (PTT Estilo Zello)
+export type UserRole = 'super_admin' | 'sindico' | 'portaria' | 'morador';
+
+// Módulo de Interfonia Digital / Walkie-Talkie Push-to-Talk (PTT Estilo Zello & Chamadas em Tempo Real)
 export type InterfoneCanalTipo = 'portaria_morador' | 'geral' | 'emergencia';
 export type InterfoneRemetenteTipo = 'morador' | 'portaria' | 'sindico' | 'administrador';
+
+export type ChamadaStatus = 'calling' | 'ringing' | 'connected' | 'rejected' | 'ended' | 'missed' | 'busy';
+export type ChamadaTipo = 'audio' | 'video';
+
+export interface ChamadaInterfone {
+  id: string;
+  condominioId: string;
+  callerId: string;
+  callerName: string;
+  callerRole: UserRole;
+  callerUnidade?: Unidade;
+  callerAvatar?: string;
+  receiverId: string; // 'portaria' | 'sindico' | moradorId
+  receiverName: string;
+  receiverRole: UserRole;
+  receiverUnidade?: Unidade;
+  status: ChamadaStatus;
+  tipo: ChamadaTipo;
+  startedAt: number;
+  connectedAt?: number;
+  endedAt?: number;
+  duracaoSegundos?: number;
+}
 
 export interface InterfoneMensagem {
   id: string;
