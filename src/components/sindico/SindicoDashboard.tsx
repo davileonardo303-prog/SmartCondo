@@ -1048,7 +1048,7 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
             </div>
             <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/50 border border-indigo-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
               <div>
-                <div className="text-xs font-bold text-indigo-900 uppercase">Acesso Rápido</div>
+                <div className="text-xs font-bold text-indigo-900 uppercase">Adicionar Morador</div>
                 <div className="text-xs text-indigo-700 mt-1">Cadastre novos moradores diretamente</div>
               </div>
               <button

@@ -499,9 +499,15 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
     setTimeout(() => setCopiadoKey(null), 2500);
   };
 
-  // Totais e contadores seguros contra valores nulos
-  const safeEncomendas = Array.isArray(encomendas) ? encomendas.filter(Boolean) : [];
-  const pendingPackages = safeEncomendas.filter((e) => e && e.status === 'na_portaria');
+  // Totais e contadores seguros contra valores nulos (Encomendas entregues visíveis por até 5 dias para o morador)
+  const cincoDiasMs = 5 * 24 * 60 * 60 * 1000;
+  const agoraTimestamp = Date.now();
+  const safeEncomendas = (Array.isArray(encomendas) ? encomendas.filter(Boolean) : []).filter((e) => {
+    if (e.status !== 'entregue') return true; // Sempre exibe pendentes/na portaria/na administração
+    const dataRef = e.entregueEm || e.recebidoEm || 0;
+    return agoraTimestamp - dataRef <= cincoDiasMs; // Entregues nos últimos 5 dias
+  });
+  const pendingPackages = safeEncomendas.filter((e) => e && (e.status === 'na_portaria' || e.status === 'encaminhada_administracao'));
   const deliveredPackages = safeEncomendas.filter((e) => e && e.status === 'entregue');
   const myReservations = (reservas || []).filter((r) => r && r.moradorId === morador?.id);
   const availableBikesCount = (bikes || []).filter((b) => b && b.status === 'disponivel').length;

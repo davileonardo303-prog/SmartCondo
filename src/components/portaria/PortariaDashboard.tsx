@@ -1908,14 +1908,36 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
       {/* ABA 6: HISTÓRICO GERAL */}
       {activeTab === 'historico' && (
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
-              <h3 className="font-extrabold text-slate-900 text-base">Histórico Completo de Entregas</h3>
-              <p className="text-xs text-slate-500">Rastreabilidade completa com validação por PIN ou Documento + Rúbrica.</p>
+              <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                <Package className="w-5 h-5 text-amber-600" />
+                <span>Histórico Completo de Encomendas & Entregas</span>
+              </h3>
+              <p className="text-xs text-slate-500">Consulta permanente para esclarecer dúvidas dos moradores com comprovante de PIN e Rúbrica.</p>
             </div>
-            <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-              Total: {encomendas.length} pacote(s)
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+                {deliveredPackages.length} entregue(s) arquivada(s)
+              </span>
+            </div>
+          </div>
+
+          {/* Busca e Filtros Rápidos */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+            <div className="sm:col-span-8 relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Buscar por Morador, Apto, Bloco, Transportadora, Rastreio ou PIN..."
+                value={searchEncomendaQuery}
+                onChange={(e) => setSearchEncomendaQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none bg-slate-50/50"
+              />
+            </div>
+            <div className="sm:col-span-4 flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold">
+              <span className="text-slate-500 text-[11px] px-2">Total: {encomendas.length}</span>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -1931,12 +1953,26 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {encomendas.map((enc) => (
+                {encomendas
+                  .filter((enc) => {
+                    const q = searchEncomendaQuery.toLowerCase().trim();
+                    if (!q) return true;
+                    return (
+                      (enc.moradorNome || '').toLowerCase().includes(q) ||
+                      (enc.unidade?.apto || '').toLowerCase().includes(q) ||
+                      (enc.unidade?.bloco || '').toLowerCase().includes(q) ||
+                      (enc.transportadora || '').toLowerCase().includes(q) ||
+                      (enc.codigoRastreio || '').toLowerCase().includes(q) ||
+                      (enc.codigoResgate || '').toLowerCase().includes(q) ||
+                      (enc.nomeRetirante || '').toLowerCase().includes(q)
+                    );
+                  })
+                  .map((enc) => (
                   <tr key={enc.id} className="hover:bg-slate-50/70 transition">
                     <td className="p-3">
                       <div className="font-bold text-slate-900">{enc.moradorNome}</div>
                       <div className="text-amber-800 text-[11px] font-semibold">
-                        Bloco {enc.unidade.bloco} - Apto {enc.unidade.apto}
+                        Bloco {enc.unidade?.bloco || '1'} - Apto {enc.unidade?.apto || '-'}
                       </div>
                     </td>
                     <td className="p-3">
@@ -1944,7 +1980,7 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
                         <button
                           type="button"
                           onClick={() => setPreviewFotoUrl(enc.fotoUrl!)}
-                          className="flex items-center gap-1.5 text-amber-800 hover:text-amber-950 font-bold bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg transition"
+                          className="flex items-center gap-1.5 text-amber-800 hover:text-amber-950 font-bold bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg transition cursor-pointer"
                           title="Clique para ver a foto do selo"
                         >
                           <Camera className="w-3.5 h-3.5 text-amber-600" />
@@ -1955,7 +1991,7 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
                       )}
                     </td>
                     <td className="p-3 text-slate-700">
-                      <div>{enc.transportadora}</div>
+                      <div className="font-bold">{enc.transportadora}</div>
                       <div className="font-mono text-[10px] text-slate-400">{enc.codigoRastreio || 'Sem rastreio'}</div>
                     </td>
                     <td className="p-3 text-slate-500">
@@ -1964,18 +2000,22 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
                     <td className="p-3">
                       {enc.status === 'na_portaria' ? (
                         <span className="px-2.5 py-1 rounded-full font-bold text-[10px] bg-amber-100 text-amber-900 border border-amber-300">
-                          Aguardando Retirada
+                          📦 Aguardando Retirada (PIN: {enc.codigoResgate})
+                        </span>
+                      ) : enc.status === 'encaminhada_administracao' ? (
+                        <span className="px-2.5 py-1 rounded-full font-bold text-[10px] bg-rose-100 text-rose-900 border border-rose-300">
+                          🏛️ Na Administração
                         </span>
                       ) : (
                         <div className="space-y-0.5">
                           <span className="px-2.5 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 inline-block">
-                            Entregue
+                            ✓ Entregue
                           </span>
                           <div className="text-[10px] text-slate-500 font-semibold">
                             {enc.metodoRetirada === 'documento_rubrica' ? (
                               <span className="text-purple-700 font-bold">📄 Doc + Rúbrica</span>
                             ) : (
-                              <span className="text-emerald-700 font-bold">🔑 PIN Validado</span>
+                              <span className="text-emerald-700 font-bold">🔑 PIN Validado ({enc.codigoResgate})</span>
                             )}
                           </div>
                         </div>
@@ -1988,11 +2028,16 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
                           {enc.documentoRetirante && (
                             <div className="font-mono text-[10px] text-slate-500">Doc: {enc.documentoRetirante}</div>
                           )}
+                          {enc.entregueEm && (
+                            <div className="text-[10px] text-emerald-700">
+                              Em: {new Date(enc.entregueEm).toLocaleDateString('pt-BR')} {new Date(enc.entregueEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          )}
                           {enc.assinaturaRetiranteUrl && (
                             <button
                               type="button"
                               onClick={() => setPreviewFotoUrl(enc.assinaturaRetiranteUrl!)}
-                              className="text-[10px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                              className="text-[10px] font-bold text-indigo-600 hover:underline flex items-center gap-1 cursor-pointer"
                             >
                               <span>✍️ Ver Rúbrica</span>
                             </button>
@@ -2005,7 +2050,7 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
                             setSelectedEncomendaForEntrega(enc);
                             setIsEntregaModalOpen(true);
                           }}
-                          className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] transition shadow-xs"
+                          className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] transition shadow-xs cursor-pointer"
                         >
                           Entregar Agora
                         </button>

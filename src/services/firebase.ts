@@ -32,6 +32,7 @@ import {
   UsuarioSistema,
   CobrancaCondominio,
   ItemCompartilhado,
+  FuncionarioEquipe,
 } from '../types';
 
 // Initialize Firebase App
@@ -278,13 +279,58 @@ export async function limparSubcolecaoFirestore(condoId: string, subcolecao: str
   }
 }
 
-export async function limparBikesEncomendasFerramentasFirestore(condoIds: string[]): Promise<void> {
-  for (const condoId of condoIds) {
-    if (!condoId) continue;
+export async function limparBikesEncomendasFerramentasFirestore(condoIds: string[] = []): Promise<void> {
+  const allIds = new Set<string>(condoIds.filter(Boolean));
+  try {
+    const condosSnap = await getDocs(collection(db, 'condominios'));
+    condosSnap.forEach((docSnap) => allIds.add(docSnap.id));
+  } catch (err) {
+    console.warn('[Firestore] Aviso ao listar condomínios para limpeza:', err);
+  }
+
+  if (allIds.size === 0) {
+    allIds.add('condo_park_avenue');
+  }
+
+  for (const condoId of allIds) {
     await limparSubcolecaoFirestore(condoId, 'encomendas');
     await limparSubcolecaoFirestore(condoId, 'bikes');
     await limparSubcolecaoFirestore(condoId, 'itens_compartilhados');
     await limparSubcolecaoFirestore(condoId, 'historicoLocacoes');
+  }
+}
+
+export async function syncFuncionarioToFirestore(condoId: string, func: FuncionarioEquipe): Promise<void> {
+  const path = `condominios/${condoId}/funcionarios/${func.id}`;
+  try {
+    const data = cleanFirestoreData(func);
+    await setDoc(doc(db, 'condominios', condoId, 'funcionarios', func.id), data, {
+      merge: true,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteFuncionarioFromFirestore(condoId: string, funcId: string): Promise<void> {
+  const path = `condominios/${condoId}/funcionarios/${funcId}`;
+  try {
+    await deleteDoc(doc(db, 'condominios', condoId, 'funcionarios', funcId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export async function limparFuncionariosFirestore(condoIds: string[] = []): Promise<void> {
+  const allIds = new Set<string>(condoIds.filter(Boolean));
+  try {
+    const condosSnap = await getDocs(collection(db, 'condominios'));
+    condosSnap.forEach((docSnap) => allIds.add(docSnap.id));
+  } catch (err) {
+    console.warn('[Firestore] Aviso ao listar condomínios para limpeza:', err);
+  }
+  for (const condoId of allIds) {
+    await limparSubcolecaoFirestore(condoId, 'funcionarios');
   }
 }
 
