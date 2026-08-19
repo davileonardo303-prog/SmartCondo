@@ -56,6 +56,8 @@ import {
   RefreshCw,
   BellRing,
   KeyRound,
+  Radio,
+  Mic,
 } from 'lucide-react';
 import {
   Condominio,
@@ -686,27 +688,37 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
           </div>
         </div>
 
-        {/* Botão de Contato com Portaria e Síndico via WhatsApp */}
+        {/* Botão de Interfone PTT e Contato com Portaria */}
         <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+          <button
+            id="btn-header-interfone-morador"
+            type="button"
+            onClick={() => setActiveTab('interfone')}
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md shadow-amber-500/20 transition active:scale-98 cursor-pointer"
+          >
+            <Radio className="w-4 h-4 text-slate-950 animate-pulse" />
+            <span>📻 Interfone & PTT</span>
+          </button>
+
           <a
             href={`https://api.whatsapp.com/send?phone=5521999999999&text=Ol%C3%A1%20Portaria,%20aqui%20%C3%A9%20o%20morador%20${encodeURIComponent(
               morador.nome
             )}%20do%20Bloco%20${morador.unidade.bloco}%20Apto%20${morador.unidade.apto}.`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs transition"
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs transition"
           >
             <Phone className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Falar com Portaria</span>
+            <span>WhatsApp Portaria</span>
           </a>
 
           {!activeBikeInUse && !bikeReservadaMorador && (
             <button
               onClick={() => setIsQrModalOpen(true)}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition active:scale-98"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md transition active:scale-98"
             >
               <QrCode className="w-4 h-4" />
-              <span>Escanear QR Totem</span>
+              <span>Escanear Totem</span>
             </button>
           )}
         </div>
@@ -875,6 +887,47 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
       {/* ==================================================================== */}
       {activeTab === 'inicio' && (
         <div className="space-y-6">
+          {/* Banner Interfone & Walkie-Talkie Digital */}
+          <div
+            onClick={() => setActiveTab('interfone')}
+            className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-xl border border-indigo-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 cursor-pointer hover:border-amber-400/60 transition group"
+          >
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-lg shadow-amber-500/20 shrink-0 group-hover:scale-105 transition">
+                <Radio className="w-6 h-6 animate-pulse text-slate-950" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 px-2 py-0.5 rounded-full">
+                    Interfonia Digital (PTT)
+                  </span>
+                  <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    Portaria 24h & Vizinhos Online
+                  </span>
+                </div>
+                <h3 className="text-base sm:text-lg font-black text-white mt-1">
+                  Interfone & Walkie-Talkie em Tempo Real
+                </h3>
+                <p className="text-xs text-indigo-200 mt-0.5">
+                  Fale com a Portaria ou interfone para outro morador/vizinho direto pelo aplicativo.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveTab('interfone');
+              }}
+              className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 flex items-center gap-2 transition shrink-0 cursor-pointer self-stretch sm:self-auto justify-center"
+            >
+              <Mic className="w-4 h-4" />
+              <span>Abrir Interfone & Falar</span>
+            </button>
+          </div>
+
           {/* Card de Aviso Destaque (Aviso mais importante do dia) */}
           {avisoDestaque && (
             <div className="p-5 rounded-3xl bg-slate-900 text-white shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4">

@@ -25,6 +25,12 @@ import {
   Building2,
   Headphones,
   Signal,
+  Sparkles,
+  Info,
+  Lock,
+  Unlock,
+  Volume1,
+  MessageSquare,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -41,7 +47,8 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
   currentMorador,
   currentUserName = 'Portaria Central',
 }) => {
-  const isPortariaOrStaff = currentUserRole === 'portaria' || currentUserRole === 'sindico' || currentUserRole === 'super_admin';
+  const isPortariaOrStaff =
+    currentUserRole === 'portaria' || currentUserRole === 'sindico' || currentUserRole === 'super_admin';
 
   // Mensagens do interfone
   const [mensagens, setMensagens] = useState<InterfoneMensagem[]>(() =>
@@ -53,19 +60,31 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
     )
   );
 
-  // Destino da transmissão (para portaria)
+  // Destino da transmissão
+  // Morador: 'portaria' | 'vizinho' | 'geral' | 'emergencia'
+  // Portaria: 'apartamento' | 'geral' | 'emergencia'
+  const [destinoModo, setDestinoModo] = useState<'portaria' | 'vizinho' | 'geral' | 'emergencia'>(
+    isPortariaOrStaff ? 'apartamento' as any : 'portaria'
+  );
+
   const [targetBloco, setTargetBloco] = useState('');
   const [targetApto, setTargetApto] = useState('');
-  const [targetCanal, setTargetCanal] = useState<'portaria_morador' | 'geral' | 'emergencia'>('portaria_morador');
+  const [selectedVizinhoMoradorId, setSelectedVizinhoMoradorId] = useState('');
   const [textoMensagemRapida, setTextoMensagemRapida] = useState('');
 
-  // Push-to-Talk (PTT) Estados
-  const [isHoldingPTT, setIsHoldingPTT] = useState(false);
+  // Modo de operação do PTT: 'hold' (segurar) ou 'toggle' (clicar para iniciar/parar)
+  const [pttMode, setPttMode] = useState<'hold' | 'toggle'>('toggle');
+  const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
+
+  // Permissões e status do microfone
+  const [micPermissionState, setMicPermissionState] = useState<'prompt' | 'granted' | 'denied' | 'unknown'>('unknown');
   const [isMicAvailable, setIsMicAvailable] = useState<boolean | null>(null);
-  const [micError, setMicError] = useState<string | null>(null);
-  const [autoPlayIncoming, setAutoPlayIncoming] = useState(true);
+  const [micErrorMessage, setMicErrorMessage] = useState<string | null>(null);
+  const [showMicHelpModal, setShowMicHelpModal] = useState(false);
+
+  // Notificações em segundo plano
   const [notificationPermissionGranted, setNotificationPermissionGranted] = useState(
     typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted'
   );
@@ -76,6 +95,7 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
 
   // MediaRecorder refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -83,8 +103,9 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
   const animationFrameRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
 
-  // Moradores cadastrados para auto-complete
+  // Moradores cadastrados
   const todosMoradores = condoStore.getMoradores(condominio.id);
+  const outrosMoradores = todosMoradores.filter((m) => m.id !== currentMorador?.id);
 
   // Subscrição reativa aos dados do condoStore
   useEffect(() => {
@@ -101,34 +122,77 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
     return unsub;
   }, [condominio.id, currentMorador]);
 
-  // Checa permissão de notificação
+  // Checa permissão inicial do microfone e notificações
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      setNotificationPermissionGranted(Notification.permission === 'granted');
+    if (typeof window !== 'undefined') {
+      if ('Notification' in window) {
+        setNotificationPermissionGranted(Notification.permission === 'granted');
+      }
+
+      if (navigator.permissions && navigator.permissions.query) {
+        navigator.permissions
+          .query({ name: 'microphone' as any })
+          .then((permissionStatus) => {
+            setMicPermissionState(permissionStatus.state as any);
+            setIsMicAvailable(permissionStatus.state === 'granted');
+            permissionStatus.onchange = () => {
+              setMicPermissionState(permissionStatus.state as any);
+              setIsMicAvailable(permissionStatus.state === 'granted');
+            };
+          })
+          .catch(() => {
+            // Alguns navegadores podem não suportar query para microphone
+          });
+      }
     }
   }, []);
+
+  // Solicitar permissão de microfone
+  const handleRequestMicPermission = async () => {
+    try {
+      setMicErrorMessage(null);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+      setIsMicAvailable(true);
+      setMicPermissionState('granted');
+      audioAlertService.playChirpStart();
+      confetti({ particleCount: 40, spread: 60 });
+      // Fecha a stream de teste
+      stream.getTracks().forEach((track) => track.stop());
+    } catch (err: any) {
+      console.warn('Microphone permission error:', err);
+      setIsMicAvailable(false);
+      setMicPermissionState('denied');
+      setMicErrorMessage(
+        'Permissão de microfone não concedida pelo navegador. Clique no ícone de permissões/cadeado na barra de endereços para permitir o uso do microfone.'
+      );
+      setShowMicHelpModal(true);
+    }
+  };
 
   const handleRequestPushPermission = async () => {
     const granted = await audioAlertService.requestNotificationPermission();
     setNotificationPermissionGranted(granted);
     if (granted) {
-      audioAlertService.sendNotification('🔔 Notificações Ativadas!', {
-        body: 'Você receberá alertas sonoros em tempo real de chamadas de interfone e liberações de visitantes.',
+      audioAlertService.sendNotification(`📻 Interfone Ativo - ${condominio.nome}`, {
+        body: 'Alertas sonoros e chamadas de voz do interfone ativos.',
       });
       confetti({ particleCount: 40, spread: 60 });
     }
   };
 
-  // Inicializa gravação do microfone ao segurar o botão PTT
-  const startPTT = async () => {
+  // Iniciar Transmissão de Áudio
+  const startRecording = async () => {
     try {
-      setMicError(null);
+      setMicErrorMessage(null);
       audioAlertService.playChirpStart();
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
       setIsMicAvailable(true);
+      setMicPermissionState('granted');
 
-      // Web Audio Analyser para feedback visual
+      // Web Audio Analyser para animação visual do som
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       const ctx = new AudioCtx();
       audioContextRef.current = ctx;
@@ -170,7 +234,7 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
 
       mediaRecorderRef.current = recorder;
       recorder.start(100);
-      setIsHoldingPTT(true);
+      setIsRecording(true);
       startTimeRef.current = Date.now();
       setRecordingTime(0);
 
@@ -180,15 +244,18 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
     } catch (err: any) {
       console.warn('Microphone access denied or error:', err);
       setIsMicAvailable(false);
-      setMicError('Permissão de microfone negada. Permita o uso do microfone no navegador.');
-      setIsHoldingPTT(false);
+      setMicPermissionState('denied');
+      setMicErrorMessage(
+        'Permissão de microfone negada ou indisponível. Conceda permissão no navegador ou envie mensagens rápidas com voz sintetizada.'
+      );
+      setIsRecording(false);
     }
   };
 
-  // Finaliza gravação e envia transmissão via rádio
-  const stopPTT = async () => {
-    if (!isHoldingPTT) return;
-    setIsHoldingPTT(false);
+  // Parar Transmissão e Enviar
+  const stopRecording = async () => {
+    if (!isRecording) return;
+    setIsRecording(false);
 
     if (recordingTimerRef.current) {
       clearInterval(recordingTimerRef.current);
@@ -206,9 +273,10 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== 'inactive') {
       recorder.stop();
-      recorder.stream.getTracks().forEach((track) => track.stop());
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
 
-      // Converte áudio para Data URL
       setTimeout(async () => {
         const audioBlob = new Blob(audioChunksRef.current, {
           type: recorder.mimeType || 'audio/webm',
@@ -227,20 +295,37 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
     }
   };
 
+  // Toggle do PTT para quem prefere clique único
+  const toggleRecording = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
+
   // Disparo da transmissão montada
-  const dispatchAudioTransmission = async (audioDataUrl?: string, duracaoSegundos?: number, customTexto?: string) => {
-    let destinatarioTipo: 'portaria' | 'morador' | 'todos' = 'morador';
+  const dispatchAudioTransmission = async (
+    audioDataUrl?: string,
+    duracaoSegundos?: number,
+    customTexto?: string
+  ) => {
+    let destinatarioTipo: 'portaria' | 'morador' | 'todos' = 'portaria';
     let destinatarioUnidade = undefined;
     let destinatarioMoradorId = undefined;
+    let tipoCanal: 'portaria_morador' | 'geral' | 'emergencia' = 'portaria_morador';
 
-    if (!isPortariaOrStaff) {
-      // Morador sempre envia para a portaria (ou emergência)
-      destinatarioTipo = 'portaria';
-    } else {
-      if (targetCanal === 'geral' || targetCanal === 'emergencia') {
+    if (isPortariaOrStaff) {
+      if (destinoModo === 'geral') {
         destinatarioTipo = 'todos';
+        tipoCanal = 'geral';
+      } else if (destinoModo === 'emergencia') {
+        destinatarioTipo = 'todos';
+        tipoCanal = 'emergencia';
       } else {
+        // Apartamento Específico
         destinatarioTipo = 'morador';
+        tipoCanal = 'portaria_morador';
         destinatarioUnidade = {
           bloco: targetBloco.trim() || '1',
           apto: targetApto.trim() || '101',
@@ -254,24 +339,57 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
           destinatarioMoradorId = moradorEncontrado.id;
         }
       }
+    } else {
+      // Morador
+      if (destinoModo === 'portaria') {
+        destinatarioTipo = 'portaria';
+        tipoCanal = 'portaria_morador';
+      } else if (destinoModo === 'vizinho') {
+        destinatarioTipo = 'morador';
+        tipoCanal = 'portaria_morador';
+        destinatarioUnidade = {
+          bloco: targetBloco.trim() || '1',
+          apto: targetApto.trim() || '101',
+        };
+        const moradorEncontrado = todosMoradores.find(
+          (m) =>
+            (selectedVizinhoMoradorId && m.id === selectedVizinhoMoradorId) ||
+            (m.unidade?.apto === targetApto.trim() && (!targetBloco.trim() || m.unidade?.bloco === targetBloco.trim()))
+        );
+        if (moradorEncontrado) {
+          destinatarioMoradorId = moradorEncontrado.id;
+          destinatarioUnidade = moradorEncontrado.unidade;
+        }
+      } else if (destinoModo === 'geral') {
+        destinatarioTipo = 'todos';
+        tipoCanal = 'geral';
+      } else if (destinoModo === 'emergencia') {
+        destinatarioTipo = 'todos';
+        tipoCanal = 'emergencia';
+      }
     }
 
-    const textoFinal = customTexto || textoMensagemRapida.trim() || (audioDataUrl ? `Transmissão de Voz (${duracaoSegundos}s)` : 'Chamada no interfone');
+    const textoFinal =
+      customTexto ||
+      textoMensagemRapida.trim() ||
+      (audioDataUrl ? `Transmissão de Voz (${duracaoSegundos}s)` : 'Chamada no interfone');
 
     await condoStore.enviarInterfoneMensagem(condominio.id, {
       condominioId: condominio.id,
       remetenteId: currentMorador ? currentMorador.id : 'portaria_central',
-      remetenteNome: isPortariaOrStaff ? 'Portaria Central' : currentMorador?.nome || 'Morador',
+      remetenteNome: isPortariaOrStaff
+        ? 'Portaria Central'
+        : `${currentMorador?.nome || 'Morador'} (Apto ${currentMorador?.unidade?.apto || '303'})`,
       remetenteTipo: isPortariaOrStaff ? 'portaria' : 'morador',
       remetenteUnidade: currentMorador?.unidade,
       destinatarioTipo,
       destinatarioUnidade,
       destinatarioMoradorId,
-      tipoCanal: targetCanal,
+      tipoCanal,
       audioDataUrl,
       duracaoSegundos: duracaoSegundos || 3,
       texto: textoFinal,
-      prioridade: targetCanal === 'emergencia' ? 'emergencia' : 'normal',
+      prioridade: tipoCanal === 'emergencia' ? 'emergencia' : 'normal',
     });
 
     setTextoMensagemRapida('');
@@ -323,10 +441,11 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
         { label: '🚗 Alerta Veículo', text: 'Favor verificar veículo na garagem (farol aceso ou vaga incorreta).' },
       ]
     : [
-        { label: '🛵 Liberação de Delivery', text: 'Entregador do iFood liberado para subir.' },
-        { label: '🚪 Portão da Garagem', text: 'Favor verificar acionamento do portão de veículos.' },
-        { label: '📦 Chegada de Encomenda', text: 'Aguardando pacote Mercado Livre / Correios.' },
-        { label: '🚨 Emergência no Apartamento', text: 'Solicitação urgente de apoio da portaria no apartamento!' },
+        { label: '🛵 Liberar Delivery', text: 'Olá Portaria! O entregador de delivery está liberado para subir.' },
+        { label: '👤 Liberar Visitante', text: 'Olá Portaria! Meu convidado/visitante está autorizado a entrar.' },
+        { label: '📦 Dúvida Encomenda', text: 'Olá Portaria! Chegou alguma encomenda ou pacote para o meu apartamento hoje?' },
+        { label: '🚗 Portão Garagem', text: 'Olá Portaria! Poderia acionar a abertura do portão da garagem por gentileza?' },
+        { label: '🚨 Apoio Emergência', text: 'URGENTE: Solicito apoio da portaria no meu apartamento imediatamente!' },
       ];
 
   const handleSendPreset = async (presetText: string) => {
@@ -337,30 +456,92 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Banner de Ativação de Notificações em Segundo Plano */}
-      {!notificationPermissionGranted && (
-        <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-indigo-950 text-white p-4 sm:p-5 rounded-3xl border border-indigo-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg animate-in fade-in">
+      {/* Banner de Permissão de Microfone e Notificações */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Status do Microfone */}
+        <div
+          className={`p-4 rounded-3xl border transition-all flex items-center justify-between gap-4 ${
+            isMicAvailable
+              ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-100'
+              : 'bg-gradient-to-r from-amber-950/60 to-slate-900 border-amber-500/40 text-amber-100'
+          }`}
+        >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-500 text-white flex items-center justify-center font-bold shrink-0 animate-pulse">
-              <Bell className="w-5 h-5" />
+            <div
+              className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black shrink-0 ${
+                isMicAvailable ? 'bg-emerald-500 text-slate-950' : 'bg-amber-500 text-slate-950 animate-bounce'
+              }`}
+            >
+              {isMicAvailable ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
             </div>
             <div>
-              <h4 className="font-extrabold text-sm text-white">
-                Ativar Alertas em Segundo Plano & Toque de Interfone
-              </h4>
-              <p className="text-xs text-indigo-200">
-                Receba chamadas de voz e toques do interfone mesmo com a tela bloqueada ou aba minimizada.
+              <div className="font-extrabold text-xs flex items-center gap-1.5">
+                <span>Status do Microfone:</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    isMicAvailable ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
+                  }`}
+                >
+                  {isMicAvailable ? '🟢 Conectado & Ativo' : '🟡 Requer Permissão'}
+                </span>
+              </div>
+              <p className="text-[11px] opacity-80 mt-0.5">
+                {isMicAvailable
+                  ? 'Pronto para transmissões de voz em tempo real.'
+                  : 'Clique no botão para autorizar o microfone no seu dispositivo.'}
               </p>
             </div>
           </div>
+
           <button
-            onClick={handleRequestPushPermission}
-            className="px-4 py-2 rounded-xl bg-white text-indigo-950 hover:bg-indigo-50 font-black text-xs shadow-md transition cursor-pointer shrink-0"
+            type="button"
+            onClick={handleRequestMicPermission}
+            className={`px-4 py-2 rounded-xl text-xs font-black shrink-0 transition shadow cursor-pointer ${
+              isMicAvailable
+                ? 'bg-white/10 hover:bg-white/20 text-white'
+                : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/20'
+            }`}
           >
-            Ativar Notificações
+            {isMicAvailable ? 'Testar Microfone' : 'Ativar Microfone'}
           </button>
         </div>
-      )}
+
+        {/* Status de Notificações em Segundo Plano */}
+        <div className="p-4 rounded-3xl bg-indigo-950/40 border border-indigo-500/40 text-indigo-100 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-500 text-white flex items-center justify-center font-bold shrink-0">
+              <Bell className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="font-extrabold text-xs flex items-center gap-1.5">
+                <span>Alertas em Segundo Plano:</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    notificationPermissionGranted
+                      ? 'bg-emerald-500/20 text-emerald-300'
+                      : 'bg-indigo-500/20 text-indigo-300'
+                  }`}
+                >
+                  {notificationPermissionGranted ? '🟢 Ativo' : 'Toque / Notificação'}
+                </span>
+              </div>
+              <p className="text-[11px] opacity-80 mt-0.5">
+                Receba toques e alertas sonoros quando chamarem seu interfone.
+              </p>
+            </div>
+          </div>
+
+          {!notificationPermissionGranted && (
+            <button
+              type="button"
+              onClick={handleRequestPushPermission}
+              className="px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-black text-xs shrink-0 transition shadow cursor-pointer"
+            >
+              Ativar Sons
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Painel Principal do Walkie-Talkie (PTT) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -370,173 +551,335 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
             {/* Indicador de Status do Canal */}
             <div className="w-full flex items-center justify-between pb-4 mb-4 border-b border-slate-800 text-xs">
               <div className="flex items-center gap-2">
-                <div className={`w-2.5 h-2.5 rounded-full ${isHoldingPTT ? 'bg-rose-500 animate-ping' : 'bg-emerald-500'}`} />
+                <div
+                  className={`w-2.5 h-2.5 rounded-full ${
+                    isRecording ? 'bg-rose-500 animate-ping' : 'bg-emerald-500'
+                  }`}
+                />
                 <span className="font-mono font-bold text-slate-300">
-                  {isHoldingPTT ? 'TRANSMITINDO AO VIVO' : 'RÁDIO PRONTO / STANDBY'}
+                  {isRecording ? 'TRANSMITINDO AO VIVO' : 'RÁDIO PRONTO / STANDBY'}
                 </span>
               </div>
               <div className="flex items-center gap-1.5 text-[11px] text-slate-400 bg-slate-800 px-2.5 py-1 rounded-full">
                 <Signal className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Canal PTT Digital</span>
+                <span>PTT Interfone</span>
               </div>
             </div>
 
-            {/* Configuração de Destino (apenas para Portaria) */}
-            {isPortariaOrStaff ? (
-              <div className="w-full space-y-3 mb-5 text-left">
+            {/* SELEÇÃO DO DESTINO DA TRANSMISSÃO */}
+            <div className="w-full space-y-3 mb-5 text-left">
+              <div className="flex items-center justify-between">
                 <label className="block text-xs font-bold text-slate-300">
-                  Destino da Transmissão:
+                  {isPortariaOrStaff ? 'Destino da Transmissão (Portaria):' : 'Falar com quem? (Interfone):'}
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[10px] text-slate-400 mb-0.5">Bloco</label>
-                    <input
-                      type="text"
-                      placeholder="Bloco (Ex: 1 ou A)"
-                      value={targetBloco}
-                      onChange={(e) => setTargetBloco(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white placeholder-slate-500 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-slate-400 mb-0.5">Apartamento</label>
-                    <input
-                      type="text"
-                      placeholder="Apto (Ex: 303)"
-                      value={targetApto}
-                      onChange={(e) => setTargetApto(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white placeholder-slate-500 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 pt-1">
+                <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                  <span>Modo:</span>
                   <button
                     type="button"
-                    onClick={() => setTargetCanal('portaria_morador')}
-                    className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold border transition ${
-                      targetCanal === 'portaria_morador'
-                        ? 'bg-amber-500 text-slate-950 border-amber-400 font-extrabold'
-                        : 'bg-slate-800 text-slate-400 border-slate-700'
-                    }`}
+                    onClick={() => setPttMode(pttMode === 'hold' ? 'toggle' : 'hold')}
+                    className="text-amber-400 font-bold underline cursor-pointer hover:text-amber-300"
                   >
-                    Unidade Específica
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTargetCanal('geral')}
-                    className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold border transition ${
-                      targetCanal === 'geral'
-                        ? 'bg-indigo-600 text-white border-indigo-400 font-extrabold'
-                        : 'bg-slate-800 text-slate-400 border-slate-700'
-                    }`}
-                  >
-                    📢 Geral (Todos)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTargetCanal('emergencia')}
-                    className={`py-1.5 px-2 rounded-lg text-[11px] font-bold border transition ${
-                      targetCanal === 'emergencia'
-                        ? 'bg-rose-600 text-white border-rose-400 font-extrabold animate-pulse'
-                        : 'bg-slate-800 text-rose-400 border-slate-700'
-                    }`}
-                  >
-                    🚨 Emergência
+                    {pttMode === 'hold' ? 'Segurar p/ Falar' : 'Clique p/ Ligar/Desligar'}
                   </button>
                 </div>
               </div>
-            ) : (
-              <div className="w-full bg-slate-800/80 p-3 rounded-2xl border border-slate-700 mb-5 text-left flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black text-xs">
-                    <PhoneCall className="w-4 h-4" />
+
+              {/* Botões de Seleção de Canal / Destino */}
+              {!isPortariaOrStaff ? (
+                // Destinos para o MORADOR
+                <div className="space-y-2.5">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDestinoModo('portaria')}
+                      className={`p-2.5 rounded-xl text-xs font-black border transition flex items-center justify-center gap-2 cursor-pointer ${
+                        destinoModo === 'portaria'
+                          ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md'
+                          : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-750'
+                      }`}
+                    >
+                      <Building2 className="w-4 h-4" />
+                      <span>Portaria Central</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDestinoModo('vizinho')}
+                      className={`p-2.5 rounded-xl text-xs font-black border transition flex items-center justify-center gap-2 cursor-pointer ${
+                        destinoModo === 'vizinho'
+                          ? 'bg-indigo-600 text-white border-indigo-400 shadow-md'
+                          : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-750'
+                      }`}
+                    >
+                      <Users className="w-4 h-4" />
+                      <span>Outro Morador</span>
+                    </button>
                   </div>
-                  <div>
-                    <div className="text-xs font-black text-white">Canal Direto da Portaria 24h</div>
-                    <div className="text-[11px] text-slate-400">
-                      Unidade: Bloco {currentMorador?.unidade?.bloco || '1'} - Apto {currentMorador?.unidade?.apto || '303'}
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDestinoModo('geral')}
+                      className={`p-2 rounded-xl text-[11px] font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                        destinoModo === 'geral'
+                          ? 'bg-teal-600 text-white border-teal-400 font-black'
+                          : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-750'
+                      }`}
+                    >
+                      <Radio className="w-3.5 h-3.5" />
+                      <span>Canal Geral</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDestinoModo('emergencia')}
+                      className={`p-2 rounded-xl text-[11px] font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                        destinoModo === 'emergencia'
+                          ? 'bg-rose-600 text-white border-rose-400 font-black animate-pulse'
+                          : 'bg-slate-800 text-rose-400 border-slate-700 hover:bg-slate-750'
+                      }`}
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5" />
+                      <span>🚨 Emergência</span>
+                    </button>
+                  </div>
+
+                  {/* Detalhes do Vizinho Selecionado (quando em modo 'vizinho') */}
+                  {destinoModo === 'vizinho' && (
+                    <div className="p-3 bg-slate-800/90 rounded-2xl border border-indigo-500/30 space-y-2 animate-in fade-in">
+                      <span className="text-[10px] uppercase tracking-wider text-indigo-300 font-bold block">
+                        Informe o Apartamento do Vizinho:
+                      </span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          placeholder="Bloco (Ex: 1 ou A)"
+                          value={targetBloco}
+                          onChange={(e) => {
+                            setTargetBloco(e.target.value);
+                            setSelectedVizinhoMoradorId('');
+                          }}
+                          className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Apto (Ex: 101)"
+                          value={targetApto}
+                          onChange={(e) => {
+                            setTargetApto(e.target.value);
+                            setSelectedVizinhoMoradorId('');
+                          }}
+                          className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        />
+                      </div>
+
+                      {/* Chips de vizinhos rápidos */}
+                      {outrosMoradores.length > 0 && (
+                        <div className="pt-1">
+                          <span className="text-[10px] text-slate-400 block mb-1">Ou escolha um vizinho:</span>
+                          <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+                            {outrosMoradores.slice(0, 8).map((m) => (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedVizinhoMoradorId(m.id);
+                                  setTargetBloco(m.unidade.bloco);
+                                  setTargetApto(m.unidade.apto);
+                                }}
+                                className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                                  targetApto === m.unidade.apto && targetBloco === m.unidade.bloco
+                                    ? 'bg-indigo-600 text-white border-indigo-400'
+                                    : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-700'
+                                }`}
+                              >
+                                Bloco {m.unidade.bloco} - Apto {m.unidade.apto} ({m.nome.split(' ')[0]})
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // Destinos para a PORTARIA
+                <div className="space-y-2.5">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-0.5">Bloco</label>
+                      <input
+                        type="text"
+                        placeholder="Bloco (Ex: 1 ou A)"
+                        value={targetBloco}
+                        onChange={(e) => setTargetBloco(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white placeholder-slate-500 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-0.5">Apartamento</label>
+                      <input
+                        type="text"
+                        placeholder="Apto (Ex: 303)"
+                        value={targetApto}
+                        onChange={(e) => setTargetApto(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white placeholder-slate-500 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                      />
                     </div>
                   </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setDestinoModo('apartamento' as any)}
+                      className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                        destinoModo === ('apartamento' as any)
+                          ? 'bg-amber-500 text-slate-950 border-amber-400 font-extrabold'
+                          : 'bg-slate-800 text-slate-400 border-slate-700'
+                      }`}
+                    >
+                      Unidade Específica
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDestinoModo('geral')}
+                      className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                        destinoModo === 'geral'
+                          ? 'bg-indigo-600 text-white border-indigo-400 font-extrabold'
+                          : 'bg-slate-800 text-slate-400 border-slate-700'
+                      }`}
+                    >
+                      📢 Geral (Todos)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDestinoModo('emergencia')}
+                      className={`py-1.5 px-2 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                        destinoModo === 'emergencia'
+                          ? 'bg-rose-600 text-white border-rose-400 font-extrabold animate-pulse'
+                          : 'bg-slate-800 text-rose-400 border-slate-700'
+                      }`}
+                    >
+                      🚨 Emergência
+                    </button>
+                  </div>
                 </div>
-                <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                  Online
-                </span>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* BOTÃO PTT CENTRAL (ESTILO ZELLO / WALKIE-TALKIE) */}
-            <div className="relative my-4">
+            <div className="relative my-3">
               {/* Círculo pulsante ao transmitir */}
-              {isHoldingPTT && (
+              {isRecording && (
                 <div
                   className="absolute inset-0 rounded-full bg-rose-500/30 animate-ping pointer-events-none"
                   style={{ transform: `scale(${1 + audioLevel / 60})` }}
                 />
               )}
 
-              <button
-                id="btn-ptt-walkie-talkie"
-                onMouseDown={startPTT}
-                onMouseUp={stopPTT}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  startPTT();
-                }}
-                onTouchEnd={(e) => {
-                  e.preventDefault();
-                  stopPTT();
-                }}
-                className={`relative w-36 h-36 sm:w-40 sm:h-40 rounded-full flex flex-col items-center justify-center gap-2 select-none shadow-2xl transition-all active:scale-95 cursor-pointer touch-none ${
-                  isHoldingPTT
-                    ? 'bg-gradient-to-tr from-rose-600 to-rose-500 text-white shadow-rose-600/50 ring-8 ring-rose-500/30'
-                    : 'bg-gradient-to-tr from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 shadow-amber-500/30 ring-4 ring-amber-500/20'
-                }`}
-              >
-                <Mic className={`w-12 h-12 transition ${isHoldingPTT ? 'scale-110 animate-pulse' : ''}`} />
-                <span className="font-black text-xs uppercase tracking-wider">
-                  {isHoldingPTT ? 'SOLTE P/ ENVIAR' : 'SEGURE P/ FALAR'}
-                </span>
-              </button>
+              {pttMode === 'hold' ? (
+                // Modo Segurar para Falar
+                <button
+                  id="btn-ptt-walkie-talkie-hold"
+                  onMouseDown={startRecording}
+                  onMouseUp={stopRecording}
+                  onTouchStart={(e) => {
+                    e.preventDefault();
+                    startRecording();
+                  }}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    stopRecording();
+                  }}
+                  className={`relative w-36 h-36 sm:w-40 sm:h-40 rounded-full flex flex-col items-center justify-center gap-2 select-none shadow-2xl transition-all active:scale-95 cursor-pointer touch-none ${
+                    isRecording
+                      ? 'bg-gradient-to-tr from-rose-600 to-rose-500 text-white shadow-rose-600/50 ring-8 ring-rose-500/30'
+                      : 'bg-gradient-to-tr from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 shadow-amber-500/30 ring-4 ring-amber-500/20'
+                  }`}
+                >
+                  <Mic className={`w-12 h-12 transition ${isRecording ? 'scale-110 animate-pulse' : ''}`} />
+                  <span className="font-black text-xs uppercase tracking-wider">
+                    {isRecording ? 'SOLTE P/ ENVIAR' : 'SEGURE P/ FALAR'}
+                  </span>
+                </button>
+              ) : (
+                // Modo Clique para Iniciar / Parar
+                <button
+                  id="btn-ptt-walkie-talkie-toggle"
+                  type="button"
+                  onClick={toggleRecording}
+                  className={`relative w-36 h-36 sm:w-40 sm:h-40 rounded-full flex flex-col items-center justify-center gap-2 select-none shadow-2xl transition-all active:scale-95 cursor-pointer ${
+                    isRecording
+                      ? 'bg-gradient-to-tr from-rose-600 to-rose-500 text-white shadow-rose-600/50 ring-8 ring-rose-500/30 animate-pulse'
+                      : 'bg-gradient-to-tr from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 shadow-amber-500/30 ring-4 ring-amber-500/20'
+                  }`}
+                >
+                  <Mic className={`w-12 h-12 transition ${isRecording ? 'scale-110 animate-pulse text-white' : ''}`} />
+                  <span className="font-black text-xs uppercase tracking-wider">
+                    {isRecording ? 'CLIQUE P/ ENCERRAR' : 'CLIQUE P/ FALAR'}
+                  </span>
+                </button>
+              )}
             </div>
 
             {/* Timer de Transmissão */}
             <div className="h-6 flex items-center justify-center">
-              {isHoldingPTT ? (
+              {isRecording ? (
                 <div className="flex items-center gap-2 text-rose-400 font-mono font-black text-sm animate-pulse">
                   <div className="w-2 h-2 rounded-full bg-rose-500" />
                   <span>00:{recordingTime.toString().padStart(2, '0')}s</span>
-                  <span className="text-[10px] text-slate-400">({audioLevel}% vol)</span>
+                  <span className="text-[10px] text-slate-400">({audioLevel}% volume)</span>
                 </div>
               ) : (
                 <span className="text-[11px] text-slate-400">
-                  Mantenha pressionado para falar como num rádio walkie-talkie
+                  {pttMode === 'hold' ? 'Pressione e segure para falar' : 'Clique no microfone para iniciar a gravação de voz'}
                 </span>
               )}
             </div>
 
-            {/* Erro de microfone se houver */}
-            {micError && (
-              <div className="mt-3 p-2 rounded-xl bg-rose-950/80 border border-rose-700 text-rose-200 text-xs font-bold flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-                <span>{micError}</span>
+            {/* Erro de microfone com botão de ajuda */}
+            {micErrorMessage && (
+              <div className="mt-3 p-3 rounded-2xl bg-rose-950/90 border border-rose-700 text-rose-200 text-xs font-bold text-left space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>Acesso ao Microfone Necessário</span>
+                </div>
+                <p className="text-[11px] text-rose-300 font-normal leading-relaxed">
+                  {micErrorMessage}
+                </p>
+                <div className="pt-1 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleRequestMicPermission}
+                    className="px-3 py-1 bg-rose-700 hover:bg-rose-600 text-white rounded-lg text-[11px] font-bold cursor-pointer transition"
+                  >
+                    Tentar Novamente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowMicHelpModal(true)}
+                    className="px-3 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[11px] font-bold cursor-pointer transition"
+                  >
+                    Como Permitir?
+                  </button>
+                </div>
               </div>
             )}
 
-            {/* Teste Sonoro */}
+            {/* Testes Sonoros */}
             <div className="w-full flex items-center justify-between pt-4 mt-4 border-t border-slate-800 text-xs">
               <button
                 type="button"
                 onClick={() => audioAlertService.playIntercomRingtone()}
-                className="text-slate-400 hover:text-white flex items-center gap-1.5 transition text-[11px]"
+                className="text-slate-400 hover:text-white flex items-center gap-1.5 transition text-[11px] cursor-pointer"
               >
                 <Volume2 className="w-3.5 h-3.5" />
-                <span>Testar Toque do Interfone</span>
+                <span>Testar Toque</span>
               </button>
               <button
                 type="button"
                 onClick={() => audioAlertService.playRogerBeep()}
-                className="text-slate-400 hover:text-white flex items-center gap-1.5 transition text-[11px]"
+                className="text-slate-400 hover:text-white flex items-center gap-1.5 transition text-[11px] cursor-pointer"
               >
                 <Radio className="w-3.5 h-3.5" />
                 <span>Roger Beep</span>
@@ -546,15 +889,17 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
 
           {/* Atalhos Rápidos de Interfone */}
           <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-3">
-            <h3 className="font-extrabold text-xs uppercase tracking-wider text-slate-500">
-              ⚡ Avisos Rápidos no Interfone (1-Clique)
+            <h3 className="font-extrabold text-xs uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>Avisos Rápidos no Interfone (1-Clique)</span>
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {quickPresets.map((preset, idx) => (
                 <button
                   key={idx}
+                  type="button"
                   onClick={() => handleSendPreset(preset.text)}
-                  className="p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-left transition cursor-pointer active:scale-98 space-y-1"
+                  className="p-3 rounded-2xl bg-slate-50 hover:bg-amber-50/50 hover:border-amber-200 border border-slate-200 text-left transition cursor-pointer active:scale-98 space-y-1"
                 >
                   <div className="font-extrabold text-xs text-slate-900">{preset.label}</div>
                   <div className="text-[11px] text-slate-500 line-clamp-1">{preset.text}</div>
@@ -583,7 +928,7 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
               {mensagens.length > 0 && isPortariaOrStaff && (
                 <button
                   onClick={() => condoStore.limparHistoricoInterfone(condominio.id)}
-                  className="text-xs text-slate-400 hover:text-rose-600 flex items-center gap-1 transition"
+                  className="text-xs text-slate-400 hover:text-rose-600 flex items-center gap-1 transition cursor-pointer"
                   title="Limpar histórico"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -601,7 +946,9 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
                   </div>
                   <div className="text-slate-500 font-bold text-sm">Nenhuma transmissão recente</div>
                   <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                    Pressione o botão amarelo do rádio para enviar áudios instantâneos entre a Portaria e os Apartamentos.
+                    {isPortariaOrStaff
+                      ? 'Pressione o botão amarelo do rádio para enviar áudios aos moradores.'
+                      : 'Pressione o botão para falar diretamente com a Portaria ou outro Morador.'}
                   </p>
                 </div>
               ) : (
@@ -646,6 +993,16 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
                                 ➔ Bloco {msg.destinatarioUnidade.bloco} - Apto {msg.destinatarioUnidade.apto}
                               </span>
                             )}
+                            {msg.destinatarioTipo === 'portaria' && (
+                              <span className="text-[11px] text-amber-700 font-bold">
+                                ➔ Portaria
+                              </span>
+                            )}
+                            {msg.destinatarioTipo === 'todos' && (
+                              <span className="text-[11px] text-indigo-700 font-bold">
+                                ➔ Geral (Todos)
+                              </span>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
@@ -668,8 +1025,9 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
                         {msg.audioDataUrl && (
                           <div className="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between gap-3 shadow-xs">
                             <button
+                              type="button"
                               onClick={() => handlePlayAudio(msg)}
-                              className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition ${
+                              className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition cursor-pointer ${
                                 isPlaying
                                   ? 'bg-rose-600 text-white animate-pulse'
                                   : 'bg-slate-900 hover:bg-slate-800 text-white'
@@ -716,7 +1074,7 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
           >
             <input
               type="text"
-              placeholder="Digite uma mensagem rápida para enviar no canal..."
+              placeholder="Digite uma mensagem rápida para transmitir..."
               value={textoMensagemRapida}
               onChange={(e) => setTextoMensagemRapida(e.target.value)}
               className="flex-1 px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
@@ -731,6 +1089,67 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
           </form>
         </div>
       </div>
+
+      {/* Modal de Ajuda com Permissão de Microfone */}
+      {showMicHelpModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200 animate-in zoom-in-95">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-slate-900 font-black text-base">
+                <Mic className="w-5 h-5 text-amber-600" />
+                <span>Como Ativar o Microfone</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMicHelpModal(false)}
+                className="p-1 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-slate-600">
+              <p>
+                Para falar pelo interfone walkie-talkie (PTT), seu navegador precisa de permissão de acesso ao microfone:
+              </p>
+              <ol className="list-decimal pl-4 space-y-2 font-medium">
+                <li>
+                  Localize o <strong>ícone de cadeado ou configurações</strong> ao lado do endereço do site (barra de navegação no topo).
+                </li>
+                <li>
+                  Clique em <strong>Permissões do Site</strong> ou <strong>Microfone</strong>.
+                </li>
+                <li>
+                  Altere para <strong>Permitir</strong> (Allow).
+                </li>
+                <li>
+                  Recarregue a página ou clique em <strong>"Tentar Novamente"</strong> no botão abaixo.
+                </li>
+              </ol>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowMicHelpModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
+              >
+                Entendi
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMicHelpModal(false);
+                  handleRequestMicPermission();
+                }}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs cursor-pointer"
+              >
+                Solicitar Microfone Agora
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
