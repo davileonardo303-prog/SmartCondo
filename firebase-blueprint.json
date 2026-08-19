@@ -178,12 +178,37 @@
         "lida": { "type": "boolean" }
       },
       "required": ["id", "condominioId", "titulo", "mensagem", "tipo", "timestamp"]
+    },
+    "Chamada": {
+      "title": "Chamada",
+      "description": "Chamadas de interfone digital e voz em tempo real",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "condominioId": { "type": "string" },
+        "origemId": { "type": "string" },
+        "origemNome": { "type": "string" },
+        "origemTipo": { "type": "string", "enum": ["portaria", "sindico", "morador", "super_admin"] },
+        "origemUnidade": { "type": "string" },
+        "destinoId": { "type": "string" },
+        "destinoNome": { "type": "string" },
+        "destinoTipo": { "type": "string", "enum": ["portaria", "sindico", "morador"] },
+        "destinoUnidade": { "type": "string" },
+        "tipoMidia": { "type": "string", "enum": ["audio", "video"] },
+        "status": { "type": "string", "enum": ["chamando", "em_andamento", "finalizada", "recusada"] },
+        "criadoEm": { "type": "number" }
+      },
+      "required": ["id", "origemNome", "origemTipo", "tipoMidia", "status"]
     }
   },
   "firestore": {
     "/condominios/{condominioId}": {
       "schema": "Condominio",
       "description": "Coleção de condomínios clientes do sistema"
+    },
+    "/condominios/{condominioId}/chamadas/{chamadaId}": {
+      "schema": "Chamada",
+      "description": "Chamadas ativas e histórico de interfone digital em tempo real"
     },
     "/condominios/{condominioId}/moradores/{moradorId}": {
       "schema": "Morador",

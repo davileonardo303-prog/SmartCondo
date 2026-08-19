@@ -515,5 +515,96 @@ export async function saveFCMTokenToFirestore(userId: string, token: string): Pr
   }
 }
 
+// ==========================================
+// CHAMADAS EM TEMPO REAL (FIRESTORE SIGNALING)
+// ==========================================
+export async function saveChamadaToFirestore(
+  condominioId: string,
+  chamada: {
+    id: string;
+    origemId?: string;
+    origemNome: string;
+    origemTipo: 'portaria' | 'sindico' | 'morador' | 'super_admin';
+    origemUnidade?: string;
+    destinoId?: string;
+    destinoNome?: string;
+    destinoTipo?: 'portaria' | 'sindico' | 'morador';
+    destinoUnidade?: string;
+    tipoMidia: 'audio' | 'video';
+    status: 'chamando' | 'em_andamento' | 'finalizada' | 'recusada';
+    criadoEm?: number;
+  }
+): Promise<void> {
+  const path = `condominios/${condominioId}/chamadas/${chamada.id}`;
+  try {
+    const rawData = {
+      ...chamada,
+      criadoEm: chamada.criadoEm || Date.now(),
+    };
+    const data = cleanFirestoreData(rawData);
+    await setDoc(
+      doc(db, 'condominios', condominioId, 'chamadas', chamada.id),
+      data,
+      { merge: true }
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function updateChamadaStatusInFirestore(
+  condominioId: string,
+  chamadaId: string,
+  status: 'chamando' | 'em_andamento' | 'finalizada' | 'recusada'
+): Promise<void> {
+  try {
+    const rawData = {
+      status,
+      atualizadoEm: Date.now(),
+    };
+    const data = cleanFirestoreData(rawData);
+    await updateDoc(doc(db, 'condominios', condominioId, 'chamadas', chamadaId), data);
+  } catch (error) {
+    // Documento pode já ter sido excluído ou não sincronizado
+  }
+}
+
+export function listenChamadasFromFirestore(
+  condominioId: string,
+  callback: (chamadas: any[]) => void
+): Unsubscribe {
+  try {
+    const colRef = collection(db, 'condominios', condominioId, 'chamadas');
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        const list: any[] = [];
+        snapshot.forEach((d) => {
+          list.push({ ...d.data(), id: d.id });
+        });
+        callback(list);
+      },
+      (error) => {
+        console.warn('Erro ao escutar chamadas no Firestore:', error);
+      }
+    );
+  } catch (err) {
+    console.warn('Falha no listener de chamadas:', err);
+    return () => {};
+  }
+}
+
+export async function deleteChamadaFromFirestore(
+  condominioId: string,
+  chamadaId: string
+): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'condominios', condominioId, 'chamadas', chamadaId));
+  } catch {
+    // Ignora
+  }
+}
+
+
 
 

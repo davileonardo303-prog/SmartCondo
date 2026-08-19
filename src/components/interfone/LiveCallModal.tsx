@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Condominio, Morador, UserAccount, UserRole, ChamadaInterfone, Unidade } from '../../types';
 import { condoStore } from '../../services/mockStorage';
 import { callAudioService } from '../../utils/callAudio';
+import { webrtcCallService } from '../../services/webrtcCallService';
 import {
   Phone,
   PhoneOff,
@@ -16,12 +17,11 @@ import {
   Building2,
   Lock,
   Unlock,
-  Sparkles,
-  Zap,
   Radio,
   Clock,
   User,
   CheckCircle2,
+  VolumeCheck,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -51,6 +51,7 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
   const [isVideoEnabled, setIsVideoEnabled] = useState(false);
   const [audioLevel, setAudioLevel] = useState<number>(0);
   const [isGateUnlocked, setIsGateUnlocked] = useState(false);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
 
   const localStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -58,6 +59,7 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
   const animFrameRef = useRef<number | null>(null);
   const timerIntervalRef = useRef<any>(null);
   const videoLocalRef = useRef<HTMLVideoElement | null>(null);
+  const videoRemoteRef = useRef<HTMLVideoElement | null>(null);
 
   // Inscreve-se nas mudanças da store e nos eventos de chamada
   useEffect(() => {
@@ -73,13 +75,8 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
 
     const unsubscribe = condoStore.subscribe(checkCall);
 
-    const handleIncomingCall = (e: any) => {
-      checkCall();
-    };
-
-    const handleStatusChange = (e: any) => {
-      checkCall();
-    };
+    const handleIncomingCall = () => checkCall();
+    const handleStatusChange = () => checkCall();
 
     window.addEventListener('smartcondo_incoming_call', handleIncomingCall);
     window.addEventListener('smartcondo_call_status_change', handleStatusChange);
@@ -97,13 +94,35 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
   const isOutgoing = activeCall && activeCall.callerId === currentUser.id && activeCall.status === 'ringing';
   const isConnected = activeCall && activeCall.status === 'connected';
 
-  // Gerenciamento de Sons e Ringtone
+  // Configura callbacks do WebRTC
+  useEffect(() => {
+    webrtcCallService.setCallbacks((stream) => {
+      setRemoteStream(stream);
+      if (videoRemoteRef.current) {
+        videoRemoteRef.current.srcObject = stream;
+      }
+    });
+  }, []);
+
+  // Inicia conexão WebRTC quando estiver discando (caller)
+  useEffect(() => {
+    if (isOutgoing && activeCall) {
+      callAudioService.startOutgoingDialTone();
+      webrtcCallService.createCallOffer(condominio.id, activeCall.id, isVideoEnabled).catch((err) => {
+        console.warn('Erro ao criar oferta WebRTC:', err);
+      });
+    }
+  }, [isOutgoing, activeCall?.id]);
+
+  // Gerenciamento de Sons e Ciclo de Vida da Chamada
   useEffect(() => {
     if (!activeCall) {
       callAudioService.stopAll();
       stopMicrophone();
+      webrtcCallService.cleanup();
       clearInterval(timerIntervalRef.current);
       setCallDuration(0);
+      setRemoteStream(null);
       return;
     }
 
@@ -123,6 +142,7 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
     } else if (activeCall.status === 'rejected' || activeCall.status === 'ended') {
       callAudioService.playCallEnded();
       stopMicrophone();
+      webrtcCallService.cleanup();
       clearInterval(timerIntervalRef.current);
       const t = setTimeout(() => {
         setActiveCall(null);
@@ -135,13 +155,10 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
     };
   }, [activeCall?.id, activeCall?.status]);
 
-  // Inicializa microfone e analisador de espectro de áudio
+  // Inicializa microfone e analisador de espectro de áudio local
   const startMicrophone = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: isVideoEnabled,
-      });
+      const stream = await webrtcCallService.getLocalMediaStream(isVideoEnabled);
       localStreamRef.current = stream;
 
       if (videoLocalRef.current && isVideoEnabled) {
@@ -150,6 +167,9 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
 
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       const ctx = new AudioCtx();
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
       audioContextRef.current = ctx;
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
@@ -194,30 +214,32 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
 
   // Alternar Mudo
   const toggleMute = () => {
-    if (localStreamRef.current) {
-      const audioTracks = localStreamRef.current.getAudioTracks();
-      audioTracks.forEach((track) => {
-        track.enabled = isMuted; // Inverte
-      });
-      setIsMuted(!isMuted);
-    }
+    const nextMuted = !isMuted;
+    setIsMuted(nextMuted);
+    webrtcCallService.setMute(nextMuted);
   };
 
   // Alternar Câmera de Vídeo
   const toggleVideo = async () => {
     const nextVideoState = !isVideoEnabled;
     setIsVideoEnabled(nextVideoState);
-    if (localStreamRef.current) {
+    if (isConnected) {
       stopMicrophone();
       setTimeout(startMicrophone, 200);
     }
   };
 
   // Atender Chamada
-  const handleAnswer = () => {
+  const handleAnswer = async () => {
     if (!activeCall) return;
     callAudioService.stopAll();
+    callAudioService.unlockAudio();
     condoStore.atenderChamada(condominio.id, activeCall.id);
+    try {
+      await webrtcCallService.answerCall(condominio.id, activeCall.id, isVideoEnabled);
+    } catch (err) {
+      console.warn('Erro ao responder WebRTC:', err);
+    }
   };
 
   // Recusar Chamada
@@ -225,6 +247,7 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
     if (!activeCall) return;
     callAudioService.stopAll();
     callAudioService.playCallEnded();
+    webrtcCallService.cleanup();
     condoStore.recusarChamada(condominio.id, activeCall.id);
     setActiveCall(null);
   };
@@ -234,6 +257,7 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
     if (!activeCall) return;
     callAudioService.stopAll();
     callAudioService.playCallEnded();
+    webrtcCallService.cleanup();
     condoStore.encerrarChamada(condominio.id, activeCall.id);
     stopMicrophone();
     setActiveCall(null);
@@ -296,7 +320,7 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
             {isConnected ? (
               <>
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span className="text-emerald-400 font-black">Em Conversação Direta</span>
+                <span className="text-emerald-400 font-black">Conectado • Áudio Full Duplex</span>
               </>
             ) : isIncoming ? (
               <>
@@ -316,13 +340,13 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
           </h2>
 
           <p className="text-xs text-slate-400 font-medium">
-            {condominio.nome} • Interfonia Digital WebRTC
+            {condominio.nome} • Interfonia Digital WebRTC Real-Time
           </p>
         </div>
 
         {/* AVATAR COM RADAR E ONDAS DE TRANSMISSÃO */}
         <div className="relative my-2 z-10 flex items-center justify-center">
-          {/* Ondas pulsantes de radar (Estilo WhatsApp / Instagram) */}
+          {/* Ondas pulsantes de radar */}
           {(isIncoming || isOutgoing || (isConnected && audioLevel > 15)) && (
             <>
               <div
@@ -351,10 +375,9 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
           >
             {isVideoEnabled ? (
               <video
-                ref={videoLocalRef}
+                ref={videoRemoteRef.current ? videoRemoteRef : videoLocalRef}
                 autoPlay
                 playsInline
-                muted
                 className="w-full h-full object-cover rounded-full"
               />
             ) : otherPersonRole === 'portaria' ? (
@@ -367,7 +390,7 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
               </div>
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-teal-600 to-slate-900 rounded-full flex items-center justify-center text-white text-2xl font-black">
-                {otherPersonName.charAt(0)}
+                {otherPersonName ? otherPersonName.charAt(0).toUpperCase() : 'M'}
               </div>
             )}
           </div>
@@ -398,14 +421,14 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
           <div className="w-full bg-slate-950/80 border border-slate-800/80 rounded-2xl p-3 flex flex-col items-center space-y-2 z-10">
             <div className="flex items-center gap-1.5 h-8 w-full justify-center">
               {[40, 75, 55, 90, 60, 100, 70, 85, 45, 95, 65, 80, 50].map((baseHeight, i) => {
-                const dynamicH = Math.max(12, Math.round((baseHeight * (audioLevel + 20)) / 100));
+                const dynamicH = Math.max(15, Math.round((baseHeight * (audioLevel + 25)) / 100));
                 return (
                   <span
                     key={i}
                     className="w-1.5 bg-emerald-400 rounded-full transition-all duration-75"
                     style={{
                       height: `${dynamicH}%`,
-                      opacity: audioLevel > 5 ? 0.9 : 0.35,
+                      opacity: audioLevel > 5 ? 0.95 : 0.4,
                     }}
                   />
                 );
@@ -413,7 +436,7 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
             </div>
             <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
               <Mic className="w-3 h-3 text-emerald-400" />
-              <span>Microfone Bidirecional Ativo • Full Duplex</span>
+              <span>Microfone Bidirecional Ativo • WebRTC P2P</span>
             </span>
           </div>
         )}
@@ -482,7 +505,7 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
         {/* BOTÕES DE AÇÃO: ATENDER / RECUSAR / ENCERRAR */}
         <div className="w-full pt-2 z-10">
           {isIncoming ? (
-            /* ESTADO 1: CHAMADA RECEBIDA (BOMBA NA TELA) */
+            /* ESTADO 1: CHAMADA RECEBIDA (POPUP ANIMADO) */
             <div className="flex items-center justify-center gap-8 w-full">
               {/* BOTÃO RECUSAR */}
               <div className="flex flex-col items-center gap-2">

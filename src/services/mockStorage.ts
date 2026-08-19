@@ -66,6 +66,9 @@ import {
   deleteVisitanteFromFirestore,
   syncInterfoneToFirestore,
   deleteInterfoneFromFirestore,
+  saveChamadaToFirestore,
+  updateChamadaStatusInFirestore,
+  deleteChamadaFromFirestore,
 } from './firebase';
 import { collection, onSnapshot, doc, getDocs } from 'firebase/firestore';
 
@@ -781,6 +784,53 @@ class MockCondoStore {
         (err) => console.warn('Interfone sync error:', err.message)
       );
       unsubs.push(unsubInter);
+
+      // Chamadas Telefônicas / Interfone Duplex em Tempo Real
+      const unsubChamadas = onSnapshot(
+        collection(db, 'condominios', condoId, 'chamadas'),
+        (snap) => {
+          const list: ChamadaInterfone[] = [];
+          snap.forEach((d) => {
+            const data = d.data();
+            list.push({
+              id: d.id,
+              condominioId: condoId,
+              callerId: data.origemId || data.callerId || '',
+              callerName: data.origemNome || data.callerName || '',
+              callerRole: data.origemTipo || data.callerRole || 'morador',
+              callerUnidade: data.origemUnidade
+                ? { bloco: data.origemUnidade.split(' ')[1] || '', apto: data.origemUnidade.split(' ')[3] || data.origemUnidade }
+                : data.callerUnidade,
+              receiverId: data.destinoId || data.receiverId || '',
+              receiverName: data.destinoNome || data.receiverName || '',
+              receiverRole: data.destinoTipo || data.receiverRole || 'morador',
+              receiverUnidade: data.destinoUnidade
+                ? { bloco: data.destinoUnidade.split(' ')[1] || '', apto: data.destinoUnidade.split(' ')[3] || data.destinoUnidade }
+                : data.receiverUnidade,
+              status:
+                data.status === 'chamando'
+                  ? 'ringing'
+                  : data.status === 'em_andamento'
+                  ? 'connected'
+                  : data.status === 'recusada'
+                  ? 'rejected'
+                  : data.status === 'finalizada'
+                  ? 'ended'
+                  : (data.status as any) || 'ringing',
+              tipo: data.tipoMidia || data.tipo || 'audio',
+              startedAt: data.criadoEm || data.startedAt || Date.now(),
+              connectedAt: data.connectedAt,
+              endedAt: data.endedAt,
+            });
+          });
+
+          if (this.updateLocalSubcollection(this.chamadasInterfone, condoId, list)) {
+            this.notify();
+          }
+        },
+        (err) => console.warn('Chamadas sync error:', err.message)
+      );
+      unsubs.push(unsubChamadas);
 
       this.subUnsubscribers[condoId] = unsubs;
     } catch (err) {
@@ -4370,6 +4420,22 @@ class MockCondoStore {
     this.saveToStorage();
     this.notify();
 
+    // Sincroniza com Firestore em tempo real
+    saveChamadaToFirestore(data.condominioId, {
+      id: nova.id,
+      origemId: nova.callerId,
+      origemNome: nova.callerName,
+      origemTipo: nova.callerRole as any,
+      origemUnidade: nova.callerUnidade ? `Bloco ${nova.callerUnidade.bloco} - Apto ${nova.callerUnidade.apto}` : undefined,
+      destinoId: nova.receiverId,
+      destinoNome: nova.receiverName,
+      destinoTipo: nova.receiverRole as any,
+      destinoUnidade: nova.receiverUnidade ? `Bloco ${nova.receiverUnidade.bloco} - Apto ${nova.receiverUnidade.apto}` : undefined,
+      tipoMidia: nova.tipo || 'audio',
+      status: 'chamando',
+      criadoEm: nova.startedAt,
+    }).catch(() => {});
+
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('smartcondo_incoming_call', { detail: nova }));
     }
@@ -4385,6 +4451,9 @@ class MockCondoStore {
       chamada.connectedAt = Date.now();
       this.saveToStorage();
       this.notify();
+
+      updateChamadaStatusInFirestore(condoId, chamadaId, 'em_andamento').catch(() => {});
+
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('smartcondo_call_status_change', { detail: chamada }));
       }
@@ -4401,6 +4470,9 @@ class MockCondoStore {
       chamada.endedAt = Date.now();
       this.saveToStorage();
       this.notify();
+
+      updateChamadaStatusInFirestore(condoId, chamadaId, 'recusada').catch(() => {});
+
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('smartcondo_call_status_change', { detail: chamada }));
       }
@@ -4420,6 +4492,9 @@ class MockCondoStore {
       }
       this.saveToStorage();
       this.notify();
+
+      updateChamadaStatusInFirestore(condoId, chamadaId, 'finalizada').catch(() => {});
+
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('smartcondo_call_status_change', { detail: chamada }));
       }
@@ -4442,25 +4517,31 @@ class MockCondoStore {
       // Se eu sou quem iniciou a chamada
       if (c.callerId === userId) return true;
 
-      // Se eu sou o destinatário direto
-      if (c.receiverId === userId) return true;
+      // Se eu sou o destinatário direto por ID
+      if (c.receiverId && (c.receiverId === userId || c.receiverId === userRole)) return true;
 
-      // Se foi enviado para a portaria e meu papel é portaria/super_admin
-      if (c.receiverId === 'portaria' && (userRole === 'portaria' || userRole === 'super_admin')) {
+      // Se foi enviado para a portaria e sou portaria ou admin
+      if (
+        (c.receiverRole === 'portaria' || c.receiverId === 'portaria' || c.receiverId === `${condoId}_portaria`) &&
+        (userRole === 'portaria' || userRole === 'super_admin' || userRole === 'admin_condominio')
+      ) {
         return true;
       }
 
-      // Se foi enviado para o síndico e meu papel é síndico
-      if (c.receiverId === 'sindico' && userRole === 'sindico') {
+      // Se foi enviado para o síndico/administração e sou síndico ou admin
+      if (
+        (c.receiverRole === 'sindico' || c.receiverId === 'sindico' || c.receiverId === `${condoId}_sindico`) &&
+        (userRole === 'sindico' || userRole === 'super_admin' || userRole === 'admin_condominio')
+      ) {
         return true;
       }
 
-      // Se foi enviado para a minha unidade
+      // Se foi enviado para a minha unidade (Bloco/Apartamento)
       if (
         userUnidade &&
         c.receiverUnidade &&
-        userUnidade.apto === c.receiverUnidade.apto &&
-        (!userUnidade.bloco || !c.receiverUnidade.bloco || userUnidade.bloco === c.receiverUnidade.bloco)
+        String(userUnidade.apto).trim().toLowerCase() === String(c.receiverUnidade.apto).trim().toLowerCase() &&
+        (!userUnidade.bloco || !c.receiverUnidade.bloco || String(userUnidade.bloco).trim().toLowerCase() === String(c.receiverUnidade.bloco).trim().toLowerCase())
       ) {
         return true;
       }
