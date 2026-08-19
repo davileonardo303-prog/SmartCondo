@@ -15,6 +15,8 @@ import { ScrollableTabsNav } from '../common/ScrollableTabsNav';
 import { UniversalQrCodeScanner } from '../common/UniversalQrCodeScanner';
 import { EntregaEncomendaModal } from './EntregaEncomendaModal';
 import { FotoEtiquetaCapture } from './FotoEtiquetaCapture';
+import { VisitantesAlertBanner } from './VisitantesAlertBanner';
+import { IntercomPTTView } from '../interfone/IntercomPTTView';
 import {
   Package,
   Bike,
@@ -571,6 +573,12 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Banner de Notificação Gigante de Liberação de Visitantes Emitida pelos Moradores */}
+      <VisitantesAlertBanner
+        condominio={condominio}
+        onOpenVisitantesTab={() => setActiveTab('visitantes')}
+      />
 
       {/* Navegação de Abas */}
       <ScrollableTabsNav>
@@ -1634,63 +1642,110 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
       {/* ABA 4: VISITANTES & PRESTADORES */}
       {activeTab === 'visitantes' && (
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-          <div>
-            <h3 className="font-extrabold text-slate-900 text-base">Controle de Visitantes e Prestadores</h3>
-            <p className="text-xs text-slate-500">Autorizações emitidas pelos moradores pelo aplicativo.</p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+              <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                <Users className="w-5 h-5 text-amber-600" />
+                <span>Controle de Visitantes & Prestadores Autorizados</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Autorizações emitidas pelos moradores pelo aplicativo com QR Code / Código de Acesso.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+                {visitantes.length} registro(s)
+              </span>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {visitantes.map((vis) => (
-              <div key={vis.id} className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full">
-                    {vis.tipo}
-                  </span>
-                  <span className="text-xs font-mono font-bold bg-white px-2 py-0.5 rounded border border-slate-200">
-                    Cód: {vis.codigoAcesso}
-                  </span>
-                </div>
-
-                <div>
-                  <h4 className="font-extrabold text-slate-900 text-base">{vis.nomeVisitante}</h4>
-                  {vis.empresa && <p className="text-xs text-slate-600 font-semibold">{vis.empresa}</p>}
-                  <p className="text-xs text-slate-500 mt-1">
-                    Unidade Anfitriã: <strong>{vis.unidade ? `Bloco ${vis.unidade.bloco} - Apto ${vis.unidade.apto}` : 'Residencial'}</strong> • {vis.moradorNome}
-                  </p>
-                  {vis.placaVeiculo && (
-                    <p className="text-xs text-slate-700 mt-0.5 flex items-center gap-1 font-semibold">
-                      <Car className="w-3.5 h-3.5" /> Placa: {vis.placaVeiculo}
-                    </p>
-                  )}
-                </div>
-
-                <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-600">
-                    Status: <strong className="uppercase">{vis.status}</strong>
-                  </span>
-
-                  {vis.status === 'pendente' ? (
-                    <button
-                      onClick={() => handleCheckinVisitante(vis.id)}
-                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow transition"
-                    >
-                      Registrar Entrada
-                    </button>
-                  ) : vis.status === 'dentro' ? (
-                    <button
-                      onClick={() => handleCheckoutVisitante(vis.id)}
-                      className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs transition"
-                    >
-                      Registrar Saída
-                    </button>
-                  ) : (
-                    <span className="text-xs text-slate-400">Finalizado</span>
-                  )}
-                </div>
+          {visitantes.length === 0 ? (
+            <div className="text-center py-12 space-y-2">
+              <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                <Users className="w-6 h-6" />
               </div>
-            ))}
-          </div>
+              <div className="text-slate-600 font-bold text-xs">Nenhum visitante autorizado no momento</div>
+              <p className="text-[11px] text-slate-400">
+                Assim que um morador liberar um convidado ou prestador pelo app, aparecerá aqui e no banner sonoro da portaria.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {visitantes.map((vis) => (
+                <div key={vis.id} className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className={`text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                        vis.tipo === 'prestador'
+                          ? 'bg-blue-100 text-blue-900'
+                          : vis.tipo === 'entrega'
+                          ? 'bg-purple-100 text-purple-900'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}>
+                        {vis.tipo}
+                      </span>
+                      <span className="text-xs font-mono font-black bg-white px-2.5 py-0.5 rounded-lg border border-slate-200 text-slate-800">
+                        Cód: {vis.codigoAcesso}
+                      </span>
+                    </div>
+
+                    <div>
+                      <h4 className="font-extrabold text-slate-900 text-base">{vis.nomeVisitante}</h4>
+                      {vis.empresa && <p className="text-xs text-slate-600 font-semibold">{vis.empresa}</p>}
+                      <p className="text-xs text-slate-600 mt-1">
+                        Unidade: <strong>{vis.unidade ? `Bloco ${vis.unidade.bloco} - Apto ${vis.unidade.apto}` : 'Residencial'}</strong>
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Morador: <strong>{vis.moradorNome}</strong>
+                      </p>
+                      {vis.placaVeiculo && (
+                        <p className="text-xs text-slate-700 mt-1 flex items-center gap-1 font-semibold">
+                          <Car className="w-3.5 h-3.5" /> Placa: {vis.placaVeiculo}
+                        </p>
+                      )}
+                      <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+                        <Clock className="w-3 h-3" /> Data: {vis.dataVisita} • {vis.periodoPermitido || 'Dia Todo'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-600">
+                      Status: <strong className="uppercase">{vis.status}</strong>
+                    </span>
+
+                    {vis.status === 'pendente' ? (
+                      <button
+                        onClick={() => handleCheckinVisitante(vis.id)}
+                        className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow transition cursor-pointer"
+                      >
+                        Registrar Entrada
+                      </button>
+                    ) : vis.status === 'dentro' ? (
+                      <button
+                        onClick={() => handleCheckoutVisitante(vis.id)}
+                        className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs transition cursor-pointer"
+                      >
+                        Registrar Saída
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-400">Finalizado</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+      )}
+
+      {/* ABA 5: INTERFONE & WALKIE-TALKIE PTT (ESTILO ZELLO) */}
+      {activeTab === 'interfone' && (
+        <IntercomPTTView
+          condominio={condominio}
+          currentUserRole="portaria"
+          currentUserName="Portaria Central"
+        />
       )}
 
       {/* MODAL DE VISTORIA FOTOGRÁFICA DE DEVOLUÇÃO NA PORTARIA */}

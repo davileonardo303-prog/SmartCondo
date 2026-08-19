@@ -33,6 +33,8 @@ import {
   CobrancaCondominio,
   ItemCompartilhado,
   FuncionarioEquipe,
+  VisitanteLiberado,
+  InterfoneMensagem,
 } from '../types';
 
 // Initialize Firebase App
@@ -397,6 +399,49 @@ export async function deleteItemCompartilhadoFromFirestore(condoId: string, item
     handleFirestoreError(error, OperationType.DELETE, path);
   }
 }
+
+export async function syncVisitanteToFirestore(visitante: VisitanteLiberado): Promise<void> {
+  const path = `condominios/${visitante.condominioId}/visitantes/${visitante.id}`;
+  try {
+    const data = cleanFirestoreData(visitante);
+    await setDoc(doc(db, 'condominios', visitante.condominioId, 'visitantes', visitante.id), data, {
+      merge: true,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteVisitanteFromFirestore(condoId: string, visitanteId: string): Promise<void> {
+  const path = `condominios/${condoId}/visitantes/${visitanteId}`;
+  try {
+    await deleteDoc(doc(db, 'condominios', condoId, 'visitantes', visitanteId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export async function syncInterfoneToFirestore(msg: InterfoneMensagem): Promise<void> {
+  const path = `condominios/${msg.condominioId}/interfone/${msg.id}`;
+  try {
+    const data = cleanFirestoreData(msg);
+    await setDoc(doc(db, 'condominios', msg.condominioId, 'interfone', msg.id), data, {
+      merge: true,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteInterfoneFromFirestore(condoId: string, msgId: string): Promise<void> {
+  const path = `condominios/${condoId}/interfone/${msgId}`;
+  try {
+    await deleteDoc(doc(db, 'condominios', condoId, 'interfone', msgId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
 
 export async function loginWithGooglePopup(): Promise<FirebaseUser> {
   const result = await signInWithPopup(auth, googleProvider);

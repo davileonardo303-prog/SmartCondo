@@ -86,7 +86,8 @@ import { SmartPassModal } from '../common/SmartPassModal';
 import { SmartOcorrenciaModal } from '../common/SmartOcorrenciaModal';
 import { SmartMuralView } from '../common/SmartMuralView';
 import { ScrollableTabsNav } from '../common/ScrollableTabsNav';
-import { Wrench } from 'lucide-react';
+import { IntercomPTTView } from '../interfone/IntercomPTTView';
+import { Wrench, PhoneCall } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface MoradorDashboardProps {
@@ -117,6 +118,7 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
     | 'equipamentos'
     | 'lazer'
     | 'seguranca'
+    | 'interfone'
     | 'encomendas'
     | 'ocorrencias'
     | 'financeiro'
@@ -787,6 +789,19 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
         >
           <Users className="w-4 h-4" />
           <span>Visitantes & Convidados</span>
+        </button>
+
+        <button
+          id="tab-morador-interfone"
+          onClick={() => setActiveTab('interfone')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
+            activeTab === 'interfone'
+              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+              : 'text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200'
+          }`}
+        >
+          <PhoneCall className="w-4 h-4 text-indigo-600" />
+          <span>📞 Interfone / Portaria PTT</span>
         </button>
 
         <button
@@ -1605,6 +1620,18 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* MÓDULO INTERFONE & WALKIE-TALKIE PTT COM A PORTARIA (ESTILO ZELLO)  */}
+      {/* ==================================================================== */}
+      {activeTab === 'interfone' && (
+        <IntercomPTTView
+          condominio={condominio}
+          currentUserRole="morador"
+          currentMorador={morador}
+          currentUserName={morador.nome}
+        />
       )}
 
       {/* ==================================================================== */}

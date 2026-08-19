@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   UserPlus,
@@ -184,6 +184,11 @@ export const GestaoEquipePermissoes: React.FC<GestaoEquipePermissoesProps> = ({ 
   );
 
   const [feedbackMsg, setFeedbackMsg] = useState<{ tipo: 'sucesso' | 'erro'; texto: string } | null>(null);
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    return condoStore.subscribe(() => setTick((t) => t + 1));
+  }, []);
 
   const funcionarios = condoStore.getFuncionarios(condominio.id);
 

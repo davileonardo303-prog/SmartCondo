@@ -1,4 +1,25 @@
-export type UserRole = 'super_admin' | 'sindico' | 'portaria' | 'morador';
+export type UserRole = 'super_admin' | 'sindico' | 'portaria' | 'morador';// Módulo de Interfonia Digital / Walkie-Talkie Push-to-Talk (PTT Estilo Zello)
+export type InterfoneCanalTipo = 'portaria_morador' | 'geral' | 'emergencia';
+export type InterfoneRemetenteTipo = 'morador' | 'portaria' | 'sindico' | 'administrador';
+
+export interface InterfoneMensagem {
+  id: string;
+  condominioId: string;
+  remetenteId: string;
+  remetenteNome: string;
+  remetenteTipo: InterfoneRemetenteTipo;
+  remetenteUnidade?: Unidade;
+  destinatarioTipo: 'portaria' | 'morador' | 'todos';
+  destinatarioUnidade?: Unidade;
+  destinatarioMoradorId?: string;
+  tipoCanal: InterfoneCanalTipo;
+  audioDataUrl?: string; // Gravação de áudio Base64 (webm/ogg/mp4)
+  duracaoSegundos?: number;
+  texto?: string; // Transcrição ou mensagem rápida de texto do rádio
+  criadoEm: number;
+  lido: boolean;
+  prioridade?: 'normal' | 'urgente' | 'emergencia';
+}
 
 export type CargoFuncionario = 'porteiro' | 'zelador' | 'administracao' | 'gerente_predial' | 'vigilante' | 'auxiliar_servicos';
 
@@ -562,6 +583,3 @@ export interface ItemCompartilhado {
     observacoes?: string;
   }[];
 }
-
-
-

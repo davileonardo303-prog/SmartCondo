@@ -30,9 +30,11 @@ import {
   CargoFuncionario,
   PermissoesFuncionario,
   UserRole,
+  InterfoneMensagem,
 } from '../types';
 import { whatsappService } from './whatsappService';
 import { notificationService } from './notificationService';
+import { audioAlertService } from '../utils/audioAlerts';
 import {
   db,
   syncCondominioToFirestore,
@@ -59,6 +61,10 @@ import {
   syncFuncionarioToFirestore,
   deleteFuncionarioFromFirestore,
   limparFuncionariosFirestore,
+  syncVisitanteToFirestore,
+  deleteVisitanteFromFirestore,
+  syncInterfoneToFirestore,
+  deleteInterfoneFromFirestore,
 } from './firebase';
 import { collection, onSnapshot, doc, getDocs } from 'firebase/firestore';
 
@@ -198,6 +204,7 @@ class MockCondoStore {
   private documentos: Record<string, DocumentoCondominio[]> = {};
   private itensCompartilhados: Record<string, ItemCompartilhado[]> = {};
   private funcionarios: Record<string, FuncionarioEquipe[]> = {};
+  private interfoneMensagens: Record<string, InterfoneMensagem[]> = {};
   private listeners: Set<Listener> = new Set();
   private subUnsubscribers: Record<string, (() => void)[]> = {};
   private version = 0;
@@ -406,13 +413,23 @@ class MockCondoStore {
       return false;
     }
 
+    // Merge: prioritize incoming firestore items but preserve local items not yet synced
+    const firestoreMap = new Map(firestoreItems.map((item) => [item.id, item]));
+    const mergedList: T[] = [...firestoreItems];
+
+    for (const locItem of currentList) {
+      if (!firestoreMap.has(locItem.id)) {
+        mergedList.push(locItem);
+      }
+    }
+
     const currentJson = JSON.stringify(currentList);
-    const newJson = JSON.stringify(firestoreItems);
+    const newJson = JSON.stringify(mergedList);
     if (currentJson === newJson) {
       return false;
     }
 
-    localMap[condoId] = firestoreItems;
+    localMap[condoId] = mergedList;
     this.saveToStorage();
     return true;
   }
@@ -482,6 +499,22 @@ class MockCondoStore {
         funcSnap.forEach((d) => funcList.push({ ...(d.data() as FuncionarioEquipe), id: d.id }));
       }
       this.updateLocalSubcollection(this.funcionarios, condoId, funcList);
+
+      // Visitantes e Prestadores
+      const visSnap = await getDocs(collection(db, 'condominios', condoId, 'visitantes'));
+      const visList: VisitanteLiberado[] = [];
+      if (!visSnap.empty) {
+        visSnap.forEach((d) => visList.push({ ...(d.data() as VisitanteLiberado), id: d.id }));
+      }
+      this.updateLocalSubcollection(this.visitantes, condoId, visList);
+
+      // Interfonia e Áudios PTT
+      const interSnap = await getDocs(collection(db, 'condominios', condoId, 'interfone'));
+      const interList: InterfoneMensagem[] = [];
+      if (!interSnap.empty) {
+        interSnap.forEach((d) => interList.push({ ...(d.data() as InterfoneMensagem), id: d.id }));
+      }
+      this.updateLocalSubcollection(this.interfoneMensagens, condoId, interList);
 
       this.saveToStorage();
     } catch (err) {
@@ -708,6 +741,45 @@ class MockCondoStore {
       );
       unsubs.push(unsubFunc);
 
+      // Visitantes e Prestadores em Tempo Real
+      const unsubVis = onSnapshot(
+        collection(db, 'condominios', condoId, 'visitantes'),
+        (snap) => {
+          const list: VisitanteLiberado[] = [];
+          snap.forEach((d) => list.push({ ...(d.data() as VisitanteLiberado), id: d.id }));
+          if (this.updateLocalSubcollection(this.visitantes, condoId, list)) {
+            this.notify();
+          }
+        },
+        (err) => console.warn('Visitantes sync error:', err.message)
+      );
+      unsubs.push(unsubVis);
+
+      // Interfonia e Áudios PTT em Tempo Real
+      const unsubInter = onSnapshot(
+        collection(db, 'condominios', condoId, 'interfone'),
+        (snap) => {
+          const list: InterfoneMensagem[] = [];
+          snap.forEach((d) => list.push({ ...(d.data() as InterfoneMensagem), id: d.id }));
+          const previousCount = (this.interfoneMensagens[condoId] || []).length;
+          if (this.updateLocalSubcollection(this.interfoneMensagens, condoId, list)) {
+            // Se chegou nova mensagem não lida
+            if (list.length > previousCount) {
+              const latest = list.sort((a, b) => b.criadoEm - a.criadoEm)[0];
+              if (latest && Date.now() - latest.criadoEm < 30000) {
+                audioAlertService.playIntercomRingtone();
+                audioAlertService.sendNotification(`🎙️ ${latest.remetenteNome}: Transmissão no Interfone`, {
+                  body: latest.texto || 'Mensagem de áudio recebida via interfone.',
+                });
+              }
+            }
+            this.notify();
+          }
+        },
+        (err) => console.warn('Interfone sync error:', err.message)
+      );
+      unsubs.push(unsubInter);
+
       this.subUnsubscribers[condoId] = unsubs;
     } catch (err) {
       console.warn(`Erro ao assinar subcoleções do condomínio ${condoId}:`, err);
@@ -748,6 +820,7 @@ class MockCondoStore {
         this.documentos = parsed.documentos || {};
         this.itensCompartilhados = parsed.itensCompartilhados || {};
         this.funcionarios = parsed.funcionarios || {};
+        this.interfoneMensagens = parsed.interfoneMensagens || {};
         this.planosConfig = parsed.planosConfig
           ? { ...DEFAULT_PLANOS_CONFIG, ...parsed.planosConfig }
           : { ...DEFAULT_PLANOS_CONFIG };
@@ -823,6 +896,7 @@ class MockCondoStore {
         documentos: this.documentos,
         itensCompartilhados: this.itensCompartilhados,
         funcionarios: this.funcionarios,
+        interfoneMensagens: this.interfoneMensagens,
       };
       localStorage.setItem(STORAGE_KEY_PREFIX, JSON.stringify(data));
     } catch {
@@ -1080,13 +1154,16 @@ class MockCondoStore {
     }
 
     // 1. Procura em Funcionários da Equipe (Porteiros, Zeladores, Administração Predial)
-    for (const condoId of Object.keys(this.funcionarios)) {
+    const allCondoIds = Array.from(new Set([...Object.keys(this.funcionarios), ...this.condominios.map((c) => c.id)]));
+    for (const condoId of allCondoIds) {
       const listFunc = this.funcionarios[condoId] || [];
       const func = listFunc.find((f) => {
         const fEmail = (f.email || '').toLowerCase().trim();
         const fPhone = (f.telefone || '').replace(/\D/g, '');
+        const fNome = (f.nome || '').toLowerCase().trim();
         return (
           fEmail === normalizedEmail ||
+          fNome === normalizedEmail ||
           (cleanDigits.length >= 8 && fPhone.length >= 8 && fPhone.includes(cleanDigits))
         );
       });
@@ -4007,12 +4084,30 @@ class MockCondoStore {
     if (!this.visitantes[condoId]) this.visitantes[condoId] = [];
     this.visitantes[condoId].unshift(novo);
 
+    // 1. Notificação para o morador confirmando
     this.addNotification({
       condominioId: condoId,
       paraMoradorId: morador.id,
       titulo: `🔐 Acesso Criado: ${data.nomeVisitante}`,
       mensagem: `Código gerado: ${codigoAcesso}. Envie pelo WhatsApp para seu convidado/prestador.`,
       tipo: 'seguranca',
+    });
+
+    // 2. Notificação de ALTA PRIORIDADE para Portaria e Síndico
+    this.addNotification({
+      condominioId: condoId,
+      titulo: `🚨 LIBERAÇÃO: ${data.nomeVisitante} (Apto ${morador.unidade.apto})`,
+      mensagem: `Morador ${morador.nome} (${morador.unidade.bloco ? `Bloco ${morador.unidade.bloco} - ` : ''}Apto ${morador.unidade.apto}) autorizou ${data.nomeVisitante} (${data.tipo === 'prestador' ? (data.empresa ? `${data.empresa} (Prestador)` : 'Prestador de Serviço') : 'Visitante'}) • Código: ${codigoAcesso} • Data: ${data.dataVisita} (${data.periodoPermitido || 'Dia Todo'})`,
+      tipo: 'seguranca',
+    });
+
+    // 3. Sincroniza em tempo real com Firestore
+    syncVisitanteToFirestore(novo).catch((e) => console.warn('Erro ao sincronizar visitante:', e));
+
+    // 4. Emite alerta sonoro de alta visibilidade e notificação Web Push
+    audioAlertService.playVisitorAlertSound();
+    audioAlertService.sendNotification(`🚨 Nova Liberação na Portaria: ${data.nomeVisitante}`, {
+      body: `Morador ${morador.nome} (Apto ${morador.unidade.apto}) liberou entrada • Código ${codigoAcesso}`,
     });
 
     this.saveToStorage();
@@ -4025,6 +4120,7 @@ class MockCondoStore {
     const item = this.visitantes[condoId].find((v) => v.id === id);
     if (item) {
       item.status = 'expirado';
+      syncVisitanteToFirestore(item).catch(() => {});
       this.saveToStorage();
       this.notify();
       return true;
@@ -4058,6 +4154,7 @@ class MockCondoStore {
       tipo: 'seguranca',
     });
 
+    syncVisitanteToFirestore(item).catch(() => {});
     this.saveToStorage();
     this.notify();
     return {
@@ -4078,9 +4175,107 @@ class MockCondoStore {
     item.status = 'saiu';
     item.saidaEm = Date.now();
 
+    syncVisitanteToFirestore(item).catch(() => {});
     this.saveToStorage();
     this.notify();
     return { success: true, message: `Saída de ${item.nomeVisitante} registrada.` };
+  }
+
+  // ========================================================
+  // INTERFONIA DIGITAL & WALKIE-TALKIE PTT (ESTILO ZELLO)
+  // ========================================================
+  public getInterfoneMensagens(
+    condoId: string,
+    moradorId?: string,
+    bloco?: string,
+    apto?: string
+  ): InterfoneMensagem[] {
+    const list = this.interfoneMensagens[condoId] || [];
+    if (!moradorId && !bloco && !apto) {
+      // Portaria/Admin: todas as mensagens do condomínio
+      return [...list].sort((a, b) => a.criadoEm - b.criadoEm);
+    }
+    // Para o morador: mensagens direcionadas a ele ou da unidade dele ou gerais/emergência
+    return list
+      .filter((m) => {
+        if (m.tipoCanal === 'geral' || m.tipoCanal === 'emergencia') return true;
+        if (m.destinatarioTipo === 'todos') return true;
+        if (moradorId && (m.remetenteId === moradorId || m.destinatarioMoradorId === moradorId)) return true;
+        if (
+          bloco !== undefined &&
+          apto !== undefined &&
+          ((m.destinatarioUnidade?.bloco === bloco && m.destinatarioUnidade?.apto === apto) ||
+            (m.remetenteUnidade?.bloco === bloco && m.remetenteUnidade?.apto === apto))
+        ) {
+          return true;
+        }
+        return false;
+      })
+      .sort((a, b) => a.criadoEm - b.criadoEm);
+  }
+
+  public async enviarInterfoneMensagem(
+    condoId: string,
+    data: Omit<InterfoneMensagem, 'id' | 'criadoEm' | 'lido'>
+  ): Promise<InterfoneMensagem> {
+    const nova: InterfoneMensagem = {
+      ...data,
+      id: `inter_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      criadoEm: Date.now(),
+      lido: false,
+    };
+
+    if (!this.interfoneMensagens[condoId]) {
+      this.interfoneMensagens[condoId] = [];
+    }
+    this.interfoneMensagens[condoId].push(nova);
+
+    // Efeito sonoro de rádio/PTT ao enviar
+    audioAlertService.playRogerBeep();
+
+    // Notificação interna
+    if (data.destinatarioTipo === 'morador' && data.destinatarioMoradorId) {
+      this.addNotification({
+        condominioId: condoId,
+        paraMoradorId: data.destinatarioMoradorId,
+        titulo: `📻 Interfone: ${data.remetenteNome}`,
+        mensagem: data.texto || 'Mensagem de áudio recebida via interfonia digital.',
+        tipo: 'aviso',
+      });
+    } else if (data.destinatarioTipo === 'portaria') {
+      this.addNotification({
+        condominioId: condoId,
+        titulo: `📻 Chamada Portaria: ${data.remetenteNome} ${data.remetenteUnidade ? `(Apto ${data.remetenteUnidade.apto})` : ''}`,
+        mensagem: data.texto || 'Áudio recebido do morador via Walkie-Talkie Interfone.',
+        tipo: 'seguranca',
+      });
+    }
+
+    // Persiste no Firestore
+    syncInterfoneToFirestore(nova).catch((err) => console.warn('Erro ao sync interfone:', err));
+
+    this.saveToStorage();
+    this.notify();
+    return nova;
+  }
+
+  public marcarInterfoneLido(condoId: string, id: string): void {
+    const list = this.interfoneMensagens[condoId] || [];
+    const item = list.find((m) => m.id === id);
+    if (item && !item.lido) {
+      item.lido = true;
+      syncInterfoneToFirestore(item).catch(() => {});
+      this.saveToStorage();
+      this.notify();
+    }
+  }
+
+  public limparHistoricoInterfone(condoId: string): void {
+    const list = this.interfoneMensagens[condoId] || [];
+    list.forEach((m) => deleteInterfoneFromFirestore(condoId, m.id).catch(() => {}));
+    this.interfoneMensagens[condoId] = [];
+    this.saveToStorage();
+    this.notify();
   }
 
   public getCameras(condoId: string): CameraAreaComum[] {
