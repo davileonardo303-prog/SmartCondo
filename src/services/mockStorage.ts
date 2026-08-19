@@ -4265,10 +4265,10 @@ class MockCondoStore {
       });
     }
 
-    const notifTitle = data.audioUrl
+    const notifTitle = data.audioDataUrl
       ? `📻 Interfone: Chamada de Áudio de ${data.remetenteNome}`
       : `💬 Interfone: Mensagem de ${data.remetenteNome}`;
-    const notifBody = data.texto || (data.audioUrl ? 'Nova transmissão de voz recebida pelo interfone. Clique para ouvir.' : 'Mensagem do interfone.');
+    const notifBody = data.texto || (data.audioDataUrl ? 'Nova transmissão de voz recebida pelo interfone. Clique para ouvir.' : 'Mensagem do interfone.');
 
     // Notificação in-app e push para todos os moradores destinatários
     if (targetMoradorIds.length > 0) {

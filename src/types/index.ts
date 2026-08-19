@@ -73,6 +73,7 @@ export interface Morador {
   unidade: Unidade;
   statusAdimplencia: 'em_dia' | 'com_pendencia';
   statusCadastro: 'ativo' | 'pendente_aprovacao' | 'recusado';
+  tipoMorador?: 'proprietario' | 'inquilino';
   avatarUrl?: string;
   solicitadoEm?: number;
   aprovadoPor?: string;

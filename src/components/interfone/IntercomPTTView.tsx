@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Condominio, Morador, InterfoneMensagem, UserRole } from '../../types';
 import { condoStore } from '../../services/mockStorage';
 import { audioAlertService } from '../../utils/audioAlerts';
+import { nextelAudio } from '../../utils/nextelAudio';
+import { SuperPTT } from '../SuperPTT';
 import {
   Mic,
   MicOff,
@@ -38,6 +40,7 @@ import {
   Layers,
   ArrowRight,
   Filter,
+  Zap,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -46,7 +49,7 @@ interface IntercomPTTViewProps {
   currentUserRole: UserRole;
   currentMorador?: Morador | null;
   currentUserName?: string;
-  initialTab?: 'ptt' | 'mensagens' | 'moradores';
+  initialTab?: 'ptt' | 'super_ptt' | 'mensagens' | 'moradores';
 }
 
 export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
@@ -60,8 +63,8 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
     currentUserRole === 'portaria' || currentUserRole === 'sindico' || currentUserRole === 'super_admin';
   const isSindico = currentUserRole === 'sindico';
 
-  // Sub-abas do componente: 'ptt' (Rádio Interfone), 'mensagens' (Chat Direto), 'moradores' (Lista de Moradores & Contatos)
-  const [activeSubTab, setActiveSubTab] = useState<'ptt' | 'mensagens' | 'moradores'>(initialTab);
+  // Sub-abas do componente: 'ptt' (Rádio Interfone), 'super_ptt' (Nextel DTA PTT), 'mensagens' (Chat Direto), 'moradores' (Lista de Moradores & Contatos)
+  const [activeSubTab, setActiveSubTab] = useState<'ptt' | 'super_ptt' | 'mensagens' | 'moradores'>(initialTab);
 
   // Mensagens do interfone
   const [mensagens, setMensagens] = useState<InterfoneMensagem[]>(() =>
@@ -224,7 +227,7 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
   const startRecording = async () => {
     try {
       setMicErrorMessage(null);
-      audioAlertService.playChirpStart();
+      nextelAudio.playChirp();
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioStreamRef.current = stream;
@@ -321,6 +324,9 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
       audioContextRef.current = null;
     }
 
+    // Toca o clássico Roger Beep de encerramento imediatamente
+    nextelAudio.playRogerBeep();
+
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== 'inactive') {
       recorder.stop();
@@ -341,8 +347,6 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
         };
         reader.readAsDataURL(audioBlob);
       }, 200);
-    } else {
-      audioAlertService.playRogerBeep();
     }
   };
 
@@ -584,6 +588,19 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
           >
             <Radio className="w-4 h-4" />
             <span>📻 Rádio Interfone PTT</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('super_ptt')}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition cursor-pointer ${
+              activeSubTab === 'super_ptt'
+                ? 'bg-[#00D7A5] text-[#050d1a] shadow-md shadow-[#00D7A5]/30'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Zap className="w-4 h-4 text-emerald-500" />
+            <span>⚡ SuperPTT Nextel Real</span>
           </button>
 
           <button
@@ -1205,6 +1222,23 @@ export const IntercomPTTView: React.FC<IntercomPTTViewProps> = ({
               </button>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* SUB-ABA: DTA SUPER PTT NEXTEL REAL (WEBRTC & WEB AUDIO SINTETIZADO) */}
+      {/* ==================================================================== */}
+      {activeSubTab === 'super_ptt' && (
+        <div className="space-y-4">
+          <SuperPTT
+            condominio={condominio}
+            currentUserRole={currentUserRole}
+            currentMorador={currentMorador}
+            currentUserName={currentUserName}
+            onSendVoiceTransmission={(audioBase64, durationSec, channel) => {
+              dispatchAudioTransmission(audioBase64, durationSec);
+            }}
+          />
         </div>
       )}
 
