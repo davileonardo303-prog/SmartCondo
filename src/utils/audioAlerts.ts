@@ -1,9 +1,36 @@
-// Utilitário de Efeitos Sonoros e Notificações em Segundo Plano (Interfone PTT & Portaria)
+// Utilitário de Efeitos Sonoros e Notificações em Segundo Plano (Interfone PTT, Portaria & Moradores)
 
 class AudioAlertService {
   private ctx: AudioContext | null = null;
+  private isUnlocked: boolean = false;
 
-  private getContext(): AudioContext | null {
+  constructor() {
+    this.initUserInteractionUnlock();
+  }
+
+  // Desbloqueia automaticamente o AudioContext na primeira interação do usuário na página
+  public initUserInteractionUnlock() {
+    if (typeof window === 'undefined') return;
+
+    const unlock = () => {
+      if (!this.isUnlocked) {
+        const ctx = this.getContext();
+        if (ctx && ctx.state === 'suspended') {
+          ctx.resume().then(() => {
+            this.isUnlocked = true;
+          }).catch(() => {});
+        } else if (ctx) {
+          this.isUnlocked = true;
+        }
+      }
+    };
+
+    window.addEventListener('click', unlock, { once: false, passive: true });
+    window.addEventListener('touchstart', unlock, { once: false, passive: true });
+    window.addEventListener('keydown', unlock, { once: false, passive: true });
+  }
+
+  public getContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -11,7 +38,7 @@ class AudioAlertService {
         this.ctx = new AudioCtx();
       }
       if (this.ctx && this.ctx.state === 'suspended') {
-        this.ctx.resume();
+        this.ctx.resume().catch(() => {});
       }
       return this.ctx;
     } catch (e) {
@@ -25,20 +52,21 @@ class AudioAlertService {
     const ctx = this.getContext();
     if (!ctx) return;
     try {
+      const now = ctx.currentTime;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(800, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(1600, ctx.currentTime + 0.08);
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.exponentialRampToValueAtTime(1600, now + 0.08);
 
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.09);
+      gain.gain.setValueAtTime(0.35, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.09);
 
       osc.connect(gain);
       gain.connect(ctx.destination);
 
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.1);
+      osc.start(now);
+      osc.stop(now + 0.1);
     } catch (err) {
       console.warn('Error playing chirp start:', err);
     }
@@ -55,7 +83,7 @@ class AudioAlertService {
       const gain1 = ctx.createGain();
       osc1.type = 'sine';
       osc1.frequency.setValueAtTime(1200, now);
-      gain1.gain.setValueAtTime(0.25, now);
+      gain1.gain.setValueAtTime(0.3, now);
       gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.06);
       osc1.connect(gain1);
       gain1.connect(ctx.destination);
@@ -67,7 +95,7 @@ class AudioAlertService {
       const gain2 = ctx.createGain();
       osc2.type = 'sine';
       osc2.frequency.setValueAtTime(1800, now + 0.08);
-      gain2.gain.setValueAtTime(0.3, now + 0.08);
+      gain2.gain.setValueAtTime(0.35, now + 0.08);
       gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.18);
       osc2.connect(gain2);
       gain2.connect(ctx.destination);
@@ -78,19 +106,19 @@ class AudioAlertService {
     }
   }
 
-  // 3. Chamada de Interfonia (Campainha de Interfone Din-Don Eletrônico Rítmico)
+  // 3. Chamada de Interfonia (Campainha de Interfone Din-Don Eletrônico Rítmico Alto)
   public playIntercomRingtone() {
     const ctx = this.getContext();
     if (!ctx) return;
     try {
-      const playTone = (freq: number, startOffset: number, duration: number) => {
+      const playTone = (freq: number, startOffset: number, duration: number, vol = 0.4) => {
         const now = ctx.currentTime + startOffset;
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'triangle';
         osc.frequency.setValueAtTime(freq, now);
 
-        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.setValueAtTime(vol, now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
         osc.connect(gain);
@@ -100,17 +128,17 @@ class AudioAlertService {
         osc.stop(now + duration);
       };
 
-      // Toque 1: Triplo tom de interfone digital
-      playTone(880, 0, 0.25);
-      playTone(1174, 0.2, 0.3);
-      playTone(880, 0.5, 0.25);
-      playTone(1174, 0.7, 0.35);
+      // Toque harmônico duplo de interfone moderno
+      playTone(880, 0, 0.28, 0.45);     // La5
+      playTone(1174.66, 0.22, 0.35, 0.5); // Re6
+      playTone(880, 0.55, 0.28, 0.45);
+      playTone(1174.66, 0.77, 0.45, 0.5);
     } catch (err) {
       console.warn('Error playing intercom ringtone:', err);
     }
   }
 
-  // 4. Alerta Alto de Liberação de Visitante na Portaria (Ding-Dong Triplo + Siren Chime)
+  // 4. Alerta Alto de Liberação de Visitante na Portaria (Ding-Dong Triplo + Harmonic Chime)
   public playVisitorAlertSound() {
     const ctx = this.getContext();
     if (!ctx) return;
@@ -122,7 +150,7 @@ class AudioAlertService {
         osc.type = 'sine';
         osc.frequency.setValueAtTime(freq, now);
 
-        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.setValueAtTime(0.45, now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + len);
 
         osc.connect(gain);
@@ -132,17 +160,17 @@ class AudioAlertService {
         osc.stop(now + len);
       };
 
-      // Sequência harmônica atraente e bem audível
-      playChime(523.25, 0, 0.3);    // C5
-      playChime(659.25, 0.18, 0.3); // E5
-      playChime(783.99, 0.36, 0.4); // G5
-      playChime(1046.5, 0.54, 0.6); // C6
+      // Sequência harmônica C5-E5-G5-C6
+      playChime(523.25, 0, 0.3);
+      playChime(659.25, 0.18, 0.3);
+      playChime(783.99, 0.36, 0.4);
+      playChime(1046.5, 0.54, 0.6);
     } catch (err) {
       console.warn('Error playing visitor alert sound:', err);
     }
   }
 
-  // 5. Notificação Nativa do Navegador (Funciona mesmo com o app minimizado / em segundo plano)
+  // 5. Notificação Nativa do Navegador (Segundo Plano)
   public async requestNotificationPermission(): Promise<boolean> {
     if (typeof window === 'undefined' || !('Notification' in window)) return false;
     try {

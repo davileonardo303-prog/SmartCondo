@@ -4192,23 +4192,30 @@ class MockCondoStore {
   ): InterfoneMensagem[] {
     const list = this.interfoneMensagens[condoId] || [];
     if (!moradorId && !bloco && !apto) {
-      // Portaria/Admin: todas as mensagens do condomínio
+      // Portaria/Admin/Síndico: todas as mensagens do condomínio
       return [...list].sort((a, b) => a.criadoEm - b.criadoEm);
     }
-    // Para o morador: mensagens direcionadas a ele ou da unidade dele ou gerais/emergência
+
+    const cleanBloco = bloco ? bloco.trim().toLowerCase().replace(/^bloco\s*/i, '') : '';
+    const cleanApto = apto ? apto.trim().toLowerCase().replace(/^apto\s*/i, '').replace(/^apartamento\s*/i, '') : '';
+
+    // Para o morador: mensagens direcionadas a ele, da unidade dele, ou canais gerais/emergência/síndico
     return list
       .filter((m) => {
         if (m.tipoCanal === 'geral' || m.tipoCanal === 'emergencia') return true;
         if (m.destinatarioTipo === 'todos') return true;
         if (moradorId && (m.remetenteId === moradorId || m.destinatarioMoradorId === moradorId)) return true;
-        if (
-          bloco !== undefined &&
-          apto !== undefined &&
-          ((m.destinatarioUnidade?.bloco === bloco && m.destinatarioUnidade?.apto === apto) ||
-            (m.remetenteUnidade?.bloco === bloco && m.remetenteUnidade?.apto === apto))
-        ) {
-          return true;
+
+        const destB = (m.destinatarioUnidade?.bloco || '').trim().toLowerCase().replace(/^bloco\s*/i, '');
+        const destA = (m.destinatarioUnidade?.apto || '').trim().toLowerCase().replace(/^apto\s*/i, '').replace(/^apartamento\s*/i, '');
+        const remB = (m.remetenteUnidade?.bloco || '').trim().toLowerCase().replace(/^bloco\s*/i, '');
+        const remA = (m.remetenteUnidade?.apto || '').trim().toLowerCase().replace(/^apto\s*/i, '').replace(/^apartamento\s*/i, '');
+
+        if (cleanApto) {
+          if (destA === cleanApto && (!cleanBloco || !destB || destB === cleanBloco)) return true;
+          if (remA === cleanApto && (!cleanBloco || !remB || remB === cleanBloco)) return true;
         }
+
         return false;
       })
       .sort((a, b) => a.criadoEm - b.criadoEm);
@@ -4230,26 +4237,71 @@ class MockCondoStore {
     }
     this.interfoneMensagens[condoId].push(nova);
 
-    // Efeito sonoro de rádio/PTT ao enviar
-    audioAlertService.playRogerBeep();
+    // Efeito sonoro de chamada / interfone imediato
+    audioAlertService.playIntercomRingtone();
 
-    // Notificação interna
-    if (data.destinatarioTipo === 'morador' && data.destinatarioMoradorId) {
-      this.addNotification({
-        condominioId: condoId,
-        paraMoradorId: data.destinatarioMoradorId,
-        titulo: `📻 Interfone: ${data.remetenteNome}`,
-        mensagem: data.texto || 'Mensagem de áudio recebida via interfonia digital.',
-        tipo: 'aviso',
+    // Localizar moradores correspondentes caso seja enviado para uma unidade
+    const moradoresDoCondo = this.getMoradores(condoId);
+    let targetMoradorIds: string[] = [];
+
+    if (data.destinatarioMoradorId) {
+      targetMoradorIds.push(data.destinatarioMoradorId);
+    }
+
+    if (data.destinatarioUnidade?.apto) {
+      const targetApto = data.destinatarioUnidade.apto.trim().toLowerCase().replace(/^apto\s*/i, '').replace(/^apartamento\s*/i, '');
+      const targetBloco = (data.destinatarioUnidade.bloco || '').trim().toLowerCase().replace(/^bloco\s*/i, '');
+
+      const found = moradoresDoCondo.filter((m) => {
+        const mApto = (m.unidade?.apto || '').trim().toLowerCase().replace(/^apto\s*/i, '').replace(/^apartamento\s*/i, '');
+        const mBloco = (m.unidade?.bloco || '').trim().toLowerCase().replace(/^bloco\s*/i, '');
+        return mApto === targetApto && (!targetBloco || !mBloco || mBloco === targetBloco);
+      });
+
+      found.forEach((m) => {
+        if (!targetMoradorIds.includes(m.id)) {
+          targetMoradorIds.push(m.id);
+        }
+      });
+    }
+
+    const notifTitle = data.audioUrl
+      ? `📻 Interfone: Chamada de Áudio de ${data.remetenteNome}`
+      : `💬 Interfone: Mensagem de ${data.remetenteNome}`;
+    const notifBody = data.texto || (data.audioUrl ? 'Nova transmissão de voz recebida pelo interfone. Clique para ouvir.' : 'Mensagem do interfone.');
+
+    // Notificação in-app e push para todos os moradores destinatários
+    if (targetMoradorIds.length > 0) {
+      targetMoradorIds.forEach((mId) => {
+        this.addNotification({
+          condominioId: condoId,
+          paraMoradorId: mId,
+          titulo: notifTitle,
+          mensagem: notifBody,
+          tipo: 'aviso',
+        });
       });
     } else if (data.destinatarioTipo === 'portaria') {
       this.addNotification({
         condominioId: condoId,
-        titulo: `📻 Chamada Portaria: ${data.remetenteNome} ${data.remetenteUnidade ? `(Apto ${data.remetenteUnidade.apto})` : ''}`,
-        mensagem: data.texto || 'Áudio recebido do morador via Walkie-Talkie Interfone.',
+        titulo: `📻 Interfone da Portaria: ${data.remetenteNome} ${data.remetenteUnidade ? `(Apto ${data.remetenteUnidade.apto})` : ''}`,
+        mensagem: notifBody,
         tipo: 'seguranca',
       });
+    } else if (data.destinatarioTipo === 'todos' || data.tipoCanal === 'geral' || data.tipoCanal === 'emergencia') {
+      this.addNotification({
+        condominioId: condoId,
+        titulo: data.tipoCanal === 'emergencia' ? `🚨 ALERTA DE EMERGÊNCIA - ${data.remetenteNome}` : `📢 Comunicado Geral: ${data.remetenteNome}`,
+        mensagem: notifBody,
+        tipo: data.tipoCanal === 'emergencia' ? 'seguranca' : 'aviso',
+      });
     }
+
+    // Disparo de notificação nativa no navegador / PWA
+    audioAlertService.sendNotification(notifTitle, {
+      body: notifBody,
+      tag: `interfone-${nova.id}`,
+    });
 
     // Persiste no Firestore
     syncInterfoneToFirestore(nova).catch((err) => console.warn('Erro ao sync interfone:', err));
