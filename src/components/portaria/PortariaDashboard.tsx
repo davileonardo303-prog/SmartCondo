@@ -11,7 +11,6 @@ import { condoStore } from '../../services/mockStorage';
 import { notificationService } from '../../services/notificationService';
 import { whatsappService } from '../../services/whatsappService';
 import { ItensCompartilhadosView } from '../compartilhados/ItensCompartilhadosView';
-import { ScrollableTabsNav } from '../common/ScrollableTabsNav';
 import { UniversalQrCodeScanner } from '../common/UniversalQrCodeScanner';
 import { EntregaEncomendaModal } from './EntregaEncomendaModal';
 import { FotoEtiquetaCapture } from './FotoEtiquetaCapture';
@@ -57,6 +56,8 @@ interface PortariaDashboardProps {
   encomendas: Encomenda[];
   bikes: Bicicleta[];
   historicoLocacoes: HistoricoLocacao[];
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
 }
 
 export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
@@ -65,10 +66,9 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
   encomendas,
   bikes,
   historicoLocacoes,
+  activeTab,
+  setActiveTab,
 }) => {
-  const [activeTab, setActiveTab] = useState<
-    'receber' | 'bicicletario' | 'equipamentos' | 'visitantes' | 'interfone' | 'historico'
-  >('receber');
 
   // Encomendas: Receber & Lote por Apartamento
   const [cadastroMode, setCadastroMode] = useState<'lista' | 'manual'>('manual');
@@ -581,91 +581,6 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
       />
 
       {/* Navegação de Abas */}
-      <ScrollableTabsNav>
-        <button
-          onClick={() => setActiveTab('receber')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'receber'
-              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Package className="w-4 h-4" />
-          <span>Receber & Entregar Encomendas</span>
-          {pendingPackages.length > 0 && (
-            <span className="text-[10px] bg-white text-amber-900 font-black px-1.5 py-0.5 rounded-full ml-1 shadow-xs">
-              {pendingPackages.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('bicicletario')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'bicicletario'
-              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Bike className="w-4 h-4" />
-          <span>Totem & Bikes (5 min)</span>
-          {reservedBikes.length > 0 && (
-            <span className="text-[10px] bg-emerald-500 text-white font-black px-2 py-0.5 rounded-full animate-bounce">
-              {reservedBikes.length} reservadas
-            </span>
-          )}
-        </button>
-
-        <button
-          id="tab-portaria-equipamentos"
-          onClick={() => setActiveTab('equipamentos')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'equipamentos'
-              ? 'bg-teal-700 text-white shadow-md shadow-teal-700/20'
-              : 'text-teal-900 bg-teal-50 hover:bg-teal-100 border border-teal-200'
-          }`}
-        >
-          <Wrench className="w-4 h-4 text-teal-700" />
-          <span>Itens & Equipamentos (5 min)</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('visitantes')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'visitantes'
-              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Controle de Visitantes</span>
-        </button>
-
-        <button
-          id="tab-portaria-interfone"
-          onClick={() => setActiveTab('interfone')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'interfone'
-              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-              : 'text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200'
-          }`}
-        >
-          <PhoneCall className="w-4 h-4 text-indigo-600" />
-          <span>📞 Interfone & Moradores</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('historico')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'historico'
-              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Clock className="w-4 h-4" />
-          <span>Histórico</span>
-        </button>
-      </ScrollableTabsNav>
 
       {/* ABA 1: RECEBER ENCOMENDA */}
       {activeTab === 'receber' && (

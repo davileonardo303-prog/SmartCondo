@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useSyncExternalStore } from 'react';
 import { UserRole, Condominio, Morador, UserAccount } from './types';
 import { condoStore } from './services/mockStorage';
-import { Header } from './components/common/Header';
+import { SidebarLayout } from './components/common/SidebarLayout';
+import { defaultTabByRole } from './components/common/navConfig';
 import { AuthScreen } from './components/auth/AuthScreen';
 import { MoradorDashboard } from './components/morador/MoradorDashboard';
 import { PortariaDashboard } from './components/portaria/PortariaDashboard';
@@ -44,6 +45,14 @@ export default function App() {
   });
 
   const [selectedCondoId, setSelectedCondoId] = useState<string>('condo_park_avenue');
+  const [activeTab, setActiveTab] = useState<string>(() => defaultTabByRole[currentUser?.role || 'morador'] || 'inicio');
+
+  // Reset active tab when user role changes
+  useEffect(() => {
+    if (currentUser) {
+      setActiveTab(defaultTabByRole[currentUser.role] || 'inicio');
+    }
+  }, [currentUser?.role]);
 
   const condominios = condoStore.getCondominios();
   const effectiveCondoId = currentUser?.condominioId || selectedCondoId;
@@ -144,19 +153,17 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans selection:bg-emerald-600 selection:text-white">
-      {/* Barra Superior de Navegação Limpa (Sem Menu Demonstração) */}
-      <Header
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans selection:bg-blue-600 selection:text-white">
+      <SidebarLayout
         currentUser={currentUser}
         currentCondo={currentCondo}
-        setCondoId={setSelectedCondoId}
         condominios={condominios}
+        setCondoId={setSelectedCondoId}
         notifications={notifications}
         onLogout={handleLogout}
-      />
-
-      {/* Conteúdo Principal com base no Perfil Logado */}
-      <main className="flex-1 pb-16">
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
+      >
         <ErrorBoundary fallbackTitle="Erro ao carregar o painel do usuário">
           {currentUser.role === 'morador' && (
             <MoradorDashboard
@@ -168,6 +175,8 @@ export default function App() {
               reservas={reservas}
               avisos={avisos}
               historicoLocacoes={historicoLocacoes}
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
             />
           )}
 
@@ -178,6 +187,8 @@ export default function App() {
               encomendas={allEncomendasCondo}
               bikes={bikes}
               historicoLocacoes={historicoLocacoes}
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
             />
           )}
 
@@ -189,6 +200,8 @@ export default function App() {
               areasLazer={areasLazer}
               reservas={reservas}
               avisos={avisos}
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
             />
           )}
 
@@ -203,39 +216,21 @@ export default function App() {
                   setCurrentUser((prev) => (prev ? { ...prev, role } : null));
                 }
               }}
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
             />
           )}
         </ErrorBoundary>
-      </main>
+      </SidebarLayout>
 
-      {/* Rodapé do Sistema */}
-      <footer className="border-t border-slate-200 bg-white py-4 px-4 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span className="font-semibold text-slate-700">{APP_NAME}</span>
-            <span className="text-slate-400">•</span>
-            <span>Gestão Residencial 100% Integrada</span>
-            <span className="bg-slate-100 text-slate-600 font-mono text-[10px] font-bold px-2 py-0.5 rounded-full border border-slate-200">
-              v{APP_VERSION}
-            </span>
-          </div>
-          <div className="flex items-center gap-3 text-xs text-slate-500">
-            <span>Condomínio: <strong className="text-slate-700">{currentCondo.nome}</strong></span>
-            <span>•</span>
-            <span>Perfil Ativo: <strong className="text-emerald-700 uppercase">{currentUser.role}</strong></span>
-          </div>
-        </div>
-      </footer>
-
-      {/* Modal de Chamada de Interfone em Tempo Real (Estilo WhatsApp / Instagram / Face) */}
+      {/* Modal de Chamada de Interfone em Tempo Real */}
       <LiveCallModal
         condominio={currentCondo}
         currentUser={currentUser}
         currentMorador={currentMorador}
       />
 
-      {/* Modal / Prompt de Instalação PWA (Dispositivos Móveis, Tablets, Desktops, iPhones, iPads) */}
+      {/* Modal / Prompt de Instalação PWA */}
       <PwaInstallPrompt />
     </div>
   );

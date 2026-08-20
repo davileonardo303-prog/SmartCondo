@@ -62,7 +62,6 @@ import { GestaoEquipePermissoes } from './GestaoEquipePermissoes';
 import { RegrasEncomendasPanel } from './RegrasEncomendasPanel';
 import { RelatorioMensalAssembleiaModal } from './RelatorioMensalAssembleiaModal';
 import { ItensCompartilhadosView } from '../compartilhados/ItensCompartilhadosView';
-import { ScrollableTabsNav } from '../common/ScrollableTabsNav';
 import { TrendingUp } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -73,6 +72,8 @@ interface SindicoDashboardProps {
   areasLazer: AreaLazer[];
   reservas: Reserva[];
   avisos: Aviso[];
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
 }
 
 export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
@@ -82,25 +83,9 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
   areasLazer,
   reservas,
   avisos,
+  activeTab,
+  setActiveTab,
 }) => {
-  const [activeTab, setActiveTab] = useState<
-    | 'moradores'
-    | 'equipe'
-    | 'regras_encomendas'
-    | 'frota'
-    | 'equipamentos'
-    | 'liberacoes'
-    | 'lazer'
-    | 'reservas'
-    | 'ocorrencias'
-    | 'financeiro'
-    | 'comunidade'
-    | 'documentos'
-    | 'avisos'
-    | 'whatsapp'
-    | 'aprovacoes'
-    | 'configuracoes'
-  >('moradores');
 
   // Filtro de Moradores
   const [moradorSearch, setMoradorSearch] = useState('');
@@ -720,7 +705,7 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
   });
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+    <div className="space-y-6">
       {/* Top Banner Executivo */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
@@ -811,218 +796,6 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
       )}
 
       {/* Abas de Navegação */}
-      <ScrollableTabsNav>
-        <button
-          onClick={() => setActiveTab('moradores')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'moradores'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Moradores & Cadastros ({moradores.length})</span>
-        </button>
-
-        <button
-          id="tab-sindico-equipe"
-          onClick={() => setActiveTab('equipe')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'equipe'
-              ? 'bg-indigo-900 text-white shadow-md shadow-indigo-900/30'
-              : 'text-indigo-950 bg-indigo-50/80 hover:bg-indigo-100 border border-indigo-200'
-          }`}
-        >
-          <ShieldCheck className="w-4 h-4 text-indigo-600" />
-          <span>Equipe & Permissões ({condoStore.getFuncionarios(condominio.id).length})</span>
-        </button>
-
-        <button
-          id="tab-sindico-regras-encomendas"
-          onClick={() => setActiveTab('regras_encomendas')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'regras_encomendas'
-              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
-              : 'text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200'
-          }`}
-        >
-          <Package className="w-4 h-4 text-amber-600" />
-          <span>Regras de Encomendas ({condominio.regras?.diasLimiteRetiradaEncomenda ?? 5} dias)</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('frota')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'frota'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Bike className="w-4 h-4" />
-          <span>Gestão da Frota ({bikes.length})</span>
-        </button>
-
-        <button
-          id="tab-sindico-liberacoes"
-          onClick={() => setActiveTab('liberacoes')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'liberacoes'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-              : 'text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200'
-          }`}
-        >
-          <KeyRound className="w-4 h-4 text-emerald-600" />
-          <span>Liberação & Senhas ({bikes.filter((b) => b.status === 'reservada_5min').length})</span>
-          {bikes.filter((b) => b.status === 'reservada_5min').length > 0 && (
-            <span className="bg-emerald-600 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full animate-pulse">
-              {bikes.filter((b) => b.status === 'reservada_5min').length}
-            </span>
-          )}
-        </button>
-
-        <button
-          id="tab-sindico-equipamentos"
-          onClick={() => setActiveTab('equipamentos')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'equipamentos'
-              ? 'bg-teal-700 text-white shadow-sm'
-              : 'text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200'
-          }`}
-        >
-          <Wrench className="w-4 h-4" />
-          <span>Itens & Equipamentos</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('lazer')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'lazer'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Sparkles className="w-4 h-4" />
-          <span>Áreas Comuns & Lazer ({areasLazer.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('reservas')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'reservas'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Calendar className="w-4 h-4" />
-          <span>Agenda & Reservas ({reservas.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('ocorrencias')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap relative cursor-pointer ${
-            activeTab === 'ocorrencias'
-              ? 'bg-amber-600 text-white shadow-sm'
-              : 'text-amber-700 bg-amber-50 hover:bg-amber-100 hover:text-amber-900 border border-amber-200/80'
-          }`}
-        >
-          <Wrench className="w-4 h-4" />
-          <span>Ocorrências & Chamados ({ocorrencias.length})</span>
-          {ocorrencias.filter((o) => o.status === 'aberto').length > 0 && (
-            <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full">
-              {ocorrencias.filter((o) => o.status === 'aberto').length}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('financeiro')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'financeiro'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <DollarSign className="w-4 h-4" />
-          <span>Financeiro & Prestação</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('comunidade')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'comunidade'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Vote className="w-4 h-4" />
-          <span>Comunidade & Enquetes ({enquetes.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('documentos')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'documentos'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <FileText className="w-4 h-4" />
-          <span>Documentos ({documentos.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('avisos')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'avisos'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <AlertCircle className="w-4 h-4" />
-          <span>Comunicados ({avisos.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('whatsapp')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'whatsapp'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
-              : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-900 border border-emerald-200/80'
-          }`}
-        >
-          <PhoneCall className="w-4 h-4" />
-          <span>Disparador WhatsApp</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('aprovacoes')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap relative cursor-pointer ${
-            activeTab === 'aprovacoes'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <ShieldCheck className="w-4 h-4" />
-          <span>Aprovações</span>
-          {moradoresPendentes.length > 0 && (
-            <span className="bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full animate-pulse">
-              {moradoresPendentes.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('configuracoes')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'configuracoes'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Settings className="w-4 h-4" />
-          <span>Configurações & Regras</span>
-        </button>
-      </ScrollableTabsNav>
 
       {/* ========================================================================= */}
       {/* ABA: MORADORES & CADASTROS */}
