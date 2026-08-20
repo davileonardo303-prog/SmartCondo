@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Condominio, Morador, UserAccount, UserRole, ChamadaInterfone } from '../../types';
+import { Condominio, Morador, UserAccount, UserRole, ChamadaInterfone, Unidade } from '../../types';
 import { condoStore } from '../../services/mockStorage';
 import { callAudioService } from '../../utils/callAudio';
 import {
@@ -26,7 +26,15 @@ import {
 
 interface CentralTelefonicaViewProps {
   condominio: Condominio;
-  currentUser: UserAccount;
+  currentUser: {
+    id: string;
+    nome: string;
+    email: string;
+    role: UserRole;
+    condominioId: string;
+    unidade?: Unidade;
+    [key: string]: any;
+  };
   currentMorador?: Morador | null;
 }
 

@@ -144,7 +144,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans selection:bg-emerald-600 selection:text-white">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#F0F5F2] dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans selection:bg-emerald-600 selection:text-white">
       {/* Barra Superior de Navegação Limpa (Sem Menu Demonstração) */}
       <Header
         currentUser={currentUser}
@@ -156,7 +156,7 @@ export default function App() {
       />
 
       {/* Conteúdo Principal com base no Perfil Logado */}
-      <main className="flex-1 pb-16">
+      <main className="flex-1 w-full max-w-full overflow-x-hidden pb-16">
         <ErrorBoundary fallbackTitle="Erro ao carregar o painel do usuário">
           {currentUser.role === 'morador' && (
             <MoradorDashboard

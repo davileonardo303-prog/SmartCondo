@@ -59,6 +59,7 @@ import {
   Radio,
   Mic,
   PhoneCall,
+  Menu,
 } from 'lucide-react';
 import {
   Condominio,
@@ -90,7 +91,8 @@ import { SmartOcorrenciaModal } from '../common/SmartOcorrenciaModal';
 import { SmartMuralView } from '../common/SmartMuralView';
 import { ScrollableTabsNav } from '../common/ScrollableTabsNav';
 import { IntercomPTTView } from '../interfone/IntercomPTTView';
-import { Wrench, PhoneCall } from 'lucide-react';
+import { CentralTelefonicaView } from '../interfone/CentralTelefonicaView';
+import { Wrench } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface MoradorDashboardProps {
@@ -131,6 +133,7 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
   >('inicio');
 
   // Modais do Bicicletário
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [isLockModalOpen, setIsLockModalOpen] = useState(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
@@ -520,7 +523,7 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
   const avisoDestaque = (avisos || []).find((a) => a && a.prioritario) || (avisos || [])[0];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5 sm:space-y-6 w-full max-w-full overflow-x-hidden">
       {/* Alerta de Feedback Superior */}
       {alertMessage && (
         <div
@@ -665,245 +668,851 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
       )}
 
       {/* ==================================================================== */}
-      {/* CABEÇALHO DO MORADOR COM DADOS DA UNIDADE                            */}
+      {/* BARRA LATERAL MOBILE (DRAWER LATERAL DESLIZANTE ACIONADO PELOS 3 TRAÇOS) */}
       {/* ==================================================================== */}
-      <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-100 border border-emerald-200 text-emerald-800 flex items-center justify-center font-black text-xl shadow-sm">
-            {morador.nome.substring(0, 2).toUpperCase()}
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                Morador Ativo
-              </span>
-              <span className="text-xs text-slate-500 font-medium">{condominio.nome}</span>
+      {isMobileSidebarOpen && (
+        <div className="fixed inset-0 z-50 flex lg:hidden">
+          {/* Fundo escuro com backdrop blur que fecha ao clicar */}
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity duration-300"
+            onClick={() => setIsMobileSidebarOpen(false)}
+            aria-hidden="true"
+          />
+
+          {/* Painel lateral deslizante (Barra Lateral Completa) */}
+          <div className="relative w-80 max-w-[85vw] h-full bg-white text-slate-800 shadow-2xl flex flex-col justify-between p-4 z-10 overflow-y-auto animate-in slide-in-from-left duration-200">
+            <div className="space-y-4">
+              {/* Topo da Barra Lateral com Identificação e Botão Fechar */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-black text-sm">
+                    {morador.nome.substring(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm text-slate-900 leading-tight">Barra Lateral</h3>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Bloco {morador.unidade.bloco} • Apto {morador.unidade.apto}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileSidebarOpen(false)}
+                  className="p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
+                  title="Fechar barra lateral"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Lista Vertical Completa de Opções da Barra Lateral */}
+              <nav className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('inicio');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                    activeTab === 'inicio'
+                      ? 'bg-emerald-800 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Home className="w-4 h-4" />
+                    <span>Início</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('bicicletario');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                    activeTab === 'bicicletario'
+                      ? 'bg-emerald-800 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Bike className="w-4 h-4" />
+                    <span>Bicicletas (5 min)</span>
+                  </div>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                      activeTab === 'bicicletario'
+                        ? 'bg-emerald-950 text-emerald-100'
+                        : 'bg-emerald-100 text-emerald-800'
+                    }`}
+                  >
+                    {availableBikesCount} livres
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('equipamentos');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                    activeTab === 'equipamentos'
+                      ? 'bg-emerald-800 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Wrench className="w-4 h-4" />
+                    <span>Itens & Equipamentos</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('lazer');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                    activeTab === 'lazer'
+                      ? 'bg-emerald-800 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Calendar className="w-4 h-4" />
+                    <span>Reservas & Lazer</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('seguranca');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                    activeTab === 'seguranca'
+                      ? 'bg-emerald-800 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Users className="w-4 h-4" />
+                    <span>Visitantes & Convidados</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('interfone');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                    activeTab === 'interfone'
+                      ? 'bg-emerald-800 text-white shadow-xs'
+                      : 'border border-emerald-300 text-emerald-800 bg-emerald-50/60 hover:bg-emerald-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <PhoneCall className="w-4 h-4 text-emerald-700" />
+                    <span>Interfone & Telefonia</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('encomendas');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                    activeTab === 'encomendas'
+                      ? 'bg-emerald-800 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Package className="w-4 h-4" />
+                    <span>Encomendas</span>
+                  </div>
+                  {pendingPackages.length > 0 && (
+                    <span className="text-[10px] bg-amber-500 text-white px-2 py-0.5 rounded-full font-black">
+                      {pendingPackages.length}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('ocorrencias');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                    activeTab === 'ocorrencias'
+                      ? 'bg-emerald-800 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <AlertCircle className="w-4 h-4" />
+                    <span>Ocorrências</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('financeiro');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                    activeTab === 'financeiro'
+                      ? 'bg-emerald-800 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <DollarSign className="w-4 h-4" />
+                    <span>Financeiro</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('mural');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                    activeTab === 'mural'
+                      ? 'bg-emerald-800 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <MessageSquare className="w-4 h-4" />
+                    <span>Comunidade</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('documentos');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                    activeTab === 'documentos'
+                      ? 'bg-emerald-800 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <FileText className="w-4 h-4" />
+                    <span>Documentos</span>
+                  </div>
+                </button>
+              </nav>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              Olá, {morador.nome}
-            </h1>
-            <p className="text-sm text-slate-600 mt-0.5">
-              Unidade: <strong className="text-slate-900">Bloco {morador.unidade.bloco}</strong> • Apartamento{' '}
-              <strong className="text-slate-900">{morador.unidade.apto}</strong>
-            </p>
+
+            {/* Rodapé da barra lateral */}
+            <div className="pt-4 border-t border-slate-100 text-center">
+              <p className="text-[11px] text-slate-400 font-medium">{condominio.nome}</p>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Botão de Interfone PTT e Contato com Portaria */}
-        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-          <button
-            id="btn-header-ligar-portaria-ao-vivo"
-            type="button"
-            onClick={() => {
-              condoStore.iniciarChamada({
-                condominioId: condominio.id,
-                callerId: morador.id,
-                callerName: morador.nome,
-                callerRole: 'morador',
-                callerUnidade: morador.unidade,
-                receiverId: 'portaria',
-                receiverName: 'Portaria Central 24h',
-                receiverRole: 'portaria',
-                tipo: 'audio',
-              });
-            }}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md shadow-emerald-600/30 transition active:scale-98 cursor-pointer"
-          >
-            <PhoneCall className="w-4 h-4 text-emerald-200 animate-pulse" />
-            <span>📞 Ligar Portaria (Ao Vivo)</span>
-          </button>
-
-          <button
-            id="btn-header-interfone-morador"
-            type="button"
-            onClick={() => setActiveTab('interfone')}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md shadow-amber-500/20 transition active:scale-98 cursor-pointer"
-          >
-            <Radio className="w-4 h-4 text-slate-950 animate-pulse" />
-            <span>📻 Interfone & PTT</span>
-          </button>
-
-          <a
-            href={`https://api.whatsapp.com/send?phone=5521999999999&text=Ol%C3%A1%20Portaria,%20aqui%20%C3%A9%20o%20morador%20${encodeURIComponent(
-              morador.nome
-            )}%20do%20Bloco%20${morador.unidade.bloco}%20Apto%20${morador.unidade.apto}.`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs transition"
-          >
-            <Phone className="w-3.5 h-3.5 text-emerald-600" />
-            <span>WhatsApp Portaria</span>
-          </a>
-
-          {!activeBikeInUse && !bikeReservadaMorador && (
+      {/* ==================================================================== */}
+      {/* NAVEGAÇÃO MOBILE: BOTÃO 3 TRAÇOS + CARROSSEL HORIZONTAL              */}
+      {/* ==================================================================== */}
+      <div className="block lg:hidden bg-white p-2.5 rounded-2xl border border-slate-200 shadow-xs">
+        <ScrollableTabsNav>
+          <div className="flex items-center gap-1.5 min-w-max py-0.5">
+            {/* Botão dos 3 Traços para abrir a barra lateral a qualquer momento */}
             <button
-              onClick={() => setIsQrModalOpen(true)}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md transition active:scale-98"
+              type="button"
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold bg-emerald-800 text-white shadow-xs hover:bg-emerald-900 transition active:scale-95 cursor-pointer whitespace-nowrap"
+              title="Abrir Barra Lateral (Menu Completo)"
             >
-              <QrCode className="w-4 h-4" />
-              <span>Escanear Totem</span>
+              <Menu className="w-4 h-4" />
+              <span>Menu</span>
             </button>
-          )}
-        </div>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('inicio')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                activeTab === 'inicio'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+              }`}
+            >
+              <Home className="w-3.5 h-3.5" />
+              <span>Início</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('bicicletario')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                activeTab === 'bicicletario'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+              }`}
+            >
+              <Bike className="w-3.5 h-3.5" />
+              <span>Bicicletas</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${activeTab === 'bicicletario' ? 'bg-emerald-900 text-emerald-100' : 'bg-emerald-100 text-emerald-800'}`}>
+                {availableBikesCount}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('interfone')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                activeTab === 'interfone'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-emerald-800 bg-emerald-50 border border-emerald-200'
+              }`}
+            >
+              <PhoneCall className="w-3.5 h-3.5" />
+              <span>Interfone</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('encomendas')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                activeTab === 'encomendas'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+              }`}
+            >
+              <Package className="w-3.5 h-3.5" />
+              <span>Encomendas</span>
+              {pendingPackages.length > 0 && (
+                <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.2 rounded-full font-black">
+                  {pendingPackages.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('lazer')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                activeTab === 'lazer'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Lazer</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('equipamentos')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                activeTab === 'equipamentos'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+              }`}
+            >
+              <Wrench className="w-3.5 h-3.5" />
+              <span>Itens</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('seguranca')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                activeTab === 'seguranca'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Visitantes</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('ocorrencias')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                activeTab === 'ocorrencias'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+              }`}
+            >
+              <AlertCircle className="w-3.5 h-3.5" />
+              <span>Ocorrências</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('financeiro')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                activeTab === 'financeiro'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+              }`}
+            >
+              <DollarSign className="w-3.5 h-3.5" />
+              <span>Financeiro</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('mural')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                activeTab === 'mural'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span>Comunidade</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('documentos')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                activeTab === 'documentos'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Documentos</span>
+            </button>
+          </div>
+        </ScrollableTabsNav>
       </div>
 
       {/* ==================================================================== */}
-      {/* BARRA DE NAVEGAÇÃO ENTRE OS MÓDULOS (SCROLL HORIZONTAL RESPONSIVO)  */}
+      {/* GRID PRINCIPAL: SIDEBAR ESQUERDA (DESKTOP) + CONTEÚDO DIREITA        */}
       {/* ==================================================================== */}
-      <ScrollableTabsNav>
-        <button
-          onClick={() => setActiveTab('inicio')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'inicio'
-              ? 'bg-slate-900 text-white shadow'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Home className="w-4 h-4" />
-          <span>Início</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('bicicletario')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'bicicletario'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Bike className="w-4 h-4" />
-          <span>Bicicletas (5 min)</span>
-          <span
-            className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
-              activeTab === 'bicicletario'
-                ? 'bg-emerald-800 text-emerald-100'
-                : 'bg-emerald-100 text-emerald-800'
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        {/* MENU LATERAL / SIDEBAR (SOMENTE DESKTOP LG+) */}
+        <aside className="hidden lg:block w-64 xl:w-72 shrink-0 bg-white p-3.5 sm:p-4 rounded-3xl border border-slate-200 shadow-xs space-y-1 lg:sticky lg:top-20">
+          <button
+            type="button"
+            onClick={() => setActiveTab('inicio')}
+            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+              activeTab === 'inicio'
+                ? 'bg-emerald-800 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
             }`}
           >
-            {availableBikesCount} livres
-          </span>
-        </button>
+            <div className="flex items-center gap-3">
+              <Home className="w-4 h-4" />
+              <span>Início</span>
+            </div>
+          </button>
 
-        <button
-          id="tab-morador-equipamentos"
-          onClick={() => setActiveTab('equipamentos')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'equipamentos'
-              ? 'bg-teal-700 text-white shadow-md shadow-teal-700/20'
-              : 'text-teal-900 bg-teal-50 hover:bg-teal-100 border border-teal-200'
-          }`}
-        >
-          <Wrench className="w-4 h-4 text-teal-700" />
-          <span>Itens & Equipamentos</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('lazer')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'lazer'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Calendar className="w-4 h-4" />
-          <span>Reservas & Lazer</span>
-          {myReservations.length > 0 && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-black bg-white text-emerald-800">
-              {myReservations.length}
+          <button
+            type="button"
+            onClick={() => setActiveTab('bicicletario')}
+            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+              activeTab === 'bicicletario'
+                ? 'bg-emerald-800 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Bike className="w-4 h-4" />
+              <span>Bicicletas (5 min)</span>
+            </div>
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                activeTab === 'bicicletario'
+                  ? 'bg-emerald-950 text-emerald-100'
+                  : 'bg-emerald-100 text-emerald-800'
+              }`}
+            >
+              {availableBikesCount} livres
             </span>
-          )}
-        </button>
+          </button>
 
-        <button
-          onClick={() => setActiveTab('seguranca')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'seguranca'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Visitantes & Convidados</span>
-        </button>
+          <button
+            type="button"
+            id="tab-morador-equipamentos"
+            onClick={() => setActiveTab('equipamentos')}
+            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+              activeTab === 'equipamentos'
+                ? 'bg-emerald-800 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Wrench className="w-4 h-4" />
+              <span>Itens & Equipamentos</span>
+            </div>
+          </button>
 
-        <button
-          id="tab-morador-interfone"
-          onClick={() => setActiveTab('interfone')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'interfone'
-              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-              : 'text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200'
-          }`}
-        >
-          <PhoneCall className="w-4 h-4 text-indigo-600" />
-          <span>📞 Interfone / Portaria PTT</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('lazer')}
+            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+              activeTab === 'lazer'
+                ? 'bg-emerald-800 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Calendar className="w-4 h-4" />
+              <span>Reservas & Lazer</span>
+            </div>
+            {myReservations.length > 0 && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-emerald-100 text-emerald-800">
+                {myReservations.length}
+              </span>
+            )}
+          </button>
 
-        <button
-          onClick={() => setActiveTab('encomendas')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'encomendas'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Package className="w-4 h-4" />
-          <span>Encomendas</span>
-          {pendingPackages.length > 0 && (
-            <span className="text-[10px] bg-amber-500 text-white font-black px-2 py-0.5 rounded-full animate-bounce">
-              {pendingPackages.length}
-            </span>
-          )}
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('seguranca')}
+            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+              activeTab === 'seguranca'
+                ? 'bg-emerald-800 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Users className="w-4 h-4" />
+              <span>Visitantes & Convidados</span>
+            </div>
+          </button>
 
-        <button
-          onClick={() => setActiveTab('ocorrencias')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'ocorrencias'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <AlertCircle className="w-4 h-4" />
-          <span>Ocorrências</span>
-        </button>
+          <button
+            type="button"
+            id="tab-morador-interfone"
+            onClick={() => setActiveTab('interfone')}
+            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+              activeTab === 'interfone'
+                ? 'bg-emerald-800 text-white shadow-xs'
+                : 'border border-emerald-300 text-emerald-800 bg-emerald-50/60 hover:bg-emerald-100'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <PhoneCall className="w-4 h-4 text-emerald-700" />
+              <span>Interfone & Telefonia</span>
+            </div>
+          </button>
 
-        <button
-          onClick={() => setActiveTab('financeiro')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'financeiro'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <DollarSign className="w-4 h-4" />
-          <span>Financeiro</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('encomendas')}
+            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+              activeTab === 'encomendas'
+                ? 'bg-emerald-800 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Package className="w-4 h-4" />
+              <span>Encomendas</span>
+            </div>
+            {pendingPackages.length > 0 && (
+              <span className="text-[10px] bg-amber-500 text-white font-black px-2 py-0.5 rounded-full animate-bounce">
+                {pendingPackages.length}
+              </span>
+            )}
+          </button>
 
-        <button
-          onClick={() => setActiveTab('mural')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'mural'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <MessageSquare className="w-4 h-4" />
-          <span>Comunidade</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('ocorrencias')}
+            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+              activeTab === 'ocorrencias'
+                ? 'bg-emerald-800 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-4 h-4" />
+              <span>Ocorrências</span>
+            </div>
+          </button>
 
-        <button
-          onClick={() => setActiveTab('documentos')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'documentos'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <FileText className="w-4 h-4" />
-          <span>Documentos</span>
-        </button>
-      </ScrollableTabsNav>
+          <button
+            type="button"
+            onClick={() => setActiveTab('financeiro')}
+            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+              activeTab === 'financeiro'
+                ? 'bg-emerald-800 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <DollarSign className="w-4 h-4" />
+              <span>Financeiro</span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('mural')}
+            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+              activeTab === 'mural'
+                ? 'bg-emerald-800 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <MessageSquare className="w-4 h-4" />
+              <span>Comunidade</span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('documentos')}
+            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+              activeTab === 'documentos'
+                ? 'bg-emerald-800 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <FileText className="w-4 h-4" />
+              <span>Documentos</span>
+            </div>
+          </button>
+        </aside>
+
+        {/* COLUNA PRINCIPAL DE CONTEÚDO (DIREITA) */}
+        <div className="flex-1 w-full min-w-0 space-y-6">
+          {/* CABEÇALHO LIMPO E PROFISSIONAL DO MORADOR */}
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start justify-between w-full md:w-auto">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full">
+                    Morador Ativo
+                  </span>
+                  <span className="text-xs text-slate-500 font-medium">{condominio.nome}</span>
+                </div>
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-1">
+                  Olá, {morador.nome}
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
+                  Unidade: <strong className="text-slate-900 font-bold">Bloco {morador.unidade.bloco} • Apartamento {morador.unidade.apto}</strong>
+                </p>
+              </div>
+
+              {/* Botão 3 traços visível no mobile no cabeçalho */}
+              <button
+                type="button"
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="flex md:hidden items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-black transition active:scale-95 cursor-pointer"
+                title="Abrir Barra Lateral"
+              >
+                <Menu className="w-4 h-4 text-emerald-800" />
+                <span>Menu</span>
+              </button>
+            </div>
+
+            {/* Ações Rápidas Coesas e Elegantes */}
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              <button
+                id="btn-header-ligar-portaria-ao-vivo"
+                type="button"
+                onClick={() => {
+                  condoStore.iniciarChamada({
+                    condominioId: condominio.id,
+                    callerId: morador.id,
+                    callerName: morador.nome,
+                    callerRole: 'morador',
+                    callerUnidade: morador.unidade,
+                    receiverId: 'portaria',
+                    receiverName: 'Portaria Central 24h',
+                    receiverRole: 'portaria',
+                    tipo: 'audio',
+                  });
+                }}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+              >
+                <PhoneCall className="w-3.5 h-3.5" />
+                <span>Ligar Portaria</span>
+              </button>
+
+              <button
+                id="btn-header-interfone-morador"
+                type="button"
+                onClick={() => setActiveTab('interfone')}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 font-bold text-xs transition active:scale-95 cursor-pointer"
+              >
+                <Radio className="w-3.5 h-3.5 text-emerald-700" />
+                <span>Interfone PTT</span>
+              </button>
+
+              <a
+                href={`https://api.whatsapp.com/send?phone=5521999999999&text=Ol%C3%A1%20Portaria,%20aqui%20%C3%A9%20o%20morador%20${encodeURIComponent(
+                  morador.nome
+                )}%20do%20Bloco%20${morador.unidade.bloco}%20Apto%20${morador.unidade.apto}.`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs transition cursor-pointer"
+              >
+                <Phone className="w-3.5 h-3.5 text-emerald-700" />
+                <span>WhatsApp</span>
+              </a>
+
+              {!activeBikeInUse && !bikeReservadaMorador && (
+                <button
+                  onClick={() => setIsQrModalOpen(true)}
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs transition active:scale-95 cursor-pointer"
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span>Totem</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* ==================================================================== */}
+          {/* DESTAQUES DINÂMICOS DE STATUS (ENCOMENDAS, BICICLETA, INTERFONE)     */}
+          {/* ==================================================================== */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 1. STATUS DE ENCOMENDAS */}
+            <div
+              onClick={() => setActiveTab('encomendas')}
+              className={`p-4 sm:p-5 rounded-3xl border transition cursor-pointer flex flex-col justify-between gap-3 ${
+                pendingPackages.length > 0
+                  ? 'bg-amber-50/70 border-amber-300 hover:border-amber-400 shadow-xs'
+                  : 'bg-white border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${pendingPackages.length > 0 ? 'bg-amber-500 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
+                    <Package className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm text-slate-900">
+                      {pendingPackages.length > 0 ? 'Encomendas na Portaria' : 'Encomendas & Entregas'}
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      {pendingPackages.length > 0
+                        ? `${pendingPackages.length} encomenda(s) aguardando retirada`
+                        : 'Nenhuma encomenda pendente no momento'}
+                    </p>
+                  </div>
+                </div>
+
+                {pendingPackages.length > 0 ? (
+                  <span className="text-[11px] font-black bg-amber-500 text-white px-2 py-0.5 rounded-full animate-pulse">
+                    {pendingPackages.length} pendente{pendingPackages.length > 1 ? 's' : ''}
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                    Em dia
+                  </span>
+                )}
+              </div>
+
+              {pendingPackages.length > 0 && (
+                <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200 text-xs flex items-center justify-between">
+                  <span className="text-slate-700 font-medium">
+                    PIN da portaria: <strong className="font-mono text-amber-800">{pendingPackages[0]?.codigoResgate || '1234'}</strong>
+                  </span>
+                  <span className="text-amber-800 font-bold flex items-center gap-1">
+                    Ver detalhes <ChevronRight className="w-3 h-3" />
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* 2. STATUS DE BICICLETA & CONTAGEM DE TEMPO (RESERVA OU USO) */}
+            <div
+              onClick={() => setActiveTab('bicicletario')}
+              className={`p-4 sm:p-5 rounded-3xl border transition cursor-pointer flex flex-col justify-between gap-3 ${
+                bikeReservadaMorador
+                  ? 'bg-amber-50/80 border-amber-400 shadow-xs'
+                  : activeBikeInUse
+                  ? 'bg-emerald-50/80 border-emerald-400 shadow-xs'
+                  : 'bg-white border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                    bikeReservadaMorador ? 'bg-amber-500 text-white' : activeBikeInUse ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'
+                  }`}>
+                    <Bike className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm text-slate-900">
+                      {bikeReservadaMorador
+                        ? `Bike #${bikeReservadaMorador.codigo} Reservada`
+                        : activeBikeInUse
+                        ? `Bike #${activeBikeInUse.codigo} em Uso`
+                        : 'Bicicletas Compartilhadas'}
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      {bikeReservadaMorador
+                        ? 'Tolerância de 5 min para retirar no totem'
+                        : activeBikeInUse
+                        ? `Regra de uso: máx. ${condominio.regras.limiteTempoBikeMinutos} minutos`
+                        : `${availableBikesCount} bikes livres para retirada`}
+                    </p>
+                  </div>
+                </div>
+
+                {bikeReservadaMorador ? (
+                  <span className="text-xs font-black font-mono bg-amber-600 text-white px-2.5 py-0.5 rounded-full">
+                    {formatCountdown(segundosRestantes5Min)}
+                  </span>
+                ) : activeBikeInUse ? (
+                  <span className="text-[11px] font-bold bg-emerald-700 text-white px-2 py-0.5 rounded-full">
+                    ~{elapsedMinutes} min de uso
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                    {availableBikesCount} livres
+                  </span>
+                )}
+              </div>
+
+              {bikeReservadaMorador ? (
+                <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200 text-xs flex items-center justify-between">
+                  <span className="text-slate-700">
+                    Cód: <strong className="font-mono text-amber-800">{bikeReservadaMorador.reservaCodigo || 'BK-5MIN'}</strong> • Senha: <strong>{bikeReservadaMorador.lockPassword}</strong>
+                  </span>
+                  <span className="text-amber-800 font-bold flex items-center gap-1">
+                    Destravar <ChevronRight className="w-3 h-3" />
+                  </span>
+                </div>
+              ) : activeBikeInUse ? (
+                <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-200 text-xs flex items-center justify-between">
+                  <span className="text-slate-700">
+                    Tempo restante: <strong className="text-emerald-800">~{Math.max(0, condominio.regras.limiteTempoBikeMinutos - elapsedMinutes)} min</strong>
+                  </span>
+                  <span className="text-emerald-800 font-bold flex items-center gap-1">
+                    Devolver <ChevronRight className="w-3 h-3" />
+                  </span>
+                </div>
+              ) : (
+                <div className="text-[11px] text-emerald-800 font-bold flex items-center justify-between pt-0.5">
+                  <span>Tolerância de retirada rápida em 1 clique</span>
+                  <span className="flex items-center gap-1">Reservar <ChevronRight className="w-3 h-3" /></span>
+                </div>
+              )}
+            </div>
+          </div>
 
       {/* ==================================================================== */}
       {/* MÓDULO 1: TELA INICIAL (DASHBOARD EXECUTIVO DO MORADOR)              */}
@@ -1702,12 +2311,27 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
       {/* MÓDULO INTERFONE & WALKIE-TALKIE PTT COM A PORTARIA (ESTILO ZELLO)  */}
       {/* ==================================================================== */}
       {activeTab === 'interfone' && (
-        <IntercomPTTView
-          condominio={condominio}
-          currentUserRole="morador"
-          currentMorador={morador}
-          currentUserName={morador.nome}
-        />
+        <div className="space-y-6">
+          <CentralTelefonicaView
+            condominio={condominio}
+            currentUser={{
+              id: morador.id,
+              nome: morador.nome,
+              email: morador.email,
+              role: 'morador',
+              condominioId: condominio.id,
+              unidade: morador.unidade,
+            }}
+            currentMorador={morador}
+          />
+
+          <IntercomPTTView
+            condominio={condominio}
+            currentUserRole="morador"
+            currentMorador={morador}
+            currentUserName={morador.nome}
+          />
+        </div>
       )}
 
       {/* ==================================================================== */}
@@ -1715,18 +2339,18 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
       {/* ==================================================================== */}
       {activeTab === 'ocorrencias' && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h3 className="text-xl font-extrabold text-slate-900">Ocorrências & Chamados</h3>
-              <p className="text-xs text-slate-500">Abra chamados para a administração e acompanhe o status em tempo real.</p>
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight">Ocorrências & Chamados</h3>
+              <p className="text-xs text-slate-500 font-medium">Abra chamados para a administração e acompanhe o status em tempo real.</p>
             </div>
 
             <button
               onClick={() => setIsNovaOcorrenciaModalOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-md shadow-rose-600/20 flex items-center gap-2 transition"
+              className="px-5 py-3 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs shadow-lg shadow-rose-600/30 flex items-center gap-2 transition cursor-pointer self-start sm:self-auto active:scale-95"
             >
               <Plus className="w-4 h-4" />
-              <span>Abrir Nova Ocorrência</span>
+              <span>+ Abrir Nova Ocorrência</span>
             </button>
           </div>
 
@@ -1777,10 +2401,14 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
                 </div>
               ))
             ) : (
-              <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 text-slate-500 space-y-2">
-                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
-                <h4 className="text-base font-bold text-slate-800">Nenhum chamado aberto</h4>
-                <p className="text-xs">Tudo tranquilo! Caso encontre qualquer problema no condomínio, abra uma ocorrência.</p>
+              <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 shadow-sm space-y-3">
+                <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-8 h-8" />
+                </div>
+                <h4 className="text-lg font-black text-slate-900">Nenhum chamado aberto</h4>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  Tudo tranquilo! Caso encontre qualquer problema no condomínio, abra uma ocorrência.
+                </p>
               </div>
             )}
           </div>
@@ -2346,6 +2974,9 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
           </div>
         </div>
       )}
+
+        </div>
+      </div>
 
       {/* Modal: Marcar Bicicleta & Destravar com Senha sem QR Code */}
       <BikeSelectionModal

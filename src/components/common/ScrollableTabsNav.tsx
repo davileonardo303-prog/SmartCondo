@@ -59,52 +59,43 @@ export const ScrollableTabsNav: React.FC<ScrollableTabsNavProps> = ({
 
   return (
     <div className={`relative group ${className}`}>
-      {/* Botão de Scroll para a Esquerda */}
+      {/* Botão de Scroll para a Esquerda (apenas em desktop no hover) */}
       <button
         type="button"
         onClick={() => scroll('left')}
         aria-label="Rolar abas para a esquerda"
-        className={`absolute left-0 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/95 text-slate-700 shadow-md border border-slate-200 flex items-center justify-center transition-all duration-200 hover:bg-slate-900 hover:text-white hover:scale-110 active:scale-95 cursor-pointer ${
+        className={`hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-full bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 shadow-md border border-slate-200 dark:border-slate-700 items-center justify-center transition-all duration-200 hover:bg-emerald-700 hover:text-white hover:scale-110 active:scale-95 cursor-pointer ${
           canScrollLeft
-            ? 'opacity-100 translate-x-0'
-            : 'opacity-0 -translate-x-3 pointer-events-none'
+            ? 'opacity-0 group-hover:opacity-100 translate-x-0'
+            : 'opacity-0 pointer-events-none'
         }`}
       >
         <ChevronLeft className="w-4 h-4" />
       </button>
 
-      {/* Sombra de esmaecimento à esquerda */}
-      {canScrollLeft && (
-        <div className="absolute left-0 top-0 bottom-2 w-10 bg-gradient-to-r from-slate-50 via-slate-50/70 to-transparent z-10 pointer-events-none" />
-      )}
-
-      {/* Container das Abas com scroll horizontal suave */}
+      {/* Container das Abas com scroll horizontal nativo suave */}
       <div
         ref={containerRef}
         onWheel={handleWheel}
-        className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto scroll-smooth no-scrollbar select-none"
+        className="flex items-center gap-1.5 sm:gap-2 pb-1 overflow-x-auto scroll-smooth no-scrollbar select-none touch-pan-x"
         style={{
           scrollbarWidth: 'none',
           msOverflowStyle: 'none',
+          WebkitOverflowScrolling: 'touch',
         }}
       >
         {children}
       </div>
 
-      {/* Sombra de esmaecimento à direita */}
-      {canScrollRight && (
-        <div className="absolute right-0 top-0 bottom-2 w-10 bg-gradient-to-l from-slate-50 via-slate-50/70 to-transparent z-10 pointer-events-none" />
-      )}
-
-      {/* Botão de Scroll para a Direita */}
+      {/* Botão de Scroll para a Direita (apenas em desktop no hover) */}
       <button
         type="button"
         onClick={() => scroll('right')}
         aria-label="Rolar abas para a direita"
-        className={`absolute right-0 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/95 text-slate-700 shadow-md border border-slate-200 flex items-center justify-center transition-all duration-200 hover:bg-slate-900 hover:text-white hover:scale-110 active:scale-95 cursor-pointer ${
+        className={`hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-full bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 shadow-md border border-slate-200 dark:border-slate-700 items-center justify-center transition-all duration-200 hover:bg-emerald-700 hover:text-white hover:scale-110 active:scale-95 cursor-pointer ${
           canScrollRight
-            ? 'opacity-100 translate-x-0'
-            : 'opacity-0 translate-x-3 pointer-events-none'
+            ? 'opacity-0 group-hover:opacity-100 translate-x-0'
+            : 'opacity-0 pointer-events-none'
         }`}
       >
         <ChevronRight className="w-4 h-4" />

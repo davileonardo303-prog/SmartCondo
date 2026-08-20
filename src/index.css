@@ -2,21 +2,35 @@
 
 @layer base {
   :root {
-    --bg-main: #f8fafc;
+    --bg-main: #f2f7f4;
     --bg-card: #ffffff;
-    --text-main: #1e293b;
-    --text-muted: #64748b;
+    --text-main: #0f172a;
+    --text-muted: #475569;
     --border-color: #e2e8f0;
   }
 
+  html, body {
+    max-width: 100vw;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    -webkit-text-size-adjust: 100%;
+    box-sizing: border-box;
+  }
+
+  #root {
+    width: 100%;
+    max-width: 100%;
+  }
+
   html.dark, body.dark-mode-active {
-    --bg-main: #0f172a;
-    --bg-card: #1e293b;
-    --text-main: #f8fafc;
-    --text-muted: #94a3b8;
-    --border-color: #334155;
-    background-color: #0f172a !important;
-    color: #f8fafc !important;
+    --bg-main: #090d14;
+    --bg-card: #111827;
+    --text-main: #f9fafb;
+    --text-muted: #9ca3af;
+    --border-color: #1f2937;
+    background-color: #090d14 !important;
+    color: #f9fafb !important;
   }
 
   body {
@@ -26,24 +40,24 @@
     transition: background-color 0.25s ease, color 0.25s ease;
   }
 
-  /* Dark mode overrides for common components */
+  /* Dark mode overrides for common components - Solid green & deep black aesthetic */
   html.dark .bg-white,
   body.dark-mode-active .bg-white {
-    background-color: #1e293b !important;
-    color: #f8fafc !important;
-    border-color: #334155 !important;
+    background-color: #111827 !important;
+    color: #f9fafb !important;
+    border-color: #1f2937 !important;
   }
 
   html.dark .bg-slate-50,
   body.dark-mode-active .bg-slate-50 {
-    background-color: #0f172a !important;
+    background-color: #0d131f !important;
     color: #f1f5f9 !important;
   }
 
   html.dark .bg-slate-100,
   body.dark-mode-active .bg-slate-100 {
-    background-color: #1e293b !important;
-    color: #f8fafc !important;
+    background-color: #1a2233 !important;
+    color: #f9fafb !important;
   }
 
   html.dark .text-slate-900,
@@ -52,27 +66,27 @@
   body.dark-mode-active .text-slate-900,
   body.dark-mode-active .text-slate-800,
   body.dark-mode-active .text-slate-700 {
-    color: #f8fafc !important;
+    color: #f9fafb !important;
   }
 
   html.dark .text-slate-600,
   html.dark .text-slate-500,
   body.dark-mode-active .text-slate-600,
   body.dark-mode-active .text-slate-500 {
-    color: #94a3b8 !important;
+    color: #9ca3af !important;
   }
 
   html.dark .border-slate-200,
   html.dark .border-slate-300,
   body.dark-mode-active .border-slate-200,
   body.dark-mode-active .border-slate-300 {
-    border-color: #334155 !important;
+    border-color: #1f2937 !important;
   }
 
   html.dark header,
   body.dark-mode-active header {
-    background-color: #0f172a !important;
-    border-color: #334155 !important;
+    background-color: #0b0f19 !important;
+    border-color: #1f2937 !important;
   }
 }
 

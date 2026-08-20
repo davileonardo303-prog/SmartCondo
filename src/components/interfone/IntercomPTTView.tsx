@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Condominio, Morador, InterfoneMensagem, UserRole } from '../../types';
+import { Condominio, Morador, InterfoneMensagem, UserRole, Unidade } from '../../types';
 import { condoStore } from '../../services/mockStorage';
 import { audioAlertService } from '../../utils/audioAlerts';
 import { nextelAudio } from '../../utils/nextelAudio';

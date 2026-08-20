@@ -21,13 +21,20 @@ import {
   Clock,
   User,
   CheckCircle2,
-  VolumeCheck,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface LiveCallModalProps {
   condominio: Condominio;
-  currentUser: UserAccount;
+  currentUser: {
+    id: string;
+    nome: string;
+    email: string;
+    role: UserRole;
+    condominioId: string;
+    unidade?: Unidade;
+    [key: string]: any;
+  };
   currentMorador?: Morador | null;
 }
 

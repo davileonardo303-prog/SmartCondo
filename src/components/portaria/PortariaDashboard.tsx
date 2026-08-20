@@ -17,6 +17,7 @@ import { EntregaEncomendaModal } from './EntregaEncomendaModal';
 import { FotoEtiquetaCapture } from './FotoEtiquetaCapture';
 import { VisitantesAlertBanner } from './VisitantesAlertBanner';
 import { IntercomPTTView } from '../interfone/IntercomPTTView';
+import { CentralTelefonicaView } from '../interfone/CentralTelefonicaView';
 import {
   Package,
   Bike,
@@ -1739,13 +1740,26 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
         </div>
       )}
 
-      {/* ABA 5: INTERFONE & WALKIE-TALKIE PTT (ESTILO ZELLO) */}
+      {/* ABA 5: INTERFONE, CENTRAL TELEFÔNICA & PTT */}
       {activeTab === 'interfone' && (
-        <IntercomPTTView
-          condominio={condominio}
-          currentUserRole="portaria"
-          currentUserName="Portaria Central"
-        />
+        <div className="space-y-6">
+          <CentralTelefonicaView
+            condominio={condominio}
+            currentUser={{
+              id: 'portaria',
+              nome: 'Portaria Central 24h',
+              email: 'portaria@condominio.com',
+              role: 'portaria',
+              condominioId: condominio.id,
+            }}
+          />
+
+          <IntercomPTTView
+            condominio={condominio}
+            currentUserRole="portaria"
+            currentUserName="Portaria Central"
+          />
+        </div>
       )}
 
       {/* MODAL DE VISTORIA FOTOGRÁFICA DE DEVOLUÇÃO NA PORTARIA */}

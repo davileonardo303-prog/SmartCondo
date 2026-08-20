@@ -62,6 +62,8 @@ import { GestaoEquipePermissoes } from './GestaoEquipePermissoes';
 import { RegrasEncomendasPanel } from './RegrasEncomendasPanel';
 import { RelatorioMensalAssembleiaModal } from './RelatorioMensalAssembleiaModal';
 import { ItensCompartilhadosView } from '../compartilhados/ItensCompartilhadosView';
+import { CentralTelefonicaView } from '../interfone/CentralTelefonicaView';
+import { IntercomPTTView } from '../interfone/IntercomPTTView';
 import { ScrollableTabsNav } from '../common/ScrollableTabsNav';
 import { TrendingUp } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -85,6 +87,7 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<
     | 'moradores'
+    | 'interfone'
     | 'equipe'
     | 'regras_encomendas'
     | 'frota'
@@ -822,6 +825,19 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
         >
           <Users className="w-4 h-4" />
           <span>Moradores & Cadastros ({moradores.length})</span>
+        </button>
+
+        <button
+          id="tab-sindico-interfone"
+          onClick={() => setActiveTab('interfone')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition whitespace-nowrap cursor-pointer ${
+            activeTab === 'interfone'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+              : 'text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300'
+          }`}
+        >
+          <PhoneCall className="w-4 h-4 text-emerald-600" />
+          <span>Central Telefônica & Interfone</span>
         </button>
 
         <button
@@ -3035,6 +3051,30 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ABA: CENTRAL TELEFÔNICA, LIGAÇÕES & INTERFONE SÍNDICO                     */}
+      {/* ========================================================================= */}
+      {activeTab === 'interfone' && (
+        <div className="space-y-6">
+          <CentralTelefonicaView
+            condominio={condominio}
+            currentUser={{
+              id: 'sindico',
+              nome: condominio.sindicoNome || 'Síndico Geral',
+              email: condominio.sindicoEmail || 'sindico@condominio.com',
+              role: 'sindico',
+              condominioId: condominio.id,
+            }}
+          />
+
+          <IntercomPTTView
+            condominio={condominio}
+            currentUserRole="sindico"
+            currentUserName={condominio.sindicoNome || 'Síndico Geral'}
+          />
         </div>
       )}
 

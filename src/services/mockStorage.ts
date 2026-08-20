@@ -4523,7 +4523,7 @@ class MockCondoStore {
       // Se foi enviado para a portaria e sou portaria ou admin
       if (
         (c.receiverRole === 'portaria' || c.receiverId === 'portaria' || c.receiverId === `${condoId}_portaria`) &&
-        (userRole === 'portaria' || userRole === 'super_admin' || userRole === 'admin_condominio')
+        (userRole === 'portaria' || userRole === 'super_admin')
       ) {
         return true;
       }
@@ -4531,7 +4531,7 @@ class MockCondoStore {
       // Se foi enviado para o síndico/administração e sou síndico ou admin
       if (
         (c.receiverRole === 'sindico' || c.receiverId === 'sindico' || c.receiverId === `${condoId}_sindico`) &&
-        (userRole === 'sindico' || userRole === 'super_admin' || userRole === 'admin_condominio')
+        (userRole === 'sindico' || userRole === 'super_admin')
       ) {
         return true;
       }

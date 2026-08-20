@@ -87,8 +87,15 @@ export const PwaInstallPrompt: React.FC = () => {
       setDeferredPrompt(null);
     });
 
+    // 6. Escuta evento global disparado pelo botão fixo do Header
+    const handleOpenCustomEvent = () => {
+      setShowPrompt(true);
+    };
+    window.addEventListener('open-pwa-install', handleOpenCustomEvent);
+
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('open-pwa-install', handleOpenCustomEvent);
       clearTimeout(timer);
     };
   }, []);
@@ -273,21 +280,6 @@ export const PwaInstallPrompt: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
-
-      {/* BOTÃO FLUTUANTE DISCRETO QUANDO FECHADO PARA QUEM QUISER INSTALAR DEPOIS */}
-      {!showPrompt && !isStandalone && (
-        <button
-          onClick={() => setShowPrompt(true)}
-          className="fixed bottom-20 sm:bottom-6 right-4 z-40 bg-slate-900/90 hover:bg-slate-900 text-emerald-400 hover:text-emerald-300 border border-emerald-500/40 hover:border-emerald-500 px-3.5 py-2 rounded-2xl shadow-xl backdrop-blur-md flex items-center gap-2 text-xs font-black transition group animate-in fade-in"
-          title="Instalar aplicativo na tela inicial"
-        >
-          <Download className="w-4 h-4 text-emerald-400 group-hover:animate-bounce" />
-          <span className="hidden sm:inline">Instalar App</span>
-          <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full font-bold">
-            PWA
-          </span>
-        </button>
       )}
 
       {/* FEEDBACK DE INSTALAÇÃO CONCLUÍDA */}
