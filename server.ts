@@ -11,6 +11,12 @@ async function startServer() {
 
   app.use(express.json({ limit: '15mb' }));
 
+  // Log ALL incoming requests to diagnose platform probe
+  app.use((req, res, next) => {
+    console.log(`[REQ] ${new Date().toISOString()} ${req.method} ${req.url} Host=${req.headers.host || 'none'} UA=${req.headers['user-agent'] || 'none'}`);
+    next();
+  });
+
   // API Route: Status / Healthcheck
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: Date.now() });
