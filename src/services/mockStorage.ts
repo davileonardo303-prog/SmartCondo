@@ -66,6 +66,8 @@ import {
   deleteVisitanteFromFirestore,
   syncInterfoneToFirestore,
   deleteInterfoneFromFirestore,
+  syncNotificacaoToFirestore,
+  deleteNotificacaoFromFirestore,
   saveChamadaToFirestore,
   updateChamadaStatusInFirestore,
   deleteChamadaFromFirestore,
@@ -521,6 +523,20 @@ class MockCondoStore {
       }
       this.updateLocalSubcollection(this.interfoneMensagens, condoId, interList);
 
+      // Notificações do Condomínio
+      const notifSnap = await getDocs(collection(db, 'condominios', condoId, 'notificacoes'));
+      if (!notifSnap.empty) {
+        const existingIds = new Set(this.notificacoes.map((n) => n.id));
+        notifSnap.forEach((d) => {
+          const item = { ...(d.data() as AppNotification), id: d.id };
+          if (!existingIds.has(item.id)) {
+            this.notificacoes.unshift(item);
+            existingIds.add(item.id);
+          }
+        });
+        this.notificacoes.sort((a, b) => b.timestamp - a.timestamp);
+      }
+
       this.saveToStorage();
     } catch (err) {
       console.warn(`Erro ao buscar subcoleções do condomínio ${condoId}:`, err);
@@ -831,6 +847,57 @@ class MockCondoStore {
         (err) => console.warn('Chamadas sync error:', err.message)
       );
       unsubs.push(unsubChamadas);
+
+      // Notificações do Condomínio em Tempo Real
+      const unsubNotifs = onSnapshot(
+        collection(db, 'condominios', condoId, 'notificacoes'),
+        (snap) => {
+          let hasNew = false;
+          const existingIds = new Set(this.notificacoes.map((n) => n.id));
+          const agora = Date.now();
+
+          snap.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+              const notifData = { ...(change.doc.data() as AppNotification), id: change.doc.id };
+              if (!existingIds.has(notifData.id)) {
+                this.notificacoes.unshift(notifData);
+                existingIds.add(notifData.id);
+                hasNew = true;
+
+                // Se a notificação foi criada recentemente (< 60s), dispara notificação nativa no celular/PC
+                if (agora - notifData.timestamp < 60000) {
+                  notificationService.dispararNotificacaoNativa(notifData.titulo, {
+                    body: notifData.mensagem,
+                    tag: notifData.id,
+                    data: { url: '/', notifId: notifData.id, tipo: notifData.tipo },
+                  });
+                  audioAlertService.sendNotification(notifData.titulo, {
+                    body: notifData.mensagem,
+                  });
+                }
+              }
+            } else if (change.type === 'modified') {
+              const updated = { ...(change.doc.data() as AppNotification), id: change.doc.id };
+              const idx = this.notificacoes.findIndex((n) => n.id === updated.id);
+              if (idx >= 0) {
+                this.notificacoes[idx] = updated;
+                hasNew = true;
+              }
+            } else if (change.type === 'removed') {
+              this.notificacoes = this.notificacoes.filter((n) => n.id !== change.doc.id);
+              hasNew = true;
+            }
+          });
+
+          if (hasNew) {
+            this.notificacoes.sort((a, b) => b.timestamp - a.timestamp);
+            this.saveToStorage();
+            this.notify();
+          }
+        },
+        (err) => console.warn('Notificacoes sync error:', err.message)
+      );
+      unsubs.push(unsubNotifs);
 
       this.subUnsubscribers[condoId] = unsubs;
     } catch (err) {
@@ -3741,6 +3808,25 @@ class MockCondoStore {
       lida: false,
     };
     this.notificacoes.unshift(newN);
+    this.saveToStorage();
+
+    // Dispara push nativo no celular/PC imediatamente sem precisar desativar/reativar
+    notificationService.dispararNotificacaoNativa(newN.titulo, {
+      body: newN.mensagem,
+      tag: newN.id,
+      data: { url: '/', notifId: newN.id, tipo: newN.tipo },
+    });
+
+    // Envia alerta de áudio / som
+    audioAlertService.sendNotification(newN.titulo, {
+      body: newN.mensagem,
+    });
+
+    // Sincroniza em tempo real no Firestore para todos os aparelhos
+    syncNotificacaoToFirestore(newN).catch((err) =>
+      console.warn('Sync Notificacao error:', err)
+    );
+
     this.notify();
   }
 
@@ -4514,10 +4600,12 @@ class MockCondoStore {
       if (c.status !== 'calling' && c.status !== 'ringing' && c.status !== 'connected') {
         return false;
       }
-      // Se eu sou quem iniciou a chamada
+      // Se eu sou quem iniciou a chamada (por ID direto ou por papel de portaria/sindico)
       if (c.callerId === userId) return true;
+      if (userRole === 'portaria' && (c.callerRole === 'portaria' || c.callerId === 'portaria' || c.callerId === `${condoId}_portaria`)) return true;
+      if (userRole === 'sindico' && (c.callerRole === 'sindico' || c.callerId === 'sindico' || c.callerId === `${condoId}_sindico`)) return true;
 
-      // Se eu sou o destinatário direto por ID
+      // Se eu sou o destinatário direto por ID ou por Role
       if (c.receiverId && (c.receiverId === userId || c.receiverId === userRole)) return true;
 
       // Se foi enviado para a portaria e sou portaria ou admin

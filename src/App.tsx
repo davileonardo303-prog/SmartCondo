@@ -44,6 +44,19 @@ export default function App() {
     return null;
   });
 
+  // Inicialização automática permanente das notificações push no Celular e PC
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        import('./services/notificationService').then(({ notificationService }) => {
+          if (currentUser?.id) {
+            notificationService.solicitarPermissaoPush(currentUser.id).catch(() => {});
+          }
+        });
+      }
+    }
+  }, [currentUser?.id]);
+
   const [selectedCondoId, setSelectedCondoId] = useState<string>('condo_park_avenue');
 
   const condominios = condoStore.getCondominios();
@@ -179,6 +192,7 @@ export default function App() {
               encomendas={allEncomendasCondo}
               bikes={bikes}
               historicoLocacoes={historicoLocacoes}
+              currentUser={currentUser}
             />
           )}
 
@@ -190,6 +204,7 @@ export default function App() {
               areasLazer={areasLazer}
               reservas={reservas}
               avisos={avisos}
+              currentUser={currentUser}
             />
           )}
 

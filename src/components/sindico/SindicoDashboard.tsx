@@ -55,6 +55,7 @@ import {
   EnqueteCondominio,
   SugestaoMorador,
   DocumentoCondominio,
+  UserAccount,
 } from '../../types';
 import { condoStore } from '../../services/mockStorage';
 import { WhatsAppBroadcastPanel } from './WhatsAppBroadcastPanel';
@@ -75,6 +76,7 @@ interface SindicoDashboardProps {
   areasLazer: AreaLazer[];
   reservas: Reserva[];
   avisos: Aviso[];
+  currentUser?: UserAccount;
 }
 
 export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
@@ -84,6 +86,7 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
   areasLazer,
   reservas,
   avisos,
+  currentUser,
 }) => {
   const [activeTab, setActiveTab] = useState<
     | 'moradores'
@@ -1242,6 +1245,32 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ABA: CENTRAL TELEFÔNICA & INTERFONE DIGITAL SÍNDICO */}
+      {/* ========================================================================= */}
+      {activeTab === 'interfone' && (
+        <div className="space-y-6">
+          <CentralTelefonicaView
+            condominio={condominio}
+            currentUser={
+              currentUser || {
+                id: 'sindico',
+                nome: condominio.sindicoNome || 'Síndico / Administração',
+                email: condominio.sindicoEmail || 'sindico@condominio.com',
+                role: 'sindico',
+                condominioId: condominio.id,
+              }
+            }
+          />
+
+          <IntercomPTTView
+            condominio={condominio}
+            currentUserRole="sindico"
+            currentUserName={condominio.sindicoNome || 'Síndico / Gestor'}
+          />
         </div>
       )}
 

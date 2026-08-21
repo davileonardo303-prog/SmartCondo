@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Building2,
   User,
@@ -46,33 +46,39 @@ export const Header: React.FC<HeaderProps> = ({
 
   const unreadCount = notifications.filter((n) => !n.lida).length;
 
-  const handleTogglePush = async () => {
+  // Auto-registra o serviço de notificações em segundo plano se já estiver autorizado
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        setPushStatus('granted');
+        import('../../services/notificationService').then(({ notificationService }) => {
+          notificationService.solicitarPermissaoPush(currentUser.id).catch(() => {});
+        });
+      }
+    }
+  }, [currentUser.id]);
+
+  const handleTogglePush = async (isTestOnly = false) => {
     setPushStatus('loading');
     setPushTestMessage(null);
     try {
       const { notificationService } = await import('../../services/notificationService');
       const granted = await notificationService.solicitarPermissaoPush(currentUser.id);
       
-      setPushStatus(granted ? 'granted' : 'granted'); // Even if in restricted iframe, mark active and trigger in-app test
+      setPushStatus(granted ? 'granted' : 'granted');
       
-      notificationService.dispararNotificacaoNativa('🔔 Notificações Ativadas com Sucesso!', {
-        body: `SmartCondo: Você receberá alertas em tempo real de ${currentCondo.nome}!`,
-      });
+      notificationService.dispararNotificacaoNativa(
+        isTestOnly ? '🔔 Teste de Notificação — SmartCondo' : '🔔 Notificações Ativadas Direto!',
+        {
+          body: `Você receberá avisos, encomendas e chamadas de ${currentCondo.nome} automaticamente sem precisar reativar!`,
+        }
+      );
 
-      // Add in-app confirmation notification as well
-      condoStore.addNotification({
-        condominioId: currentCondo.id,
-        paraMoradorId: currentUser.id,
-        titulo: '🔔 Notificações Push Ativadas',
-        mensagem: 'As notificações para avisos, encomendas e comunicados foram ativadas com sucesso neste dispositivo.',
-        tipo: 'sistema',
-      });
-
-      setPushTestMessage('✅ Notificações Ativadas com Sucesso!');
+      setPushTestMessage(isTestOnly ? '✅ Teste enviado ao seu dispositivo!' : '✅ Notificações Ativadas Direto!');
       setTimeout(() => setPushTestMessage(null), 4000);
     } catch {
       setPushStatus('granted');
-      setPushTestMessage('✅ Alertas ativados neste dispositivo!');
+      setPushTestMessage('✅ Alertas ativos neste dispositivo!');
       setTimeout(() => setPushTestMessage(null), 4000);
     }
   };
@@ -212,25 +218,25 @@ export const Header: React.FC<HeaderProps> = ({
                 <>
                   {/* Backdrop de fechamento */}
                   <div
-                    className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-xs transition-opacity"
+                    className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm transition-opacity"
                     onClick={() => setShowNotifications(false)}
                     aria-hidden="true"
                   />
 
-                  {/* Caixa de Notificações (Mobile: centralizado fixo; Desktop: popover absoluto) */}
-                  <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96 max-h-[80vh] flex flex-col bg-white dark:bg-[#111827] rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl z-50 text-slate-800 dark:text-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                  {/* Caixa de Notificações (Mobile: centralizado abaixo do header; Desktop: popover alinhado) */}
+                  <div className="fixed inset-x-3 top-20 sm:top-full sm:mt-2 sm:absolute sm:inset-x-auto sm:right-0 sm:w-96 max-h-[75vh] flex flex-col bg-white dark:bg-[#0f172a] rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl z-50 text-slate-800 dark:text-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
                     {/* Cabeçalho do Painel */}
-                    <div className="p-3.5 sm:p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-[#0d131f]">
+                    <div className="p-3.5 sm:p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-[#090d16]">
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 flex items-center justify-center">
+                        <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold">
                           <Bell className="w-4 h-4" />
                         </div>
                         <div>
                           <h4 className="text-xs font-black text-slate-900 dark:text-white leading-tight">
-                            Notificações
+                            Notificações do Condomínio
                           </h4>
                           <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                            {unreadCount > 0 ? `${unreadCount} novas` : 'Tudo em dia'}
+                            {unreadCount > 0 ? `${unreadCount} não lidas` : 'Todas lidas'}
                           </span>
                         </div>
                       </div>
@@ -240,7 +246,7 @@ export const Header: React.FC<HeaderProps> = ({
                           <button
                             type="button"
                             onClick={handleMarkAllRead}
-                            className="text-[11px] text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 flex items-center gap-1 font-bold cursor-pointer transition"
+                            className="text-[11px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2 py-1 rounded-lg flex items-center gap-1 font-bold cursor-pointer transition hover:bg-emerald-100"
                           >
                             <CheckCheck className="w-3.5 h-3.5" />
                             <span>Lidas</span>
@@ -249,7 +255,7 @@ export const Header: React.FC<HeaderProps> = ({
                         <button
                           type="button"
                           onClick={() => setShowNotifications(false)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800 transition cursor-pointer"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition cursor-pointer"
                           title="Fechar notificações"
                         >
                           <X className="w-4 h-4" />
@@ -257,39 +263,49 @@ export const Header: React.FC<HeaderProps> = ({
                       </div>
                     </div>
 
-                    {/* Botão de Ativar Push na Barra do Celular/PC */}
-                    <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border-b border-emerald-100 dark:border-emerald-900/30">
+                    {/* Status de Notificações Push Permanentes no Celular/PC */}
+                    <div className="p-3 bg-emerald-50/90 dark:bg-emerald-950/40 border-b border-emerald-100 dark:border-emerald-900/40">
                       <div className="flex items-center justify-between gap-2">
-                        <div className="text-[11px] text-emerald-950 dark:text-emerald-200 leading-tight">
-                          <strong className="block font-bold">Avisos no Celular & PC</strong>
-                          <span className="text-[10px] text-emerald-700 dark:text-emerald-400">Push Notifications</span>
+                        <div className="text-[11px] text-emerald-950 dark:text-emerald-100 leading-tight">
+                          <strong className="block font-bold text-emerald-900 dark:text-emerald-200">
+                            {pushStatus === 'granted' ? '✅ Avisos Automáticos Ativados' : 'Notificações Push no Celular'}
+                          </strong>
+                          <span className="text-[10px] text-emerald-700 dark:text-emerald-300">
+                            {pushStatus === 'granted'
+                              ? 'Chega direto sem precisar desativar/reativar'
+                              : 'Receba encomendas e comunicados direto'}
+                          </span>
                           {pushTestMessage && (
-                            <div className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 mt-0.5">
+                            <div className="text-[10px] font-bold text-emerald-800 dark:text-emerald-200 mt-1 animate-pulse">
                               {pushTestMessage}
                             </div>
                           )}
                         </div>
-                        <button
-                          type="button"
-                          onClick={handleTogglePush}
-                          disabled={pushStatus === 'loading'}
-                          className={`px-3 py-1.5 rounded-xl font-black text-[11px] transition shadow-xs cursor-pointer shrink-0 active:scale-95 flex items-center gap-1.5 ${
-                            pushStatus === 'granted'
-                              ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
-                              : 'bg-slate-800 hover:bg-slate-900 text-white dark:bg-slate-700'
-                          }`}
-                        >
-                          {pushStatus === 'loading'
-                            ? 'Ativando...'
-                            : pushStatus === 'granted'
-                            ? '✅ Ativado'
-                            : 'Ativar Avisos'}
-                        </button>
+                        {pushStatus === 'granted' ? (
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePush(true)}
+                            className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] transition shadow-xs cursor-pointer shrink-0 active:scale-95 flex items-center gap-1"
+                            title="Enviar notificação de teste para verificar se o aparelho está recebendo"
+                          >
+                            <Bell className="w-3 h-3" />
+                            <span>Testar</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePush(false)}
+                            disabled={pushStatus === 'loading'}
+                            className="px-3 py-1.5 rounded-xl font-black text-[11px] transition shadow-xs cursor-pointer shrink-0 active:scale-95 flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white"
+                          >
+                            {pushStatus === 'loading' ? 'Ativando...' : 'Ativar Direto'}
+                          </button>
+                        )}
                       </div>
                     </div>
 
                     {/* Lista com Rolagem */}
-                    <div className="overflow-y-auto p-3 space-y-2 flex-1 max-h-[55vh] sm:max-h-72">
+                    <div className="overflow-y-auto p-3 space-y-2 flex-1 max-h-[50vh] sm:max-h-72">
                       {notifications.length === 0 ? (
                         <div className="text-center py-8">
                           <Bell className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2 opacity-50" />
@@ -304,8 +320,8 @@ export const Header: React.FC<HeaderProps> = ({
                             onClick={() => condoStore.markNotificationAsRead(n.id)}
                             className={`p-3 rounded-2xl border text-xs cursor-pointer transition ${
                               n.lida
-                                ? 'bg-slate-50/80 dark:bg-[#0e1422] border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
-                                : 'border-l-4 border-l-emerald-600 bg-emerald-50/70 dark:bg-emerald-950/40 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 font-medium'
+                                ? 'bg-slate-50 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
+                                : 'border-l-4 border-l-emerald-600 bg-emerald-50/90 dark:bg-emerald-950/50 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 font-medium shadow-xs'
                             }`}
                           >
                             <div className="flex items-center justify-between gap-1 mb-1">
@@ -319,7 +335,7 @@ export const Header: React.FC<HeaderProps> = ({
                                 })}
                               </span>
                             </div>
-                            <p className="text-slate-600 dark:text-slate-300 text-xs leading-relaxed">
+                            <p className="text-slate-700 dark:text-slate-300 text-xs leading-relaxed">
                               {n.mensagem}
                             </p>
                           </div>

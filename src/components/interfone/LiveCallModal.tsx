@@ -97,9 +97,23 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
     };
   }, [condominio.id, currentUser.id, currentUser.role, currentUser.unidade, currentMorador]);
 
-  const isIncoming = activeCall && activeCall.callerId !== currentUser.id && activeCall.status === 'ringing';
-  const isOutgoing = activeCall && activeCall.callerId === currentUser.id && activeCall.status === 'ringing';
+  const isCaller = activeCall
+    ? activeCall.callerId === currentUser.id ||
+      (currentUser.role === 'portaria' &&
+        (activeCall.callerRole === 'portaria' ||
+          activeCall.callerId === 'portaria' ||
+          activeCall.callerId === `${condominio.id}_portaria`)) ||
+      (currentUser.role === 'sindico' &&
+        (activeCall.callerRole === 'sindico' ||
+          activeCall.callerId === 'sindico' ||
+          activeCall.callerId === `${condominio.id}_sindico`))
+    : false;
+
+  const isIncoming = activeCall && !isCaller && (activeCall.status === 'ringing' || activeCall.status === 'calling');
+  const isOutgoing = activeCall && isCaller && (activeCall.status === 'ringing' || activeCall.status === 'calling');
   const isConnected = activeCall && activeCall.status === 'connected';
+
+  const audioRemoteRef = useRef<HTMLAudioElement | null>(null);
 
   // Configura callbacks do WebRTC
   useEffect(() => {
@@ -107,6 +121,12 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
       setRemoteStream(stream);
       if (videoRemoteRef.current) {
         videoRemoteRef.current.srcObject = stream;
+      }
+      if (audioRemoteRef.current) {
+        audioRemoteRef.current.srcObject = stream;
+        audioRemoteRef.current.play().catch((err) => {
+          console.log('Audio play gesture attempt:', err);
+        });
       }
     });
   }, []);
@@ -320,6 +340,9 @@ export const LiveCallModal: React.FC<LiveCallModalProps> = ({
               : 'bg-indigo-500/25 animate-pulse'
           }`}
         />
+
+        {/* Audio Element de Alta Fidelidade Full Duplex */}
+        <audio ref={audioRemoteRef} autoPlay playsInline className="hidden" />
 
         {/* CABEÇALHO DO STATUS */}
         <div className="space-y-1.5 z-10">

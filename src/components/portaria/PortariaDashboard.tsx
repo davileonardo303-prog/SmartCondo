@@ -6,6 +6,7 @@ import {
   Bicicleta,
   HistoricoLocacao,
   VisitanteLiberado,
+  UserAccount,
 } from '../../types';
 import { condoStore } from '../../services/mockStorage';
 import { notificationService } from '../../services/notificationService';
@@ -58,6 +59,7 @@ interface PortariaDashboardProps {
   encomendas: Encomenda[];
   bikes: Bicicleta[];
   historicoLocacoes: HistoricoLocacao[];
+  currentUser?: UserAccount;
 }
 
 export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
@@ -66,6 +68,7 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
   encomendas,
   bikes,
   historicoLocacoes,
+  currentUser,
 }) => {
   const [activeTab, setActiveTab] = useState<
     'receber' | 'bicicletario' | 'equipamentos' | 'visitantes' | 'interfone' | 'historico'
@@ -1745,13 +1748,15 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
         <div className="space-y-6">
           <CentralTelefonicaView
             condominio={condominio}
-            currentUser={{
-              id: 'portaria',
-              nome: 'Portaria Central 24h',
-              email: 'portaria@condominio.com',
-              role: 'portaria',
-              condominioId: condominio.id,
-            }}
+            currentUser={
+              currentUser || {
+                id: 'portaria',
+                nome: 'Portaria Central 24h',
+                email: 'portaria@condominio.com',
+                role: 'portaria',
+                condominioId: condominio.id,
+              }
+            }
           />
 
           <IntercomPTTView
