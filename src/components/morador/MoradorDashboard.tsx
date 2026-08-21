@@ -273,6 +273,23 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
     });
   };
 
+  const handleSimularRetiradaEncomenda = (encIdOrPin: string) => {
+    const res = condoStore.darBaixaEncomenda(condominio.id, encIdOrPin, 'Portaria Plantão');
+    if (res.success) {
+      playNotificationSound('sucesso');
+      setAlertMessage({
+        type: 'success',
+        text: `✅ ${res.message} Alerta de retirada enviado para o celular e WhatsApp!`,
+      });
+      confetti({ particleCount: 60, spread: 70 });
+    } else {
+      setAlertMessage({
+        type: 'error',
+        text: res.message,
+      });
+    }
+  };
+
   // Dados reativos carregados do store
   const visitantes = condoStore.getVisitantes(condominio.id, morador.id);
   const cameras = condoStore.getCameras(condominio.id);
@@ -2897,29 +2914,41 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
                           </p>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (enc.codigoResgate) {
-                              navigator.clipboard.writeText(enc.codigoResgate);
-                            }
-                            setCopiadoKey(`pin_${enc.id}`);
-                            setTimeout(() => setCopiadoKey(null), 2500);
-                          }}
-                          className="px-4 py-2.5 rounded-xl bg-white text-amber-900 font-extrabold text-xs hover:bg-amber-50 transition active:scale-95 shadow-sm shrink-0 flex items-center gap-1.5 cursor-pointer"
-                        >
-                          {copiadoKey === `pin_${enc.id}` ? (
-                            <>
-                              <Check className="w-4 h-4 text-emerald-600" />
-                              <span>Copiado!</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-4 h-4 text-amber-700" />
-                              <span>Copiar PIN</span>
-                            </>
-                          )}
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (enc.codigoResgate) {
+                                navigator.clipboard.writeText(enc.codigoResgate);
+                              }
+                              setCopiadoKey(`pin_${enc.id}`);
+                              setTimeout(() => setCopiadoKey(null), 2500);
+                            }}
+                            className="px-4 py-2.5 rounded-xl bg-white text-amber-900 font-extrabold text-xs hover:bg-amber-50 transition active:scale-95 shadow-sm shrink-0 flex items-center gap-1.5 cursor-pointer"
+                          >
+                            {copiadoKey === `pin_${enc.id}` ? (
+                              <>
+                                <Check className="w-4 h-4 text-emerald-600" />
+                                <span>Copiado!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-4 h-4 text-amber-700" />
+                                <span>Copiar PIN</span>
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSimularRetiradaEncomenda(enc.id)}
+                            className="px-3.5 py-2.5 rounded-xl bg-amber-900/40 hover:bg-amber-900/60 text-amber-100 font-extrabold text-xs border border-amber-400/40 transition active:scale-95 shadow-sm shrink-0 flex items-center gap-1.5 cursor-pointer"
+                            title="Simular a portaria validando a retirada desta encomenda"
+                          >
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                            <span>Simular Retirada</span>
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

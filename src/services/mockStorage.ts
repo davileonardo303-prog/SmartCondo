@@ -3233,38 +3233,57 @@ class MockCondoStore {
 
     this.saveToStorage();
 
-    const primeira = matchingPending[0];
-    const morador = this.getMorador(condoId, primeira.moradorId);
+    // Notificar cada morador envolvido
+    const moradorIds = Array.from(new Set(matchingPending.map((e) => e.moradorId)));
+    moradorIds.forEach((moradorId) => {
+      const encsDoMorador = matchingPending.filter((e) => e.moradorId === moradorId);
+      const primeira = encsDoMorador[0];
+      const morador = this.getMorador(condoId, moradorId);
+      const listaPacotesTxt = encsDoMorador.map((e) => `• ${e.transportadora} (Ref: ${e.codigoRastreio || 'Volume Registrado'})`).join('\n');
+      const tituloNotif = encsDoMorador.length > 1
+        ? `✅ ${encsDoMorador.length} Encomendas Retiradas com PIN na Portaria`
+        : `✅ Encomenda da ${primeira.transportadora} Retirada com PIN`;
+      const msgNotif = `${encsDoMorador.length} pacote(s) retirado(s) com sucesso na portaria por ${operadorNome} com validação de PIN de segurança (${primeira.codigoResgate}).`;
 
-    // 1. Notificação In-App
-    this.addNotification({
-      condominioId: condoId,
-      paraMoradorId: primeira.moradorId,
-      titulo: matchingPending.length > 1 ? `✅ ${matchingPending.length} Encomendas Retiradas com PIN` : '✅ Encomenda Retirada com PIN',
-      mensagem: `${matchingPending.length} pacote(s) entregue(s) para Bloco ${primeira.unidade.bloco} - Apto ${primeira.unidade.apto}. PIN: ${primeira.codigoResgate}.`,
-      tipo: 'encomenda',
+      // 1. Notificação In-App
+      this.addNotification({
+        condominioId: condoId,
+        paraMoradorId: moradorId,
+        titulo: tituloNotif,
+        mensagem: msgNotif,
+        tipo: 'encomenda',
+      });
+
+      // 2. Notificação Push Nativa (Celular / Barra de Notificações / PC)
+      notificationService.dispararNotificacaoNativa(`${tituloNotif} — ${condoNome}`, {
+        body: msgNotif,
+        tag: `encomenda-baixa-${primeira.id}-${Date.now()}`,
+      });
+
+      // 3. Alerta Sonoro
+      audioAlertService.sendNotification(tituloNotif, { body: msgNotif });
+
+      // 4. Notificação WhatsApp Automática
+      if (morador) {
+        whatsappService.notificarMorador({
+          condominioId: condoId,
+          condominioNome: condoNome,
+          morador,
+          tipo: 'encomenda_baixa',
+          titulo: '✅ Encomenda(s) Retirada(s) na Portaria (PIN Validado)',
+          corpoMensagem: `Sua(s) *${encsDoMorador.length} encomenda(s)* foram retiradas com sucesso!\n\n${listaPacotesTxt}\n\n🔑 *PIN de Segurança Validado:* \`${primeira.codigoResgate}\`\n👮 *Entregue por:* ${operadorNome}\n📅 *Data/Hora:* ${new Date().toLocaleString('pt-BR')}`,
+        });
+      }
     });
 
-    // 2. Notificação WhatsApp
-    if (morador) {
-      const listaPacotesTxt = matchingPending.map((e) => `• ${e.transportadora} (Para: ${e.moradorNome})`).join('\n');
-      whatsappService.notificarMorador({
-        condominioId: condoId,
-        condominioNome: condoNome,
-        morador,
-        tipo: 'encomenda_baixa',
-        titulo: '✅ Encomenda(s) Retirada(s) na Portaria (PIN Validado)',
-        corpoMensagem: `Sua(s) *${matchingPending.length} encomenda(s)* foram retiradas com sucesso!\n\n${listaPacotesTxt}\n\n🔑 *PIN de Segurança Validado:* \`${primeira.codigoResgate}\`\n👮 *Entregue por:* ${operadorNome}\n📅 *Data/Hora:* ${new Date().toLocaleString('pt-BR')}`,
-      });
-    }
-
     this.notify();
+    const primeiraGeral = matchingPending[0];
     return {
       success: true,
       message: matchingPending.length > 1
-        ? `✅ ${matchingPending.length} encomendas entregues com sucesso para Bloco ${primeira.unidade.bloco} - Apto ${primeira.unidade.apto}!`
-        : `Baixa confirmada via PIN para ${primeira.moradorNome} (Bloco ${primeira.unidade.bloco} - ${primeira.unidade.apto})!`,
-      encomenda: primeira,
+        ? `✅ ${matchingPending.length} encomendas entregues com sucesso para Bloco ${primeiraGeral.unidade.bloco} - Apto ${primeiraGeral.unidade.apto}!`
+        : `Baixa confirmada via PIN para ${primeiraGeral.moradorNome} (Bloco ${primeiraGeral.unidade.bloco} - ${primeiraGeral.unidade.apto})!`,
+      encomenda: primeiraGeral,
       totalEntregues: matchingPending.length,
     };
   }
@@ -3293,6 +3312,9 @@ class MockCondoStore {
     }
 
     const agora = Date.now();
+    const condo = this.getCondominio(condoId);
+    const condoNome = condo ? condo.nome : 'Condomínio Residencial';
+
     targetEncs.forEach((enc) => {
       enc.status = 'entregue';
       enc.entregueEm = agora;
@@ -3312,11 +3334,93 @@ class MockCondoStore {
     });
 
     this.saveToStorage();
+
+    // Notificar cada morador envolvido na baixa múltipla / documental
+    const moradorIds = Array.from(new Set(targetEncs.map((e) => e.moradorId)));
+    moradorIds.forEach((moradorId) => {
+      const encsDoMorador = targetEncs.filter((e) => e.moradorId === moradorId);
+      const primeira = encsDoMorador[0];
+      const morador = this.getMorador(condoId, moradorId);
+      const listaPacotesTxt = encsDoMorador.map((e) => `• ${e.transportadora} (Ref: ${e.codigoRastreio || 'Volume Registrado'})`).join('\n');
+
+      if (dadosDoc) {
+        const tituloNotif = encsDoMorador.length > 1
+          ? `⚠️ ${encsDoMorador.length} Encomendas Retiradas por Documento & Rúbrica`
+          : `⚠️ Encomenda da ${primeira.transportadora} Retirada por Documento`;
+        const msgNotif = `Pacote(s) da ${encsDoMorador.map((e) => e.transportadora).join(', ')} retirado(s) na portaria por ${dadosDoc.nomeRetirante} (Doc: ${dadosDoc.documentoRetirante}) com assinatura digital registrada.`;
+
+        // 1. In-App
+        this.addNotification({
+          condominioId: condoId,
+          paraMoradorId: moradorId,
+          titulo: tituloNotif,
+          mensagem: msgNotif,
+          tipo: 'encomenda',
+        });
+
+        // 2. Push Nativo
+        notificationService.dispararNotificacaoNativa(`${tituloNotif} — ${condoNome}`, {
+          body: msgNotif,
+          tag: `encomenda-baixa-doc-${primeira.id}-${Date.now()}`,
+        });
+
+        // 3. Áudio
+        audioAlertService.sendNotification(tituloNotif, { body: msgNotif });
+
+        // 4. WhatsApp
+        if (morador) {
+          whatsappService.notificarMorador({
+            condominioId: condoId,
+            condominioNome: condoNome,
+            morador,
+            tipo: 'encomenda_baixa',
+            titulo: '⚠️ Retirada de Encomenda(s) (Documento & Assinatura)',
+            corpoMensagem: `Sua(s) *${encsDoMorador.length} encomenda(s)* foram entregues na portaria mediante identificação documental e rúbrica.\n\n${listaPacotesTxt}\n\n👤 *Retirado por:* ${dadosDoc.nomeRetirante}\n📄 *Documento registrado:* ${dadosDoc.documentoRetirante}\n📝 *Motivo sem PIN:* ${dadosDoc.motivoSemPin || 'Identificação no balcão'}\n👮 *Atendido por:* ${operadorNome}\n📅 *Data/Hora:* ${new Date().toLocaleString('pt-BR')}`,
+          });
+        }
+      } else {
+        const tituloNotif = encsDoMorador.length > 1
+          ? `✅ ${encsDoMorador.length} Encomendas Retiradas na Portaria`
+          : `✅ Encomenda da ${primeira.transportadora} Retirada na Portaria`;
+        const msgNotif = `${encsDoMorador.length} pacote(s) entregue(s) com sucesso na portaria por ${operadorNome}.`;
+
+        // 1. In-App
+        this.addNotification({
+          condominioId: condoId,
+          paraMoradorId: moradorId,
+          titulo: tituloNotif,
+          mensagem: msgNotif,
+          tipo: 'encomenda',
+        });
+
+        // 2. Push Nativo
+        notificationService.dispararNotificacaoNativa(`${tituloNotif} — ${condoNome}`, {
+          body: msgNotif,
+          tag: `encomenda-baixa-lote-${primeira.id}-${Date.now()}`,
+        });
+
+        // 3. Áudio
+        audioAlertService.sendNotification(tituloNotif, { body: msgNotif });
+
+        // 4. WhatsApp
+        if (morador) {
+          whatsappService.notificarMorador({
+            condominioId: condoId,
+            condominioNome: condoNome,
+            morador,
+            tipo: 'encomenda_baixa',
+            titulo: '✅ Encomenda(s) Retirada(s) na Portaria',
+            corpoMensagem: `Sua(s) *${encsDoMorador.length} encomenda(s)* foram entregues com sucesso na portaria.\n\n${listaPacotesTxt}\n\n👮 *Entregue por:* ${operadorNome}\n📅 *Data/Hora:* ${new Date().toLocaleString('pt-BR')}`,
+          });
+        }
+      }
+    });
+
     this.notify();
 
     return {
       success: true,
-      message: `✅ ${targetEncs.length} encomenda(s) entregue(s) com sucesso na portaria!`,
+      message: `✅ ${targetEncs.length} encomenda(s) entregue(s) com sucesso na portaria! Morador notificado imediatamente.`,
       totalEntregues: targetEncs.length,
     };
   }
@@ -3373,17 +3477,32 @@ class MockCondoStore {
     this.saveToStorage();
     syncEncomendaToFirestore(enc).catch((err) => console.warn('Sync Encomenda baixa com documento error:', err));
 
-    this.addNotification({
-      condominioId: condoId,
-      paraMoradorId: enc.moradorId,
-      titulo: '⚠️ Encomenda Retirada por Documento & Rúbrica',
-      mensagem: `A encomenda da ${enc.transportadora} foi retirada por ${dados.nomeRetirante} (Doc: ${dados.documentoRetirante}) com assinatura digital registrada.`,
-      tipo: 'encomenda',
-    });
-
     const condo = this.getCondominio(condoId);
     const condoNome = condo ? condo.nome : 'Condomínio Residencial';
     const morador = this.getMorador(condoId, enc.moradorId);
+
+    const tituloNotif = '⚠️ Encomenda Retirada por Documento & Rúbrica';
+    const msgNotif = `A encomenda da ${enc.transportadora} foi retirada por ${dados.nomeRetirante} (Doc: ${dados.documentoRetirante}) com assinatura digital registrada.`;
+
+    // 1. In-App
+    this.addNotification({
+      condominioId: condoId,
+      paraMoradorId: enc.moradorId,
+      titulo: tituloNotif,
+      mensagem: msgNotif,
+      tipo: 'encomenda',
+    });
+
+    // 2. Push Nativo
+    notificationService.dispararNotificacaoNativa(`${tituloNotif} — ${condoNome}`, {
+      body: msgNotif,
+      tag: `encomenda-baixa-doc-${enc.id}-${Date.now()}`,
+    });
+
+    // 3. Áudio
+    audioAlertService.sendNotification(tituloNotif, { body: msgNotif });
+
+    // 4. WhatsApp
     if (morador) {
       whatsappService.notificarMorador({
         condominioId: condoId,
