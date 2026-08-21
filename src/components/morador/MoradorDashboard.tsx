@@ -60,6 +60,8 @@ import {
   Mic,
   PhoneCall,
   Menu,
+  Bell,
+  Smartphone,
 } from 'lucide-react';
 import {
   Condominio,
@@ -81,6 +83,7 @@ import {
   DocumentoCondominio,
 } from '../../types';
 import { condoStore } from '../../services/mockStorage';
+import { notificationService, playNotificationSound } from '../../services/notificationService';
 import { QrScannerModal } from '../common/QrScannerModal';
 import { BikeLockModal } from '../common/BikeLockModal';
 import { BikeReturnModal } from '../common/BikeReturnModal';
@@ -194,8 +197,81 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
   // Copiado feedback
   const [copiadoKey, setCopiadoKey] = useState<string | null>(null);
 
+  // Status de Push Notifications e Teste de Tela Bloqueada
+  const [pushStatus, setPushStatus] = useState<NotificationPermission>(() =>
+    notificationService.getPushPermissionStatus()
+  );
+  const [lockScreenCountdown, setLockScreenCountdown] = useState<number | null>(null);
+
   // Modal de Foto da Encomenda / Selo em Alta Resolução
   const [modalFotoEncomenda, setModalFotoEncomenda] = useState<{ url: string; titulo: string; rastreio?: string } | null>(null);
+
+  const handleAtivarPushMorador = async () => {
+    const ok = await notificationService.solicitarPermissaoPush(morador.id);
+    if (ok) {
+      setPushStatus('granted');
+      playNotificationSound('sucesso');
+      setAlertMessage({
+        type: 'success',
+        text: 'Notificações ativadas! Você receberá alertas na tela e na barra do celular quando chegar encomenda.',
+      });
+      notificationService.dispararNotificacaoNativa(`✅ Notificações Ativadas — ${condominio.nome}`, {
+        body: 'Você agora receberá avisos em tempo real e na tela de bloqueio quando uma encomenda chegar!',
+        tag: 'smartcondo-push-ok',
+      });
+    } else {
+      setPushStatus('denied');
+      setAlertMessage({
+        type: 'warning',
+        text: 'Permissão de notificação negada ou não suportada no navegador.',
+      });
+    }
+  };
+
+  const handleTestarTelaBloqueada = () => {
+    if (pushStatus !== 'granted') {
+      handleAtivarPushMorador();
+      return;
+    }
+    setLockScreenCountdown(5);
+    let rem = 5;
+    const it = setInterval(() => {
+      rem -= 1;
+      setLockScreenCountdown(rem);
+      if (rem <= 0) {
+        clearInterval(it);
+        setLockScreenCountdown(null);
+        notificationService.agendarNotificacaoParaTelaBloqueada(0, {
+          titulo: `📦 Encomenda Chegou! — ${condominio.nome}`,
+          transportadora: 'Mercado Livre Full',
+          codigoResgate: '948210',
+          unidade: `Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto}`,
+        });
+      }
+    }, 1000);
+  };
+
+  const handleSimularChegadaEncomenda = () => {
+    const transportadoras = ['Mercado Livre', 'Amazon Prime', 'Shopee Express', 'Correios Sedex', 'Shein'];
+    const trans = transportadoras[Math.floor(Math.random() * transportadoras.length)];
+    const pin = Math.floor(100000 + Math.random() * 900000).toString();
+
+    const newEnc = condoStore.addEncomenda(condominio.id, {
+      moradorId: morador.id,
+      transportadora: trans,
+      codigoRastreio: `BR${Math.floor(100000000 + Math.random() * 900000000)}`,
+      observacao: 'Pacote pequeno deixado na portaria principal.',
+      recebidoPor: 'Portaria 24h',
+      codigoResgateCustomizado: pin,
+      diasLimiteCustomizado: 5,
+    });
+
+    playNotificationSound('encomenda');
+    setAlertMessage({
+      type: 'success',
+      text: `Nova encomenda da ${trans} registrada! Código PIN: ${newEnc.codigoResgate}. Notificação enviada para a tela e barra do celular.`,
+    });
+  };
 
   // Dados reativos carregados do store
   const visitantes = condoStore.getVisitantes(condominio.id, morador.id);
@@ -2568,6 +2644,82 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
               <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
                 {pendingPackages.length} aguardando na portaria
               </span>
+            </div>
+          </div>
+
+          {/* Card de Configuração e Teste de Alertas na Tela e Barra do Celular */}
+          <div className="p-5 rounded-3xl bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 text-white shadow-xl border border-emerald-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-emerald-500 text-slate-950 flex items-center justify-center font-black shadow-lg shadow-emerald-500/20 shrink-0">
+                <Smartphone className="w-5 h-5 text-slate-950" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-full">
+                    Avisos no Celular & Tela Bloqueada
+                  </span>
+                  <span
+                    className={`text-xs font-bold flex items-center gap-1 ${
+                      pushStatus === 'granted' ? 'text-emerald-400' : 'text-amber-400'
+                    }`}
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        pushStatus === 'granted' ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'
+                      }`}
+                    />
+                    {pushStatus === 'granted' ? 'Notificações Ativas' : 'Permissão Pendente'}
+                  </span>
+                </div>
+                <h4 className="text-sm sm:text-base font-black text-white mt-1">
+                  Alertas em Tempo Real quando Chegar Encomenda
+                </h4>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Receba o aviso sonoro e pop-up na tela do celular e na barra de notificações quando o aparelho estiver bloqueado.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto shrink-0">
+              {pushStatus !== 'granted' ? (
+                <button
+                  type="button"
+                  onClick={handleAtivarPushMorador}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
+                >
+                  <Bell className="w-4 h-4" />
+                  <span>Ativar Avisos no Celular</span>
+                </button>
+              ) : (
+                <>
+                  {lockScreenCountdown !== null ? (
+                    <div className="px-4 py-2.5 rounded-xl bg-amber-500 text-slate-950 font-black text-xs animate-pulse flex items-center gap-1.5">
+                      <Clock className="w-4 h-4" />
+                      <span>Bloqueie o celular! Notificando em {lockScreenCountdown}s</span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleTestarTelaBloqueada}
+                      className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 flex items-center justify-center gap-1.5 transition cursor-pointer"
+                      title="Clique, bloqueie a tela do celular e veja o alerta chegar na barra"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Testar Tela Bloqueada (5s)</span>
+                    </button>
+                  )}
+                </>
+              )}
+
+              <button
+                type="button"
+                onClick={handleSimularChegadaEncomenda}
+                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow flex items-center justify-center gap-1.5 transition cursor-pointer"
+                title="Simula a portaria recebendo um novo pacote para sua unidade"
+              >
+                <Package className="w-3.5 h-3.5" />
+                <span>+ Simular Encomenda</span>
+              </button>
             </div>
           </div>
 

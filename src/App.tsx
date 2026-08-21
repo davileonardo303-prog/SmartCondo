@@ -9,6 +9,7 @@ import { SindicoDashboard } from './components/sindico/SindicoDashboard';
 import { SuperAdminDashboard } from './components/superadmin/SuperAdminDashboard';
 import { PwaInstallPrompt } from './components/common/PwaInstallPrompt';
 import { LiveCallModal } from './components/interfone/LiveCallModal';
+import { IncomingEncomendaAlert } from './components/common/IncomingEncomendaAlert';
 import { auth, testFirestoreConnection, logoutFirebase } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { APP_VERSION, APP_NAME } from './constants/version';
@@ -234,6 +235,15 @@ export default function App() {
         currentUser={currentUser}
         currentMorador={currentMorador}
       />
+
+      {/* Alerta em Tempo Real de Chegada de Encomenda na Tela & Tela Bloqueada */}
+      {currentUser.role === 'morador' && (
+        <IncomingEncomendaAlert
+          currentMorador={currentMorador}
+          currentCondo={currentCondo}
+          encomendas={encomendas}
+        />
+      )}
 
       {/* Modal / Prompt de Instalação PWA (Dispositivos Móveis, Tablets, Desktops, iPhones, iPads) */}
       <PwaInstallPrompt />
