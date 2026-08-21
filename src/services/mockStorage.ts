@@ -697,6 +697,39 @@ class MockCondoStore {
         collection(db, 'condominios', condoId, 'encomendas'),
         (snap) => {
           const list: Encomenda[] = [];
+          const agora = Date.now();
+
+          snap.docChanges().forEach((change) => {
+            const enc = { ...(change.doc.data() as Encomenda), id: change.doc.id };
+            if (change.type === 'added') {
+              // Se foi cadastrada recentemente (< 2 min), dispara notificação nativa na barra do celular e toca som
+              if (agora - (enc.recebidoEm || 0) < 120000) {
+                notificationService.dispararNotificacaoNativa(
+                  `📦 Encomenda Chegou! Bloco ${enc.unidade?.bloco || '1'} - Apto ${enc.unidade?.apto}`,
+                  {
+                    body: `Transportadora: ${enc.transportadora || 'Entrega'}. Código PIN: ${enc.codigoResgate}.`,
+                    tag: `enc-${enc.id}`,
+                    data: { url: '/', tab: 'encomendas', encId: enc.id },
+                  }
+                );
+                playNotificationSound('encomenda');
+              }
+            } else if (change.type === 'modified') {
+              // Se a encomenda acabou de ser retirada/entregue (< 2 min)
+              if (enc.status === 'entregue' && agora - (enc.retiradoEm || 0) < 120000) {
+                notificationService.dispararNotificacaoNativa(
+                  `✅ Encomenda Retirada! Bloco ${enc.unidade?.bloco || '1'} - Apto ${enc.unidade?.apto}`,
+                  {
+                    body: `Pacote da ${enc.transportadora || 'Entrega'} foi retirado na portaria com sucesso.`,
+                    tag: `enc-retirada-${enc.id}`,
+                    data: { url: '/', tab: 'encomendas', encId: enc.id },
+                  }
+                );
+                playNotificationSound('sucesso');
+              }
+            }
+          });
+
           snap.forEach((d) => list.push({ ...(d.data() as Encomenda), id: d.id }));
           if (this.updateLocalSubcollection(this.encomendas, condoId, list)) {
             this.notify();
@@ -725,6 +758,25 @@ class MockCondoStore {
         collection(db, 'condominios', condoId, 'avisos'),
         (snap) => {
           const list: Aviso[] = [];
+          const agora = Date.now();
+
+          snap.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+              const aviso = { ...(change.doc.data() as Aviso), id: change.doc.id };
+              if (agora - (aviso.criadoEm || 0) < 120000) {
+                notificationService.dispararNotificacaoNativa(
+                  `${aviso.prioritario ? '🚨' : '📢'} Comunicado: ${aviso.titulo}`,
+                  {
+                    body: aviso.mensagem,
+                    tag: `aviso-${aviso.id}`,
+                    data: { url: '/', tab: 'inicio' },
+                  }
+                );
+                playNotificationSound('aviso');
+              }
+            }
+          });
+
           snap.forEach((d) => list.push({ ...(d.data() as Aviso), id: d.id }));
           if (this.updateLocalSubcollection(this.avisos, condoId, list)) {
             this.notify();
@@ -767,6 +819,24 @@ class MockCondoStore {
         collection(db, 'condominios', condoId, 'visitantes'),
         (snap) => {
           const list: VisitanteLiberado[] = [];
+          const agora = Date.now();
+
+          snap.docChanges().forEach((change) => {
+            if (change.type === 'modified' || change.type === 'added') {
+              const vis = { ...(change.doc.data() as VisitanteLiberado), id: change.doc.id };
+              if (vis.status === 'dentro' && agora - (vis.entradaEm || 0) < 120000) {
+                notificationService.dispararNotificacaoNativa(
+                  `🚪 Entrada na Portaria: ${vis.nomeVisitante}`,
+                  {
+                    body: `${vis.nomeVisitante} (${vis.tipo === 'prestador' ? vis.empresa || 'Prestador' : 'Visitante'}) ingressou no condomínio pela portaria.`,
+                    tag: `vis-${vis.id}`,
+                  }
+                );
+                audioAlertService.playVisitorAlertSound();
+              }
+            }
+          });
+
           snap.forEach((d) => list.push({ ...(d.data() as VisitanteLiberado), id: d.id }));
           if (this.updateLocalSubcollection(this.visitantes, condoId, list)) {
             this.notify();

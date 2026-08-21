@@ -228,6 +228,25 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
     }
   };
 
+  const handleTestarPushAgora = () => {
+    if (pushStatus !== 'granted') {
+      handleAtivarPushMorador();
+      return;
+    }
+    playNotificationSound('encomenda');
+    notificationService.dispararNotificacaoNativa(
+      `🔔 Teste de Notificação — ${condominio.nome}`,
+      {
+        body: `Seu celular está recebendo alertas sonoros e notificações na barra e tela de bloqueio perfeitamente!`,
+        tag: `teste-push-agora-${Date.now()}`,
+      }
+    );
+    setAlertMessage({
+      type: 'success',
+      text: 'Alerta sonoro e notificação disparados com sucesso para o seu celular!',
+    });
+  };
+
   const handleTestarTelaBloqueada = () => {
     if (pushStatus !== 'granted') {
       handleAtivarPushMorador();
@@ -2709,6 +2728,16 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
                 </button>
               ) : (
                 <>
+                  <button
+                    type="button"
+                    onClick={handleTestarPushAgora}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-md flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
+                    title="Testar o som e a notificação na barra do celular agora"
+                  >
+                    <Bell className="w-3.5 h-3.5 text-slate-950" />
+                    <span>Testar Som & Notificação</span>
+                  </button>
+
                   {lockScreenCountdown !== null ? (
                     <div className="px-4 py-2.5 rounded-xl bg-amber-500 text-slate-950 font-black text-xs animate-pulse flex items-center gap-1.5">
                       <Clock className="w-4 h-4" />

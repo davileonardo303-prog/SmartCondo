@@ -62,19 +62,33 @@ export const Header: React.FC<HeaderProps> = ({
     setPushStatus('loading');
     setPushTestMessage(null);
     try {
-      const { notificationService } = await import('../../services/notificationService');
+      const { notificationService, playNotificationSound } = await import('../../services/notificationService');
       const granted = await notificationService.solicitarPermissaoPush(currentUser.id);
       
-      setPushStatus(granted ? 'granted' : 'granted');
+      setPushStatus(granted ? 'granted' : 'default');
       
-      notificationService.dispararNotificacaoNativa(
-        isTestOnly ? '🔔 Teste de Notificação — SmartCondo' : '🔔 Notificações Ativadas Direto!',
-        {
-          body: `Você receberá avisos, encomendas e chamadas de ${currentCondo.nome} automaticamente sem precisar reativar!`,
-        }
-      );
+      if (isTestOnly) {
+        notificationService.dispararNotificacaoNativa(
+          '🔔 Teste de Alerta — SmartCondo',
+          {
+            body: `Seu aparelho está configurado para receber notificações automáticas de ${currentCondo.nome}!`,
+            tag: `test-push-${Date.now()}`,
+          }
+        );
+        playNotificationSound('aviso');
+        setPushTestMessage('✅ Teste enviado ao seu celular!');
+      } else {
+        notificationService.dispararNotificacaoNativa(
+          '🔔 Notificações Ativadas com Sucesso!',
+          {
+            body: `Você receberá avisos, encomendas e chamadas de ${currentCondo.nome} automaticamente sem precisar reativar!`,
+            tag: `ativado-push-${Date.now()}`,
+          }
+        );
+        playNotificationSound('sucesso');
+        setPushTestMessage('✅ Notificações Ativas no Aparelho!');
+      }
 
-      setPushTestMessage(isTestOnly ? '✅ Teste enviado ao seu dispositivo!' : '✅ Notificações Ativadas Direto!');
       setTimeout(() => setPushTestMessage(null), 4000);
     } catch {
       setPushStatus('granted');
