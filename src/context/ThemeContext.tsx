@@ -98,57 +98,77 @@ export const useTheme = () => {
   return context;
 };
 
-// Componente elegante de alternância de tema para botões rápidos
+// Componente elegante de alternância de tema para botões rápidos (totalmente responsivo)
 export const ThemeToggleCompact: React.FC<{ className?: string }> = ({ className = '' }) => {
-  const { theme, resolvedTheme, setTheme } = useTheme();
+  const { theme, resolvedTheme, setTheme, toggleTheme } = useTheme();
 
   return (
-    <div
-      className={`inline-flex items-center p-1 rounded-2xl bg-slate-200/80 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 shadow-inner ${className}`}
-      role="group"
-      aria-label="Selecionar tema do aplicativo"
-    >
+    <>
+      {/* Versão Mobile (1 Botão Compacto Inteligente que não estoura a tela) */}
       <button
         type="button"
-        onClick={() => setTheme('light')}
-        title="Modo Claro (Dia)"
-        className={`flex items-center gap-1 px-2 py-1 rounded-xl text-xs font-black transition-all duration-200 active:scale-95 cursor-pointer ${
-          theme === 'light'
-            ? 'bg-amber-500 text-white shadow-md shadow-amber-500/30 ring-2 ring-amber-400/40'
-            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/50'
-        }`}
+        onClick={toggleTheme}
+        className={`sm:hidden flex items-center justify-center w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 transition active:scale-95 shadow-xs shrink-0 ${className}`}
+        title={`Tema atual: ${theme === 'light' ? 'Claro' : theme === 'dark' ? 'Escuro' : 'Automático'} (Toque para alternar)`}
+        aria-label="Alternar tema"
       >
-        <Sun className="w-3.5 h-3.5" />
-        <span className="hidden md:inline text-[11px]">Claro</span>
+        {theme === 'light' ? (
+          <Sun className="w-4 h-4 text-amber-500" />
+        ) : theme === 'dark' ? (
+          <Moon className="w-4 h-4 text-indigo-400" />
+        ) : (
+          <Laptop className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+        )}
       </button>
 
-      <button
-        type="button"
-        onClick={() => setTheme('dark')}
-        title="Modo Escuro (Noite)"
-        className={`flex items-center gap-1 px-2 py-1 rounded-xl text-xs font-black transition-all duration-200 active:scale-95 cursor-pointer ${
-          theme === 'dark'
-            ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-2 ring-indigo-400/40'
-            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/50'
-        }`}
+      {/* Versão Desktop / Tablet (Segmented Control Completo) */}
+      <div
+        className={`hidden sm:inline-flex items-center p-1 rounded-2xl bg-slate-200/80 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 shadow-inner shrink-0 ${className}`}
+        role="group"
+        aria-label="Selecionar tema do aplicativo"
       >
-        <Moon className="w-3.5 h-3.5" />
-        <span className="hidden md:inline text-[11px]">Escuro</span>
-      </button>
+        <button
+          type="button"
+          onClick={() => setTheme('light')}
+          title="Modo Claro (Dia)"
+          className={`flex items-center gap-1 px-2 py-1 rounded-xl text-xs font-black transition-all duration-200 active:scale-95 cursor-pointer ${
+            theme === 'light'
+              ? 'bg-amber-500 text-white shadow-md shadow-amber-500/30 ring-2 ring-amber-400/40'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/50'
+          }`}
+        >
+          <Sun className="w-3.5 h-3.5" />
+          <span className="hidden md:inline text-[11px]">Claro</span>
+        </button>
 
-      <button
-        type="button"
-        onClick={() => setTheme('system')}
-        title="Automático (Acompanha o tema do Celular / Computador)"
-        className={`flex items-center gap-1 px-2 py-1 rounded-xl text-xs font-black transition-all duration-200 active:scale-95 cursor-pointer ${
-          theme === 'system'
-            ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 ring-2 ring-emerald-400/40'
-            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/50'
-        }`}
-      >
-        <Laptop className="w-3.5 h-3.5" />
-        <span className="hidden md:inline text-[11px]">Auto</span>
-      </button>
-    </div>
+        <button
+          type="button"
+          onClick={() => setTheme('dark')}
+          title="Modo Escuro (Noite)"
+          className={`flex items-center gap-1 px-2 py-1 rounded-xl text-xs font-black transition-all duration-200 active:scale-95 cursor-pointer ${
+            theme === 'dark'
+              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-2 ring-indigo-400/40'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/50'
+          }`}
+        >
+          <Moon className="w-3.5 h-3.5" />
+          <span className="hidden md:inline text-[11px]">Escuro</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setTheme('system')}
+          title="Automático (Acompanha o tema do Celular / Computador)"
+          className={`flex items-center gap-1 px-2 py-1 rounded-xl text-xs font-black transition-all duration-200 active:scale-95 cursor-pointer ${
+            theme === 'system'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 ring-2 ring-emerald-400/40'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/50'
+          }`}
+        >
+          <Laptop className="w-3.5 h-3.5" />
+          <span className="hidden md:inline text-[11px]">Auto</span>
+        </button>
+      </div>
+    </>
   );
 };

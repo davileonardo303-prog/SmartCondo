@@ -149,6 +149,37 @@ export interface PlanoConfigItem {
   ativo?: boolean;
 }
 
+export type ModuloServicoId =
+  | 'bicicletario'
+  | 'comida_mercado'
+  | 'encomendas'
+  | 'interfone'
+  | 'portaria_whatsapp'
+  | 'lazer'
+  | 'equipamentos'
+  | 'seguranca'
+  | 'garagem'
+  | 'ocorrencias'
+  | 'mural'
+  | 'financeiro'
+  | 'documentos';
+
+export interface ModulosCondominioConfig {
+  bicicletario: boolean; // 🚲 Bicicletas Compartilhadas (Reserva 5 min, Cadeados Digitais, Devoluções)
+  comida_mercado: boolean; // 🛒🍔 Mercadinho Autônomo & Alimentos / Comida do Condomínio
+  encomendas: boolean; // 📦 Portaria de Encomendas (PIN de Resgate, Fotos de Rastreio, Baixas)
+  interfone: boolean; // 📞 Interfonia Digital WebRTC, Chamadas em Vídeo & Rádio PTT Zello
+  portaria_whatsapp: boolean; // 💬 DropDesk WhatsApp Atendimento Oficial & Notificações
+  lazer: boolean; // 🏊 Reservas de Áreas de Lazer (Salão de Festas, Churrasqueira, Piscina)
+  equipamentos: boolean; // 🧰 Itens & Equipamentos Compartilhados (Ferramentas, Escadas, etc.)
+  seguranca: boolean; // 🛡️ Segurança, Câmeras ao Vivo & SmartPass Acesso de Visitantes
+  garagem: boolean; // 🚗 Garagem, Vagas & Veículos
+  ocorrencias: boolean; // ⚠️ Chamados & Ocorrências de Manutenção
+  mural: boolean; // 📢 Comunidade, Mural & Enquetes / Votações
+  financeiro: boolean; // 💵 Financeiro, Boletos & 2ª Via Pix Instantânea
+  documentos: boolean; // 📄 Atas, Regulamento & Convenção
+}
+
 export interface Condominio {
   id: string;
   nome: string;
@@ -159,6 +190,7 @@ export interface Condominio {
   totalUnidades: number;
   statusAssinatura: 'ativo' | 'suspenso' | 'em_teste';
   plano: PlanoTipo;
+  modulosAtivos?: Partial<ModulosCondominioConfig>; // Política de serviços contratados
   valorMensalidade?: number;
   diaVencimento?: number;
   statusPagamento?: 'em_dia' | 'pendente' | 'vencido' | 'cortesia';
@@ -180,6 +212,54 @@ export interface Condominio {
     diasLimiteRetiradaEncomenda?: number; // Padrão: 5 dias (Ex: Jardins do Brito)
     acaoAposLimiteEncomenda?: 'encaminhar_administracao' | 'notificar_reincidencia';
   };
+}
+
+// Módulo de Mercadinho & Alimentos / Comida Autônoma do Condomínio
+export type CategoriaProdutoMercado =
+  | 'bebidas'
+  | 'lanches'
+  | 'mercearia'
+  | 'doces'
+  | 'padaria'
+  | 'conveniencia';
+
+export interface ProdutoMercadinho {
+  id: string;
+  condominioId: string;
+  nome: string;
+  categoria: CategoriaProdutoMercado;
+  preco: number;
+  descricao: string;
+  imagemUrl: string;
+  estoque: number;
+  disponivel: boolean;
+  unidadeMedida?: string; // un, lata, pct, garrafa
+  codigoBarras?: string;
+}
+
+export interface ItemCarrinhoMercadinho {
+  produto: ProdutoMercadinho;
+  quantidade: number;
+}
+
+export interface PedidoMercadinho {
+  id: string;
+  condominioId: string;
+  moradorId: string;
+  moradorNome: string;
+  moradorUnidade: Unidade;
+  itens: {
+    produtoId: string;
+    nome: string;
+    precoUnitario: number;
+    quantidade: number;
+    subtotal: number;
+  }[];
+  valorTotal: number;
+  formaPagamento: 'pix' | 'taxa_condominio' | 'cartao_app';
+  status: 'concluido' | 'pendente_pagamento' | 'cancelado';
+  criadoEm: number;
+  comprovantePixUrl?: string;
 }
 
 export interface CobrancaCondominio {
@@ -557,8 +637,81 @@ export interface ActiveUserSession {
   moradorId: string; // se role === 'morador'
 }
 
-// Versão do Aplicativo SmartCondo
-export const APP_VERSION = '1.0.0.1';
+// ============================================================================
+// MÓDULO WHATSAPP DROPDESK (CENTRAL DE ATENDIMENTOS, MULTIATENDENTES & TICKETS)
+// ============================================================================
+export type WhatsAppTicketStatus = 'aguardando' | 'atendendo' | 'finalizado' | 'cancelado';
+export type WhatsAppTicketPrioridade = 'baixa' | 'normal' | 'alta' | 'urgente';
+export type WhatsAppTicketSetor = 'portaria' | 'sindico' | 'zeladoria' | 'financeiro' | 'seguranca';
+
+export interface WhatsAppTicketMessage {
+  id: string;
+  ticketId: string;
+  remetente: 'cliente' | 'atendente' | 'sistema' | 'bot';
+  remetenteNome: string;
+  remetenteAvatar?: string;
+  tipo: 'texto' | 'audio' | 'imagem' | 'arquivo' | 'localizacao' | 'acao_rapida' | 'encomenda_pin';
+  conteudo: string;
+  mediaUrl?: string;
+  audioDuracao?: number;
+  timestamp: number;
+  status: 'enviado' | 'entregue' | 'lido';
+  isNotaInterna?: boolean; // Nota privada entre portaria e síndico (invisível ao morador)
+  dadosExtras?: Record<string, any>;
+}
+
+export interface WhatsAppTicket {
+  id: string; // Ex: '#780'
+  protocolo: string; // Ex: 'ATD-780'
+  condominioId: string;
+  clienteId?: string; // moradorId se cadastrado
+  clienteNome: string;
+  clienteTelefone: string;
+  clienteUnidade?: Unidade;
+  clienteAvatar?: string;
+  status: WhatsAppTicketStatus;
+  prioridade: WhatsAppTicketPrioridade;
+  setor: WhatsAppTicketSetor;
+  atendenteId?: string;
+  atendenteNome?: string;
+  atendenteRole?: UserRole;
+  tags: string[]; // Ex: ['#Encomenda', '#Visitante', '#Barulho', '#Manutenção', '#Boleto']
+  assunto: string;
+  criadoEm: number;
+  iniciadoEm?: number;
+  finalizadoEm?: number;
+  ultimaMensagem: string;
+  ultimaMensagemTimestamp: number;
+  mensagensNaoLidas: number;
+  mensagens: WhatsAppTicketMessage[];
+  ocorrenciaGeradaId?: string;
+  resumoFinalizacao?: string;
+}
+
+export interface WhatsAppQuickReply {
+  id: string;
+  atalho: string; // Ex: '/encomenda', '/portao', '/visitante'
+  titulo: string;
+  conteudo: string;
+  categoria: 'portaria' | 'sindico' | 'geral' | 'encomendas';
+}
+
+export interface WhatsAppDropDeskConfig {
+  status: 'conectado' | 'desconectado' | 'conectando' | 'qr_ready';
+  numeroConectado: string; // Vazio quando desconectado. Preenchido apenas ao ler o QR Code
+  nomeInstancia: string;
+  nomePerfil?: string; // Nome da conta comercial / pushName real do WhatsApp
+  avatarPerfil?: string; // Foto real do perfil
+  plataforma?: string; // Ex: 'WhatsApp Business (Android)', 'WhatsApp Web (iOS)'
+  servidorApiUrl?: string; // URL da Evolution API / Baileys
+  apiKey?: string; // Global API Key da Evolution API
+  bateria?: number | null;
+  conectadoEm?: number | null;
+  webhookAtivo: boolean;
+  webhookUrl?: string;
+  ultimaSincronizacao: number;
+}
+
 
 // Módulo de Itens e Equipamentos Compartilhados
 export type CategoriaItemCompartilhado = 'mobilidade' | 'ferramentas' | 'utilidades' | 'lavanderia';

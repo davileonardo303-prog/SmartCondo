@@ -442,6 +442,27 @@ export async function deleteInterfoneFromFirestore(condoId: string, msgId: strin
   }
 }
 
+export async function syncNotificacaoToFirestore(notif: AppNotification): Promise<void> {
+  const path = `condominios/${notif.condominioId}/notificacoes/${notif.id}`;
+  try {
+    const data = cleanFirestoreData(notif);
+    await setDoc(doc(db, 'condominios', notif.condominioId, 'notificacoes', notif.id), data, {
+      merge: true,
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteNotificacaoFromFirestore(condoId: string, notifId: string): Promise<void> {
+  const path = `condominios/${condoId}/notificacoes/${notifId}`;
+  try {
+    await deleteDoc(doc(db, 'condominios', condoId, 'notificacoes', notifId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
 
 export async function loginWithGooglePopup(): Promise<FirebaseUser> {
   const result = await signInWithPopup(auth, googleProvider);

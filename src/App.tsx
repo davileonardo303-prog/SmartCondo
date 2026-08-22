@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useSyncExternalStore } from 'react';
 import { UserRole, Condominio, Morador, UserAccount } from './types';
 import { condoStore } from './services/mockStorage';
-import { SidebarLayout } from './components/common/SidebarLayout';
-import { defaultTabByRole } from './components/common/navConfig';
+import { Header } from './components/common/Header';
 import { AuthScreen } from './components/auth/AuthScreen';
 import { MoradorDashboard } from './components/morador/MoradorDashboard';
 import { PortariaDashboard } from './components/portaria/PortariaDashboard';
@@ -10,6 +9,7 @@ import { SindicoDashboard } from './components/sindico/SindicoDashboard';
 import { SuperAdminDashboard } from './components/superadmin/SuperAdminDashboard';
 import { PwaInstallPrompt } from './components/common/PwaInstallPrompt';
 import { LiveCallModal } from './components/interfone/LiveCallModal';
+import { IncomingEncomendaAlert } from './components/common/IncomingEncomendaAlert';
 import { auth, testFirestoreConnection, logoutFirebase } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { APP_VERSION, APP_NAME } from './constants/version';
@@ -44,15 +44,20 @@ export default function App() {
     return null;
   });
 
-  const [selectedCondoId, setSelectedCondoId] = useState<string>('condo_park_avenue');
-  const [activeTab, setActiveTab] = useState<string>(() => defaultTabByRole[currentUser?.role || 'morador'] || 'inicio');
-
-  // Reset active tab when user role changes
+  // Inicialização automática permanente das notificações push no Celular e PC
   useEffect(() => {
-    if (currentUser) {
-      setActiveTab(defaultTabByRole[currentUser.role] || 'inicio');
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        import('./services/notificationService').then(({ notificationService }) => {
+          if (currentUser?.id) {
+            notificationService.solicitarPermissaoPush(currentUser.id).catch(() => {});
+          }
+        });
+      }
     }
-  }, [currentUser?.role]);
+  }, [currentUser?.id]);
+
+  const [selectedCondoId, setSelectedCondoId] = useState<string>('condo_park_avenue');
 
   const condominios = condoStore.getCondominios();
   const effectiveCondoId = currentUser?.condominioId || selectedCondoId;
@@ -153,17 +158,19 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans selection:bg-blue-600 selection:text-white">
-      <SidebarLayout
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#F0F5F2] dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans selection:bg-emerald-600 selection:text-white">
+      {/* Barra Superior de Navegação Limpa (Sem Menu Demonstração) */}
+      <Header
         currentUser={currentUser}
         currentCondo={currentCondo}
-        condominios={condominios}
         setCondoId={setSelectedCondoId}
+        condominios={condominios}
         notifications={notifications}
         onLogout={handleLogout}
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
-      >
+      />
+
+      {/* Conteúdo Principal com base no Perfil Logado */}
+      <main className="flex-1 w-full max-w-full overflow-x-hidden pb-16">
         <ErrorBoundary fallbackTitle="Erro ao carregar o painel do usuário">
           {currentUser.role === 'morador' && (
             <MoradorDashboard
@@ -175,8 +182,6 @@ export default function App() {
               reservas={reservas}
               avisos={avisos}
               historicoLocacoes={historicoLocacoes}
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
             />
           )}
 
@@ -187,8 +192,7 @@ export default function App() {
               encomendas={allEncomendasCondo}
               bikes={bikes}
               historicoLocacoes={historicoLocacoes}
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
+              currentUser={currentUser}
             />
           )}
 
@@ -200,8 +204,7 @@ export default function App() {
               areasLazer={areasLazer}
               reservas={reservas}
               avisos={avisos}
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
+              currentUser={currentUser}
             />
           )}
 
@@ -216,21 +219,48 @@ export default function App() {
                   setCurrentUser((prev) => (prev ? { ...prev, role } : null));
                 }
               }}
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
             />
           )}
         </ErrorBoundary>
-      </SidebarLayout>
+      </main>
 
-      {/* Modal de Chamada de Interfone em Tempo Real */}
+      {/* Rodapé do Sistema */}
+      <footer className="border-t border-slate-200 bg-white py-4 px-4 text-center text-xs text-slate-500">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span className="font-semibold text-slate-700">{APP_NAME}</span>
+            <span className="text-slate-400">•</span>
+            <span>Gestão Residencial 100% Integrada</span>
+            <span className="bg-slate-100 text-slate-600 font-mono text-[10px] font-bold px-2 py-0.5 rounded-full border border-slate-200">
+              v{APP_VERSION}
+            </span>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-slate-500">
+            <span>Condomínio: <strong className="text-slate-700">{currentCondo.nome}</strong></span>
+            <span>•</span>
+            <span>Perfil Ativo: <strong className="text-emerald-700 uppercase">{currentUser.role}</strong></span>
+          </div>
+        </div>
+      </footer>
+
+      {/* Modal de Chamada de Interfone em Tempo Real (Estilo WhatsApp / Instagram / Face) */}
       <LiveCallModal
         condominio={currentCondo}
         currentUser={currentUser}
         currentMorador={currentMorador}
       />
 
-      {/* Modal / Prompt de Instalação PWA */}
+      {/* Alerta em Tempo Real de Chegada de Encomenda na Tela & Tela Bloqueada */}
+      {currentUser.role === 'morador' && (
+        <IncomingEncomendaAlert
+          currentMorador={currentMorador}
+          currentCondo={currentCondo}
+          encomendas={encomendas}
+        />
+      )}
+
+      {/* Modal / Prompt de Instalação PWA (Dispositivos Móveis, Tablets, Desktops, iPhones, iPads) */}
       <PwaInstallPrompt />
     </div>
   );

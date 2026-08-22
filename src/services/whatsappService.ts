@@ -233,6 +233,139 @@ ${dados.encomenda.fotoUrl ? '📸 *Foto do Selo / Etiqueta Anexada:* A foto da s
     });
   }
 
+  // Notificação específica de Bicicletário (Retirada, Devolução, Vaga)
+  public async notificarBicicletarioAutomatica(dados: {
+    condominio: Condominio;
+    morador: Morador;
+    tipoAcao: 'retirada' | 'devolucao' | 'reserva_5min' | 'alerta_vaga';
+    bikeNumero?: string | number;
+    bikeModelo?: string;
+    vagaBicicletario?: string;
+    observacao?: string;
+    codigoReserva?: string;
+  }): Promise<AutomatedDispatchResult> {
+    let titulo = '🚲 Bicicletário - Movimentação';
+    let corpo = '';
+
+    if (dados.tipoAcao === 'retirada') {
+      titulo = `🚲 Retirada de Bicicleta #${dados.bikeNumero || ''}`;
+      corpo = `🚲 *RETIRADA DE BICICLETA REGISTRADA*
+
+Olá, *${dados.morador.nome}*!
+A bicicleta *${dados.bikeModelo || 'Compartilhada'}* (Tag #${dados.bikeNumero || '01'}) foi liberada e retirada na portaria/totem.
+
+⏱️ *Tempo de Uso Estimado:* Conforme regras do condomínio.
+🔒 *Lembre-se:* Ao devolver, apresente-se à portaria para conferência e vistoria.`;
+    } else if (dados.tipoAcao === 'devolucao') {
+      titulo = `🚲 Devolução Confirmada #${dados.bikeNumero || ''}`;
+      corpo = `🚲 *DEVOLUÇÃO DE BICICLETA CONCLUÍDA*
+
+Olá, *${dados.morador.nome}*!
+A devolução da bicicleta *${dados.bikeModelo || 'Compartilhada'}* (Tag #${dados.bikeNumero || '01'}) foi conferida com sucesso pela equipe da portaria.
+
+${dados.observacao ? `📝 *Observação de Vistoria:* ${dados.observacao}\n` : ''}✅ Agradecemos por utilizar o bicicletário compartilhado do *${dados.condominio.nome}*!`;
+    } else if (dados.tipoAcao === 'reserva_5min') {
+      titulo = `🚲 Código de Liberação de Bike (5 min)`;
+      corpo = `🚲 *RESERVA RÁPIDA DE BICICLETA (5 MINUTOS)*
+
+Olá, *${dados.morador.nome}*!
+Sua solicitação de bike foi aprovada.
+
+🔑 *CÓDIGO DE RETIRADA:* \`${dados.codigoReserva || 'BIKE-123'}\`
+⏱️ *Validade do Código:* 5 minutos na guarita/totem.
+Apresente este código ao porteiro para retirar sua bicicleta.`;
+    } else {
+      titulo = `🚲 Aviso sobre Bicicletário`;
+      corpo = `🚲 *COMUNICADO DO BICICLETÁRIO*
+
+Olá, *${dados.morador.nome}*!
+${dados.observacao || `Informamos sobre sua vaga ou bicicleta no bicicletário (${dados.vagaBicicletario ? `Vaga: ${dados.vagaBicicletario}` : ''}).`}`;
+    }
+
+    return this.dispararNotificacaoAutomatica({
+      condominioId: dados.condominio.id,
+      condominioNome: dados.condominio.nome,
+      morador: dados.morador,
+      tipo: dados.tipoAcao === 'retirada' ? 'bike_retirada' : dados.tipoAcao === 'devolucao' ? 'bike_devolucao' : 'bike_reserva_5min',
+      titulo,
+      corpoMensagem: corpo,
+      codigoResgate: dados.codigoReserva,
+    });
+  }
+
+  // Notificação de Visitante / Prestador de Serviço
+  public async notificarVisitanteAutomatica(dados: {
+    condominio: Condominio;
+    morador: Morador;
+    visitanteNome: string;
+    tipoVisitante: 'visitante' | 'delivery' | 'prestador' | 'corretor';
+    empresa?: string;
+    documento?: string;
+  }): Promise<AutomatedDispatchResult> {
+    const tipoMap = {
+      visitante: '👤 Visitante',
+      delivery: '🛵 Entregador / Delivery',
+      prestador: '🛠️ Prestador de Serviços / Manutenção',
+      corretor: '🏢 Corretor / Visita Imobiliária',
+    };
+
+    const label = tipoMap[dados.tipoVisitante] || '👤 Visitante';
+    const corpo = `🚪 *CHEGADA NA PORTARIA - AUTORIZAÇÃO*
+
+Olá, *${dados.morador.nome}*!
+Identificamos a chegada na portaria principal:
+
+📌 *Tipo:* ${label}
+👤 *Nome:* ${dados.visitanteNome}
+${dados.empresa ? `🏢 *Empresa / App:* ${dados.empresa}\n` : ''}${dados.documento ? `🪪 *Doc Identificado:* ${dados.documento}\n` : ''}
+A portaria aguarda sua autorização para liberação de acesso. Se necessário, responda a esta mensagem ou atenda ao interfone.`;
+
+    return this.dispararNotificacaoAutomatica({
+      condominioId: dados.condominio.id,
+      condominioNome: dados.condominio.nome,
+      morador: dados.morador,
+      tipo: 'visitante_liberado',
+      titulo: `${label}: ${dados.visitanteNome}`,
+      corpoMensagem: corpo,
+    });
+  }
+
+  // Notificação de Alerta da Portaria (Veículo, Interfone, Emergência)
+  public async notificarAlertaPortariaAutomatica(dados: {
+    condominio: Condominio;
+    morador: Morador;
+    assunto: string;
+    detalhes: string;
+    categoria: 'veiculo' | 'interfone' | 'barulho' | 'urgencia' | 'geral';
+  }): Promise<AutomatedDispatchResult> {
+    const catMap = {
+      veiculo: '🚗 *AVISO DE VEÍCULO / GARAGEM*',
+      interfone: '🔔 *INTERFONE SEM RESPOSTA*',
+      barulho: '🔊 *AVISO DE CONVIVÊNCIA / BARULHO*',
+      urgencia: '🚨 *COMUNICADO URGENTE DA PORTARIA*',
+      geral: '📢 *AVISO DA ADMINISTRAÇÃO*',
+    };
+
+    const header = catMap[dados.categoria] || '📢 *AVISO DA PORTARIA*';
+    const corpo = `${header}
+
+Olá, *${dados.morador.nome}*!
+Assunto: *${dados.assunto}*
+
+${dados.detalhes}
+
+Caso necessite de suporte ou queira esclarecer, responda a esta mensagem para falar com a equipe de plantão.`;
+
+    return this.dispararNotificacaoAutomatica({
+      condominioId: dados.condominio.id,
+      condominioNome: dados.condominio.nome,
+      morador: dados.morador,
+      tipo: 'aviso_urgente',
+      titulo: dados.assunto,
+      corpoMensagem: corpo,
+    });
+  }
+
   // Notificar morador individual (com suporte a fallback ou chamada direta)
   public notificarMorador(dados: {
     condominioId: string;

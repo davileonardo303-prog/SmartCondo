@@ -12,6 +12,82 @@ export interface EmailNotificationLog {
   tipo: 'encomenda_chegada' | 'encomenda_prazo_critico' | 'encomenda_encaminhada_admin' | 'geral';
 }
 
+/**
+ * Toca um som harmônico de notificação agradável (campainha suave / chime)
+ * utilizando a Web Audio API nativa sem depender de arquivos externos.
+ */
+export function playNotificationSound(tipo: 'encomenda' | 'aviso' | 'sucesso' | 'mensagem' | 'sucesso_acao' = 'encomenda') {
+  if (typeof window === 'undefined') return;
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
+    const now = ctx.currentTime;
+    const gainNode = ctx.createGain();
+    gainNode.connect(ctx.destination);
+
+    if (tipo === 'encomenda') {
+      // Duplo tom harmônico estilo campainha moderna (D5 -> A5)
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(587.33, now); // D5
+      osc1.frequency.exponentialRampToValueAtTime(880, now + 0.18); // A5
+
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(440, now); // A4
+      osc2.frequency.exponentialRampToValueAtTime(659.25, now + 0.18); // E5
+
+      gainNode.gain.setValueAtTime(0, now);
+      gainNode.gain.linearRampToValueAtTime(0.35, now + 0.04);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
+
+      osc1.connect(gainNode);
+      osc2.connect(gainNode);
+
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + 0.9);
+      osc2.stop(now + 0.9);
+    } else if (tipo === 'mensagem') {
+      // Ping suave de mensagem (E5 -> E6)
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(659.25, now);
+      osc.frequency.exponentialRampToValueAtTime(1318.5, now + 0.12);
+
+      gainNode.gain.setValueAtTime(0.3, now);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+      osc.connect(gainNode);
+      osc.start(now);
+      osc.stop(now + 0.25);
+    } else {
+      // Tom suave de confirmação
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(523.25, now); // C5
+      osc.frequency.exponentialRampToValueAtTime(783.99, now + 0.15); // G5
+
+      gainNode.gain.setValueAtTime(0, now);
+      gainNode.gain.linearRampToValueAtTime(0.25, now + 0.03);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+
+      osc.connect(gainNode);
+      osc.start(now);
+      osc.stop(now + 0.6);
+    }
+  } catch (err) {
+    // AudioContext pode ser bloqueado antes da primeira interação do usuário
+  }
+}
+
 class NotificationService {
   private pushPermission: NotificationPermission = 'default';
   private emailLogs: EmailNotificationLog[] = [];
@@ -42,10 +118,10 @@ class NotificationService {
     }
   }
 
-  // 1. PUSH NOTIFICATIONS (BARRA DE NOTIFICAÇÃO DO CELULAR / COMPUTADOR E FCM)
+  // 1. PUSH NOTIFICATIONS (BARRA DO CELULAR, TELA DE BLOQUEIO E FCM)
   public async solicitarPermissaoPush(userId?: string): Promise<boolean> {
     if (typeof window === 'undefined' || !('Notification' in window)) {
-      console.warn('Push notifications não são suportadas neste navegador.');
+      console.warn('Push notifications não são suportadas neste dispositivo/navegador.');
       return false;
     }
 
@@ -54,6 +130,15 @@ class NotificationService {
       this.pushPermission = permission;
 
       if (permission === 'granted') {
+        // Tenta registrar o ServiceWorker se disponível
+        if ('serviceWorker' in navigator) {
+          try {
+            await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+          } catch (swErr) {
+            console.warn('Service Worker register note:', swErr);
+          }
+        }
+
         // Tenta registrar o FCM Push Token em background
         try {
           const { requestFCMToken, saveFCMTokenToFirestore } = await import('./firebase');
@@ -62,7 +147,7 @@ class NotificationService {
             await saveFCMTokenToFirestore(userId, token);
           }
         } catch (fcmErr) {
-          console.warn('FCM registration in background info:', fcmErr);
+          console.warn('FCM registration background note:', fcmErr);
         }
         return true;
       }
@@ -80,45 +165,77 @@ class NotificationService {
     return 'denied';
   }
 
+  /**
+   * Dispara notificação nativa na barra de status do celular e na tela de bloqueio
+   */
   public dispararNotificacaoNativa(
     titulo: string,
     opcoes: {
       body: string;
       icon?: string;
+      badge?: string;
       tag?: string;
       data?: any;
+      requireInteraction?: boolean;
+      vibrate?: number[];
+      actions?: Array<{ action: string; title: string }>;
     }
   ): boolean {
+    // Toca o som do dispositivo
+    playNotificationSound('encomenda');
+
     if (typeof window === 'undefined' || !('Notification' in window)) {
       return false;
     }
 
     if (Notification.permission === 'granted') {
       try {
-        // Se ServiceWorker estiver ativo, prefere o showNotification do ServiceWorker
-        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-          navigator.serviceWorker.ready.then((registration) => {
-            registration.showNotification(titulo, {
-              body: opcoes.body,
-              icon: opcoes.icon || '/icon-192.svg',
-              badge: '/icon-192.svg',
-              tag: opcoes.tag || `condo-notif-${Date.now()}`,
-              vibrate: [200, 100, 200],
-              ...opcoes,
-            } as any);
-          });
+        const notifOptions: any = {
+          body: opcoes.body,
+          icon: opcoes.icon || '/icon-192.svg',
+          badge: opcoes.badge || '/icon-192.svg',
+          tag: opcoes.tag || `smartcondo-notif-${Date.now()}`,
+          vibrate: opcoes.vibrate || [300, 100, 300, 100, 300],
+          requireInteraction: opcoes.requireInteraction ?? true,
+          data: opcoes.data || { url: '/' },
+          ...opcoes,
+        };
+
+        // 1. Tenta disparar via Service Worker (ideal para segundo plano e tela bloqueada)
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready
+            .then((registration) => {
+              if (registration && registration.showNotification) {
+                registration.showNotification(titulo, notifOptions);
+              }
+            })
+            .catch(() => {
+              // Fallback para new Notification direto
+              try {
+                const notif = new Notification(titulo, notifOptions);
+                notif.onclick = () => {
+                  window.focus();
+                  notif.close();
+                };
+              } catch (e) {
+                // ignore
+              }
+            });
+
+          // Envia também mensagem para o ServiceWorker ativo
+          if (navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({
+              type: 'SHOW_NOTIFICATION',
+              title: titulo,
+              options: notifOptions,
+            });
+          }
+
           return true;
         }
 
-        const notif = new Notification(titulo, {
-          body: opcoes.body,
-          icon: opcoes.icon || '/icon-192.svg',
-          badge: '/icon-192.svg',
-          tag: opcoes.tag || `condo-notif-${Date.now()}`,
-          vibrate: [200, 100, 200],
-          ...opcoes,
-        } as any);
-
+        // 2. Fallback direto se não houver serviceWorker
+        const notif = new Notification(titulo, notifOptions);
         notif.onclick = () => {
           window.focus();
           notif.close();
@@ -131,6 +248,37 @@ class NotificationService {
     return false;
   }
 
+  /**
+   * Agenda um disparo com contagem regressiva para permitir que o usuário
+   * bloqueie a tela do celular e veja a notificação chegar na barra e na tela de bloqueio.
+   */
+  public agendarNotificacaoParaTelaBloqueada(
+    segundos: number = 5,
+    dados: {
+      titulo?: string;
+      transportadora?: string;
+      codigoResgate?: string;
+      unidade?: string;
+    } = {}
+  ): Promise<void> {
+    return new Promise((resolve) => {
+      const titulo = dados.titulo || '📦 Encomenda Chegou na Portaria!';
+      const transportadora = dados.transportadora || 'Mercado Livre';
+      const codigoResgate = dados.codigoResgate || '482910';
+      const unidade = dados.unidade ? ` (${dados.unidade})` : '';
+
+      setTimeout(() => {
+        this.dispararNotificacaoNativa(titulo, {
+          body: `Seu pacote da ${transportadora}${unidade} está pronto para retirada. Código PIN: ${codigoResgate}.`,
+          tag: `encomenda-teste-${Date.now()}`,
+          requireInteraction: true,
+          vibrate: [400, 150, 400, 150, 400],
+          data: { url: '/', tab: 'encomendas', codigoResgate },
+        });
+        resolve();
+      }, segundos * 1000);
+    });
+  }
 
   // 2. DISPARO INTEGRADO PARA CHEGADA DE ENCOMENDA
   public notificarChegadaEncomenda(dados: {
@@ -142,21 +290,44 @@ class NotificationService {
     const { condominio, morador, encomenda, diasLimite } = dados;
     const prazoTexto = diasLimite > 0 ? `${diasLimite} dias corridos` : '5 dias';
 
-    // A. Notificação Nativa no Celular / Computador (Push na barra de status)
-    this.dispararNotificacaoNativa(`📦 Encomenda Chegou! - ${condominio.nome}`, {
+    // A. Notificação Nativa na Barra de Notificação do Celular & Tela de Bloqueio
+    this.dispararNotificacaoNativa(`📦 Encomenda Chegou! — ${condominio.nome}`, {
       body: `Olá ${morador.nome}! Seu pacote da ${encomenda.transportadora} chegou na portaria. Código de Resgate: ${encomenda.codigoResgate}. Retire em até ${prazoTexto}.`,
       tag: `encomenda-${encomenda.id}`,
+      requireInteraction: true,
+      vibrate: [300, 100, 300, 100, 300],
+      data: {
+        url: '/',
+        tab: 'encomendas',
+        encomendaId: encomenda.id,
+        codigoResgate: encomenda.codigoResgate,
+      },
     });
 
-    // B. Notificação 100% Automática por WhatsApp (Gateway Background sem redirecionar)
-    whatsappService.notificarChegadaEncomendaAutomatica({
-      condominio,
-      morador,
-      encomenda,
-      diasLimite,
-    }).catch((err) => console.warn('Erro no envio automático de WhatsApp:', err));
+    // B. Emite evento CustomEvent para a tela do celular (In-App Alert Pop-up)
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('smartcondo:nova_encomenda', {
+          detail: {
+            encomenda,
+            morador,
+            condominio,
+          },
+        })
+      );
+    }
 
-    // C. Notificação por E-mail
+    // C. Notificação Automática por WhatsApp
+    whatsappService
+      .notificarChegadaEncomendaAutomatica({
+        condominio,
+        morador,
+        encomenda,
+        diasLimite,
+      })
+      .catch((err) => console.warn('Erro no envio automático de WhatsApp:', err));
+
+    // D. Notificação por E-mail
     const emailLog: EmailNotificationLog = {
       id: `email_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       destinatarioEmail: morador.email,
@@ -180,7 +351,7 @@ class NotificationService {
 
           <div style="background: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px; margin-bottom: 20px;">
             <p style="margin: 0; font-size: 13px; color: #92400e;">
-              <strong>Regra de Retirada do Condomínio:</strong> Conforme o regulamento interno, você tem até <strong>${prazoTexto}</strong> para retirar esta encomenda na portaria. Após este prazo, o pacote é transferido para a Administração Geral.
+              <strong>Regra de Retirada do Condomínio:</strong> Conforme o regulamento interno, você tem até <strong>${prazoTexto}</strong> para retirar esta encomenda na portaria.
             </p>
           </div>
 

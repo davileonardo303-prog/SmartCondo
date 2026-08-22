@@ -59,6 +59,9 @@ import {
   Radio,
   Mic,
   PhoneCall,
+  Menu,
+  Bell,
+  Smartphone,
 } from 'lucide-react';
 import {
   Condominio,
@@ -80,6 +83,8 @@ import {
   DocumentoCondominio,
 } from '../../types';
 import { condoStore } from '../../services/mockStorage';
+import { notificationService, playNotificationSound } from '../../services/notificationService';
+import { audioAlertService } from '../../utils/audioAlerts';
 import { QrScannerModal } from '../common/QrScannerModal';
 import { BikeLockModal } from '../common/BikeLockModal';
 import { BikeReturnModal } from '../common/BikeReturnModal';
@@ -88,7 +93,11 @@ import { ItensCompartilhadosView } from '../compartilhados/ItensCompartilhadosVi
 import { SmartPassModal } from '../common/SmartPassModal';
 import { SmartOcorrenciaModal } from '../common/SmartOcorrenciaModal';
 import { SmartMuralView } from '../common/SmartMuralView';
+import { ScrollableTabsNav } from '../common/ScrollableTabsNav';
 import { IntercomPTTView } from '../interfone/IntercomPTTView';
+import { CentralTelefonicaView } from '../interfone/CentralTelefonicaView';
+import { MercadinhoComidaView } from './MercadinhoComidaView';
+import { Wrench, ShoppingBag } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface MoradorDashboardProps {
@@ -100,8 +109,6 @@ interface MoradorDashboardProps {
   reservas: Reserva[];
   avisos: Aviso[];
   historicoLocacoes: HistoricoLocacao[];
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
 }
 
 export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
@@ -113,11 +120,29 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
   reservas,
   avisos,
   historicoLocacoes,
-  activeTab,
-  setActiveTab,
 }) => {
+  // Módulos ativos contratados para este condomínio
+  const modulosAtivos = condoStore.getModulosCondominio(condominio.id);
+
+  // Navigation Tabs (Todos os módulos do SmartCondo)
+  const [activeTab, setActiveTab] = useState<
+    | 'inicio'
+    | 'bicicletario'
+    | 'comida_mercado'
+    | 'equipamentos'
+    | 'lazer'
+    | 'seguranca'
+    | 'interfone'
+    | 'encomendas'
+    | 'ocorrencias'
+    | 'financeiro'
+    | 'mural'
+    | 'documentos'
+    | 'unidade'
+  >('inicio');
 
   // Modais do Bicicletário
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [isLockModalOpen, setIsLockModalOpen] = useState(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
@@ -125,6 +150,16 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
   const [selectedBikeForManualModal, setSelectedBikeForManualModal] = useState<Bicicleta | null>(null);
   const [currentLockPassword, setCurrentLockPassword] = useState('');
   const [bikeForReturn, setBikeForReturn] = useState<Bicicleta | null>(null);
+
+  // Sincroniza e protege a rota caso o síndico/superadmin desative o módulo correspondente
+  useEffect(() => {
+    if (activeTab !== 'inicio') {
+      const isAllowed = modulosAtivos[activeTab as keyof typeof modulosAtivos];
+      if (isAllowed === false) {
+        setActiveTab('inicio');
+      }
+    }
+  }, [activeTab, modulosAtivos]);
 
   // Mensagens e Alertas
   const [alertMessage, setAlertMessage] = useState<{ type: 'error' | 'success' | 'warning'; text: string } | null>(null);
@@ -178,8 +213,117 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
   // Copiado feedback
   const [copiadoKey, setCopiadoKey] = useState<string | null>(null);
 
+  // Status de Push Notifications e Teste de Tela Bloqueada
+  const [pushStatus, setPushStatus] = useState<NotificationPermission>(() =>
+    notificationService.getPushPermissionStatus()
+  );
+  const [lockScreenCountdown, setLockScreenCountdown] = useState<number | null>(null);
+
   // Modal de Foto da Encomenda / Selo em Alta Resolução
   const [modalFotoEncomenda, setModalFotoEncomenda] = useState<{ url: string; titulo: string; rastreio?: string } | null>(null);
+
+  const handleAtivarPushMorador = async () => {
+    const ok = await notificationService.solicitarPermissaoPush(morador.id);
+    if (ok) {
+      setPushStatus('granted');
+      playNotificationSound('sucesso');
+      setAlertMessage({
+        type: 'success',
+        text: 'Notificações ativadas! Você receberá alertas na tela e na barra do celular quando chegar encomenda.',
+      });
+      notificationService.dispararNotificacaoNativa(`✅ Notificações Ativadas — ${condominio.nome}`, {
+        body: 'Você agora receberá avisos em tempo real e na tela de bloqueio quando uma encomenda chegar!',
+        tag: 'smartcondo-push-ok',
+      });
+    } else {
+      setPushStatus('denied');
+      setAlertMessage({
+        type: 'warning',
+        text: 'Permissão de notificação negada ou não suportada no navegador.',
+      });
+    }
+  };
+
+  const handleTestarPushAgora = () => {
+    if (pushStatus !== 'granted') {
+      handleAtivarPushMorador();
+      return;
+    }
+    playNotificationSound('encomenda');
+    notificationService.dispararNotificacaoNativa(
+      `🔔 Teste de Notificação — ${condominio.nome}`,
+      {
+        body: `Seu celular está recebendo alertas sonoros e notificações na barra e tela de bloqueio perfeitamente!`,
+        tag: `teste-push-agora-${Date.now()}`,
+      }
+    );
+    setAlertMessage({
+      type: 'success',
+      text: 'Alerta sonoro e notificação disparados com sucesso para o seu celular!',
+    });
+  };
+
+  const handleTestarTelaBloqueada = () => {
+    if (pushStatus !== 'granted') {
+      handleAtivarPushMorador();
+      return;
+    }
+    setLockScreenCountdown(5);
+    let rem = 5;
+    const it = setInterval(() => {
+      rem -= 1;
+      setLockScreenCountdown(rem);
+      if (rem <= 0) {
+        clearInterval(it);
+        setLockScreenCountdown(null);
+        notificationService.agendarNotificacaoParaTelaBloqueada(0, {
+          titulo: `📦 Encomenda Chegou! — ${condominio.nome}`,
+          transportadora: 'Mercado Livre Full',
+          codigoResgate: '948210',
+          unidade: `Bloco ${morador.unidade.bloco} - Apto ${morador.unidade.apto}`,
+        });
+      }
+    }, 1000);
+  };
+
+  const handleSimularChegadaEncomenda = () => {
+    const transportadoras = ['Mercado Livre', 'Amazon Prime', 'Shopee Express', 'Correios Sedex', 'Shein'];
+    const trans = transportadoras[Math.floor(Math.random() * transportadoras.length)];
+    const pin = Math.floor(100000 + Math.random() * 900000).toString();
+
+    const newEnc = condoStore.addEncomenda(condominio.id, {
+      moradorId: morador.id,
+      transportadora: trans,
+      codigoRastreio: `BR${Math.floor(100000000 + Math.random() * 900000000)}`,
+      observacao: 'Pacote pequeno deixado na portaria principal.',
+      recebidoPor: 'Portaria 24h',
+      codigoResgateCustomizado: pin,
+      diasLimiteCustomizado: 5,
+    });
+
+    playNotificationSound('encomenda');
+    setAlertMessage({
+      type: 'success',
+      text: `Nova encomenda da ${trans} registrada! Código PIN: ${newEnc.codigoResgate}. Notificação enviada para a tela e barra do celular.`,
+    });
+  };
+
+  const handleSimularRetiradaEncomenda = (encIdOrPin: string) => {
+    const res = condoStore.darBaixaEncomenda(condominio.id, encIdOrPin, 'Portaria Plantão');
+    if (res.success) {
+      playNotificationSound('sucesso');
+      setAlertMessage({
+        type: 'success',
+        text: `✅ ${res.message} Alerta de retirada enviado para o celular e WhatsApp!`,
+      });
+      confetti({ particleCount: 60, spread: 70 });
+    } else {
+      setAlertMessage({
+        type: 'error',
+        text: res.message,
+      });
+    }
+  };
 
   // Dados reativos carregados do store
   const visitantes = condoStore.getVisitantes(condominio.id, morador.id);
@@ -506,8 +650,13 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
   const inUseBikesCount = (bikes || []).filter((b) => b && b.status === 'em_uso').length;
   const avisoDestaque = (avisos || []).find((a) => a && a.prioritario) || (avisos || [])[0];
 
+  // Configuração de Módulos e Permissões Ativas para este Condomínio
+  const totalModulosAtivos = Object.values(modulosAtivos).filter(Boolean).length;
+  const isApenasBike = modulosAtivos.bicicletario && totalModulosAtivos === 1;
+  const isBikeAndFood = modulosAtivos.bicicletario && modulosAtivos.comida_mercado && totalModulosAtivos === 2;
+
   return (
-    <div className="space-y-6">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5 sm:space-y-6 w-full max-w-full overflow-x-hidden">
       {/* Alerta de Feedback Superior */}
       {alertMessage && (
         <div
@@ -652,91 +801,1026 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
       )}
 
       {/* ==================================================================== */}
-      {/* CABEÇALHO DO MORADOR COM DADOS DA UNIDADE                            */}
+      {/* BARRA LATERAL MOBILE (DRAWER LATERAL DESLIZANTE ACIONADO PELOS 3 TRAÇOS) */}
       {/* ==================================================================== */}
-      <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-100 border border-emerald-200 text-emerald-800 flex items-center justify-center font-black text-xl shadow-sm">
-            {morador.nome.substring(0, 2).toUpperCase()}
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                Morador Ativo
-              </span>
-              <span className="text-xs text-slate-500 font-medium">{condominio.nome}</span>
+      {isMobileSidebarOpen && (
+        <div className="fixed inset-0 z-50 flex lg:hidden">
+          {/* Fundo escuro com backdrop blur que fecha ao clicar */}
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity duration-300"
+            onClick={() => setIsMobileSidebarOpen(false)}
+            aria-hidden="true"
+          />
+
+          {/* Painel lateral deslizante (Barra Lateral Completa) */}
+          <div className="relative w-80 max-w-[85vw] h-full bg-white text-slate-800 shadow-2xl flex flex-col justify-between p-4 z-10 overflow-y-auto animate-in slide-in-from-left duration-200">
+            <div className="space-y-4">
+              {/* Topo da Barra Lateral com Identificação e Botão Fechar */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-black text-sm">
+                    {morador.nome.substring(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm text-slate-900 leading-tight">Barra Lateral</h3>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Bloco {morador.unidade.bloco} • Apto {morador.unidade.apto}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileSidebarOpen(false)}
+                  className="p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
+                  title="Fechar barra lateral"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Lista Vertical Completa de Opções da Barra Lateral */}
+              <nav className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('inicio');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                    activeTab === 'inicio'
+                      ? 'bg-emerald-800 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Home className="w-4 h-4" />
+                    <span>Início</span>
+                  </div>
+                </button>
+
+                {modulosAtivos.bicicletario && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('bicicletario');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'bicicletario'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Bike className="w-4 h-4" />
+                      <span>Bicicletas (5 min)</span>
+                    </div>
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                        activeTab === 'bicicletario'
+                          ? 'bg-emerald-950 text-emerald-100'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}
+                    >
+                      {availableBikesCount} livres
+                    </span>
+                  </button>
+                )}
+
+                {modulosAtivos.comida_mercado && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('comida_mercado');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'comida_mercado'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <ShoppingBag className="w-4 h-4 text-emerald-600" />
+                      <span>Mercadinho & Comida</span>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-emerald-100 text-emerald-800">
+                      Loja
+                    </span>
+                  </button>
+                )}
+
+                {modulosAtivos.equipamentos && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('equipamentos');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'equipamentos'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Wrench className="w-4 h-4" />
+                      <span>Itens & Equipamentos</span>
+                    </div>
+                  </button>
+                )}
+
+                {modulosAtivos.lazer && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('lazer');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'lazer'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Calendar className="w-4 h-4" />
+                      <span>Reservas & Lazer</span>
+                    </div>
+                  </button>
+                )}
+
+                {modulosAtivos.seguranca && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('seguranca');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'seguranca'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Users className="w-4 h-4" />
+                      <span>Visitantes & Convidados</span>
+                    </div>
+                  </button>
+                )}
+
+                {modulosAtivos.interfone && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('interfone');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'interfone'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'border border-emerald-300 text-emerald-800 bg-emerald-50/60 hover:bg-emerald-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <PhoneCall className="w-4 h-4 text-emerald-700" />
+                      <span>Interfone & Telefonia</span>
+                    </div>
+                  </button>
+                )}
+
+                {modulosAtivos.encomendas && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('encomendas');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'encomendas'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Package className="w-4 h-4" />
+                      <span>Encomendas</span>
+                    </div>
+                    {pendingPackages.length > 0 && (
+                      <span className="text-[10px] bg-amber-500 text-white px-2 py-0.5 rounded-full font-black">
+                        {pendingPackages.length}
+                      </span>
+                    )}
+                  </button>
+                )}
+
+                {modulosAtivos.ocorrencias && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('ocorrencias');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'ocorrencias'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>Ocorrências</span>
+                    </div>
+                  </button>
+                )}
+
+                {modulosAtivos.financeiro && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('financeiro');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'financeiro'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <DollarSign className="w-4 h-4" />
+                      <span>Financeiro</span>
+                    </div>
+                  </button>
+                )}
+
+                {modulosAtivos.mural && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('mural');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'mural'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <MessageSquare className="w-4 h-4" />
+                      <span>Comunidade</span>
+                    </div>
+                  </button>
+                )}
+
+                {modulosAtivos.documentos && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('documentos');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'documentos'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <FileText className="w-4 h-4" />
+                      <span>Documentos</span>
+                    </div>
+                  </button>
+                )}
+              </nav>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              Olá, {morador.nome}
-            </h1>
-            <p className="text-sm text-slate-600 mt-0.5">
-              Unidade: <strong className="text-slate-900">Bloco {morador.unidade.bloco}</strong> • Apartamento{' '}
-              <strong className="text-slate-900">{morador.unidade.apto}</strong>
-            </p>
+
+            {/* Rodapé da barra lateral */}
+            <div className="pt-4 border-t border-slate-100 text-center">
+              <p className="text-[11px] text-slate-400 font-medium">{condominio.nome}</p>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Botão de Interfone PTT e Contato com Portaria */}
-        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-          <button
-            id="btn-header-ligar-portaria-ao-vivo"
-            type="button"
-            onClick={() => {
-              condoStore.iniciarChamada({
-                condominioId: condominio.id,
-                callerId: morador.id,
-                callerName: morador.nome,
-                callerRole: 'morador',
-                callerUnidade: morador.unidade,
-                receiverId: 'portaria',
-                receiverName: 'Portaria Central 24h',
-                receiverRole: 'portaria',
-                tipo: 'audio',
-              });
-            }}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md shadow-emerald-600/30 transition active:scale-98 cursor-pointer"
-          >
-            <PhoneCall className="w-4 h-4 text-emerald-200 animate-pulse" />
-            <span>📞 Ligar Portaria (Ao Vivo)</span>
-          </button>
-
-          <button
-            id="btn-header-interfone-morador"
-            type="button"
-            onClick={() => setActiveTab('interfone')}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md shadow-amber-500/20 transition active:scale-98 cursor-pointer"
-          >
-            <Radio className="w-4 h-4 text-slate-950 animate-pulse" />
-            <span>📻 Interfone & PTT</span>
-          </button>
-
-          <a
-            href={`https://api.whatsapp.com/send?phone=5521999999999&text=Ol%C3%A1%20Portaria,%20aqui%20%C3%A9%20o%20morador%20${encodeURIComponent(
-              morador.nome
-            )}%20do%20Bloco%20${morador.unidade.bloco}%20Apto%20${morador.unidade.apto}.`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs transition"
-          >
-            <Phone className="w-3.5 h-3.5 text-emerald-600" />
-            <span>WhatsApp Portaria</span>
-          </a>
-
-          {!activeBikeInUse && !bikeReservadaMorador && (
+      {/* ==================================================================== */}
+      {/* NAVEGAÇÃO MOBILE: BOTÃO 3 TRAÇOS + CARROSSEL HORIZONTAL              */}
+      {/* ==================================================================== */}
+      <div className="block lg:hidden bg-white p-2.5 rounded-2xl border border-slate-200 shadow-xs">
+        <ScrollableTabsNav>
+          <div className="flex items-center gap-1.5 min-w-max py-0.5">
+            {/* Botão dos 3 Traços para abrir a barra lateral a qualquer momento */}
             <button
-              onClick={() => setIsQrModalOpen(true)}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md transition active:scale-98"
+              type="button"
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold bg-emerald-800 text-white shadow-xs hover:bg-emerald-900 transition active:scale-95 cursor-pointer whitespace-nowrap"
+              title="Abrir Barra Lateral (Menu Completo)"
             >
-              <QrCode className="w-4 h-4" />
-              <span>Escanear Totem</span>
+              <Menu className="w-4 h-4" />
+              <span>Menu</span>
             </button>
-          )}
-        </div>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('inicio')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                activeTab === 'inicio'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+              }`}
+            >
+              <Home className="w-3.5 h-3.5" />
+              <span>Início</span>
+            </button>
+
+            {modulosAtivos.bicicletario && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('bicicletario')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'bicicletario'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <Bike className="w-3.5 h-3.5" />
+                <span>Bicicletas</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${activeTab === 'bicicletario' ? 'bg-emerald-900 text-emerald-100' : 'bg-emerald-100 text-emerald-800'}`}>
+                  {availableBikesCount}
+                </span>
+              </button>
+            )}
+
+            {modulosAtivos.comida_mercado && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('comida_mercado')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'comida_mercado'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <ShoppingBag className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Mercadinho</span>
+              </button>
+            )}
+
+            {modulosAtivos.interfone && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('interfone')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'interfone'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-emerald-800 bg-emerald-50 border border-emerald-200'
+                }`}
+              >
+                <PhoneCall className="w-3.5 h-3.5" />
+                <span>Interfone</span>
+              </button>
+            )}
+
+            {modulosAtivos.encomendas && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('encomendas')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'encomendas'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <Package className="w-3.5 h-3.5" />
+                <span>Encomendas</span>
+                {pendingPackages.length > 0 && (
+                  <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.2 rounded-full font-black">
+                    {pendingPackages.length}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {modulosAtivos.lazer && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('lazer')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'lazer'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Lazer</span>
+              </button>
+            )}
+
+            {modulosAtivos.equipamentos && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('equipamentos')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'equipamentos'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <Wrench className="w-3.5 h-3.5" />
+                <span>Itens</span>
+              </button>
+            )}
+
+            {modulosAtivos.seguranca && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('seguranca')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'seguranca'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Visitantes</span>
+              </button>
+            )}
+
+            {modulosAtivos.ocorrencias && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('ocorrencias')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'ocorrencias'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>Ocorrências</span>
+              </button>
+            )}
+
+            {modulosAtivos.financeiro && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('financeiro')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'financeiro'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <DollarSign className="w-3.5 h-3.5" />
+                <span>Financeiro</span>
+              </button>
+            )}
+
+            {modulosAtivos.mural && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('mural')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'mural'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>Comunidade</span>
+              </button>
+            )}
+
+            {modulosAtivos.documentos && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('documentos')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'documentos'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Documentos</span>
+              </button>
+            )}
+          </div>
+        </ScrollableTabsNav>
       </div>
 
       {/* ==================================================================== */}
-      {/* BARRA DE NAVEGAÇÃO ENTRE OS MÓDULOS (SCROLL HORIZONTAL RESPONSIVO)  */}
+      {/* GRID PRINCIPAL: SIDEBAR ESQUERDA (DESKTOP) + CONTEÚDO DIREITA        */}
       {/* ==================================================================== */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        {/* MENU LATERAL / SIDEBAR (SOMENTE DESKTOP LG+) */}
+        <aside className="hidden lg:block w-64 xl:w-72 shrink-0 bg-white p-3.5 sm:p-4 rounded-3xl border border-slate-200 shadow-xs space-y-1 lg:sticky lg:top-20">
+          <button
+            type="button"
+            onClick={() => setActiveTab('inicio')}
+            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+              activeTab === 'inicio'
+                ? 'bg-emerald-800 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Home className="w-4 h-4" />
+              <span>Início</span>
+            </div>
+          </button>
+
+          {modulosAtivos.bicicletario && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('bicicletario')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'bicicletario'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Bike className="w-4 h-4" />
+                <span>Bicicletas (5 min)</span>
+              </div>
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                  activeTab === 'bicicletario'
+                    ? 'bg-emerald-950 text-emerald-100'
+                    : 'bg-emerald-100 text-emerald-800'
+                }`}
+              >
+                {availableBikesCount} livres
+              </span>
+            </button>
+          )}
+
+          {modulosAtivos.comida_mercado && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('comida_mercado')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'comida_mercado'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <ShoppingBag className="w-4 h-4 text-emerald-600" />
+                <span>Mercadinho & Comida</span>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-emerald-100 text-emerald-800">
+                Loja
+              </span>
+            </button>
+          )}
+
+          {modulosAtivos.equipamentos && (
+            <button
+              type="button"
+              id="tab-morador-equipamentos"
+              onClick={() => setActiveTab('equipamentos')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'equipamentos'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Wrench className="w-4 h-4" />
+                <span>Itens & Equipamentos</span>
+              </div>
+            </button>
+          )}
+
+          {modulosAtivos.lazer && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('lazer')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'lazer'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Calendar className="w-4 h-4" />
+                <span>Reservas & Lazer</span>
+              </div>
+              {myReservations.length > 0 && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-emerald-100 text-emerald-800">
+                  {myReservations.length}
+                </span>
+              )}
+            </button>
+          )}
+
+          {modulosAtivos.seguranca && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('seguranca')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'seguranca'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Users className="w-4 h-4" />
+                <span>Visitantes & Convidados</span>
+              </div>
+            </button>
+          )}
+
+          {modulosAtivos.interfone && (
+            <button
+              type="button"
+              id="tab-morador-interfone"
+              onClick={() => setActiveTab('interfone')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'interfone'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'border border-emerald-300 text-emerald-800 bg-emerald-50/60 hover:bg-emerald-100'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <PhoneCall className="w-4 h-4 text-emerald-700" />
+                <span>Interfone & Telefonia</span>
+              </div>
+            </button>
+          )}
+
+          {modulosAtivos.encomendas && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('encomendas')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'encomendas'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Package className="w-4 h-4" />
+                <span>Encomendas</span>
+              </div>
+              {pendingPackages.length > 0 && (
+                <span className="text-[10px] bg-amber-500 text-white font-black px-2 py-0.5 rounded-full animate-bounce">
+                  {pendingPackages.length}
+                </span>
+              )}
+            </button>
+          )}
+
+          {modulosAtivos.ocorrencias && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('ocorrencias')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'ocorrencias'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-4 h-4" />
+                <span>Ocorrências</span>
+              </div>
+            </button>
+          )}
+
+          {modulosAtivos.financeiro && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('financeiro')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'financeiro'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <DollarSign className="w-4 h-4" />
+                <span>Financeiro</span>
+              </div>
+            </button>
+          )}
+
+          {modulosAtivos.mural && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('mural')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'mural'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <MessageSquare className="w-4 h-4" />
+                <span>Comunidade</span>
+              </div>
+            </button>
+          )}
+
+          {modulosAtivos.documentos && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('documentos')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'documentos'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <FileText className="w-4 h-4" />
+                <span>Documentos</span>
+              </div>
+            </button>
+          )}
+        </aside>
+
+        {/* COLUNA PRINCIPAL DE CONTEÚDO (DIREITA) */}
+        <div className="flex-1 w-full min-w-0 space-y-6">
+          {/* CABEÇALHO LIMPO E PROFISSIONAL DO MORADOR */}
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start justify-between w-full md:w-auto">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full">
+                    Morador Ativo
+                  </span>
+                  <span className="text-xs text-slate-500 font-medium">{condominio.nome}</span>
+                </div>
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-1">
+                  Olá, {morador.nome}
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
+                  Unidade: <strong className="text-slate-900 font-bold">Bloco {morador.unidade.bloco} • Apartamento {morador.unidade.apto}</strong>
+                </p>
+              </div>
+
+              {/* Botão 3 traços visível no mobile no cabeçalho */}
+              <button
+                type="button"
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="flex md:hidden items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-black transition active:scale-95 cursor-pointer"
+                title="Abrir Barra Lateral"
+              >
+                <Menu className="w-4 h-4 text-emerald-800" />
+                <span>Menu</span>
+              </button>
+            </div>
+
+            {/* Ações Rápidas Coesas e Elegantes */}
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              {/* BOTÃO LIGAR PORTARIA */}
+              <button
+                id="btn-header-ligar-portaria-ao-vivo"
+                type="button"
+                onClick={() => {
+                  condoStore.iniciarChamada({
+                    condominioId: condominio.id,
+                    callerId: morador.id,
+                    callerName: morador.nome,
+                    callerRole: 'morador',
+                    callerUnidade: morador.unidade,
+                    receiverId: 'portaria',
+                    receiverName: 'Portaria Central 24h',
+                    receiverRole: 'portaria',
+                    tipo: 'audio',
+                  });
+                }}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                title="Ligar para a Portaria 24h via Interfone"
+              >
+                <PhoneCall className="w-3.5 h-3.5" />
+                <span>Ligar Portaria</span>
+              </button>
+
+              {/* BOTÃO LIGAR SÍNDICO / ADMINISTRAÇÃO */}
+              <button
+                id="btn-header-ligar-sindico"
+                type="button"
+                onClick={() => {
+                  condoStore.iniciarChamada({
+                    condominioId: condominio.id,
+                    callerId: morador.id,
+                    callerName: morador.nome,
+                    callerRole: 'morador',
+                    callerUnidade: morador.unidade,
+                    receiverId: 'sindico',
+                    receiverName: condominio.sindicoNome ? `Síndico (${condominio.sindicoNome})` : 'Síndico / Administração',
+                    receiverRole: 'sindico',
+                    tipo: 'audio',
+                  });
+                }}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                title="Ligar diretamente para o Síndico / Administração"
+              >
+                <Shield className="w-3.5 h-3.5" />
+                <span>Ligar Síndico</span>
+              </button>
+
+              <button
+                id="btn-header-interfone-morador"
+                type="button"
+                onClick={() => setActiveTab('interfone')}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 font-bold text-xs transition active:scale-95 cursor-pointer"
+              >
+                <Radio className="w-3.5 h-3.5 text-emerald-700" />
+                <span>Interfone PTT</span>
+              </button>
+
+              <a
+                href={`https://api.whatsapp.com/send?phone=5521999999999&text=Ol%C3%A1%20Portaria,%20aqui%20%C3%A9%20o%20morador%20${encodeURIComponent(
+                  morador.nome
+                )}%20do%20Bloco%20${morador.unidade.bloco}%20Apto%20${morador.unidade.apto}.`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs transition cursor-pointer"
+              >
+                <Phone className="w-3.5 h-3.5 text-emerald-700" />
+                <span>WhatsApp</span>
+              </a>
+
+              {!activeBikeInUse && !bikeReservadaMorador && (
+                <button
+                  onClick={() => setIsQrModalOpen(true)}
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs transition active:scale-95 cursor-pointer"
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span>Totem</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* ==================================================================== */}
+          {/* DESTAQUES DINÂMICOS DE STATUS (ENCOMENDAS, BICICLETA, INTERFONE)     */}
+          {/* ==================================================================== */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 1. STATUS DE ENCOMENDAS */}
+            {modulosAtivos.encomendas && (
+              <div
+                onClick={() => setActiveTab('encomendas')}
+                className={`p-4 sm:p-5 rounded-3xl border transition cursor-pointer flex flex-col justify-between gap-3 ${
+                  pendingPackages.length > 0
+                    ? 'bg-amber-50/70 border-amber-300 hover:border-amber-400 shadow-xs'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${pendingPackages.length > 0 ? 'bg-amber-500 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
+                      <Package className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-900">
+                        {pendingPackages.length > 0 ? 'Encomendas na Portaria' : 'Encomendas & Entregas'}
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        {pendingPackages.length > 0
+                          ? `${pendingPackages.length} encomenda(s) aguardando retirada`
+                          : 'Nenhuma encomenda pendente no momento'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {pendingPackages.length > 0 ? (
+                    <span className="text-[11px] font-black bg-amber-500 text-white px-2 py-0.5 rounded-full animate-pulse">
+                      {pendingPackages.length} pendente{pendingPackages.length > 1 ? 's' : ''}
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                      Em dia
+                    </span>
+                  )}
+                </div>
+
+                {pendingPackages.length > 0 && (
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200 text-xs flex items-center justify-between">
+                    <span className="text-slate-700 font-medium">
+                      PIN da portaria: <strong className="font-mono text-amber-800">{pendingPackages[0]?.codigoResgate || '1234'}</strong>
+                    </span>
+                    <span className="text-amber-800 font-bold flex items-center gap-1">
+                      Ver detalhes <ChevronRight className="w-3 h-3" />
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 2. STATUS DE BICICLETA & CONTAGEM DE TEMPO (RESERVA OU USO) */}
+            {modulosAtivos.bicicletario && (
+              <div
+                onClick={() => setActiveTab('bicicletario')}
+                className={`p-4 sm:p-5 rounded-3xl border transition cursor-pointer flex flex-col justify-between gap-3 ${
+                  bikeReservadaMorador
+                    ? 'bg-amber-50/80 border-amber-400 shadow-xs'
+                    : activeBikeInUse
+                    ? 'bg-emerald-50/80 border-emerald-400 shadow-xs'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                      bikeReservadaMorador ? 'bg-amber-500 text-white' : activeBikeInUse ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      <Bike className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-900">
+                        {bikeReservadaMorador
+                          ? `Bike #${bikeReservadaMorador.codigo} Reservada`
+                          : activeBikeInUse
+                          ? `Bike #${activeBikeInUse.codigo} em Uso`
+                          : 'Bicicletas Compartilhadas'}
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        {bikeReservadaMorador
+                          ? 'Tolerância de 5 min para retirar no totem'
+                          : activeBikeInUse
+                          ? `Regra de uso: máx. ${condominio.regras.limiteTempoBikeMinutos} minutos`
+                          : `${availableBikesCount} bikes livres para retirada`}
+                      </p>
+                    </div>
+                  </div>
+
+                  {bikeReservadaMorador ? (
+                    <span className="text-xs font-black font-mono bg-amber-600 text-white px-2.5 py-0.5 rounded-full">
+                      {formatCountdown(segundosRestantes5Min)}
+                    </span>
+                  ) : activeBikeInUse ? (
+                    <span className="text-[11px] font-bold bg-emerald-700 text-white px-2 py-0.5 rounded-full">
+                      ~{elapsedMinutes} min de uso
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                      {availableBikesCount} livres
+                    </span>
+                  )}
+                </div>
+
+                {bikeReservadaMorador ? (
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200 text-xs flex items-center justify-between">
+                    <span className="text-slate-700">
+                      Cód: <strong className="font-mono text-amber-800">{bikeReservadaMorador.reservaCodigo || 'BK-5MIN'}</strong> • Senha: <strong>{bikeReservadaMorador.lockPassword}</strong>
+                    </span>
+                    <span className="text-amber-800 font-bold flex items-center gap-1">
+                      Destravar <ChevronRight className="w-3 h-3" />
+                    </span>
+                  </div>
+                ) : activeBikeInUse ? (
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-200 text-xs flex items-center justify-between">
+                    <span className="text-slate-700">
+                      Tempo restante: <strong className="text-emerald-800">~{Math.max(0, condominio.regras.limiteTempoBikeMinutos - elapsedMinutes)} min</strong>
+                    </span>
+                    <span className="text-emerald-800 font-bold flex items-center gap-1">
+                      Devolver <ChevronRight className="w-3 h-3" />
+                    </span>
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-emerald-800 font-bold flex items-center justify-between pt-0.5">
+                    <span>Tolerância de retirada rápida em 1 clique</span>
+                    <span className="flex items-center gap-1">Reservar <ChevronRight className="w-3 h-3" /></span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 3. STATUS DO MERCADINHO & COMIDA */}
+            {modulosAtivos.comida_mercado && (
+              <div
+                onClick={() => setActiveTab('comida_mercado')}
+                className="p-4 sm:p-5 rounded-3xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 hover:border-emerald-300 transition cursor-pointer flex flex-col justify-between gap-3 shadow-xs"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-700 text-white flex items-center justify-center">
+                      <ShoppingBag className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-900">Mercadinho & Comida 24h</h3>
+                      <p className="text-xs text-slate-500">Bebidas, snacks, gelo e refeições no condomínio</p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-bold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full">
+                    Aberto 24h
+                  </span>
+                </div>
+                <div className="text-[11px] text-emerald-800 font-bold flex items-center justify-between pt-0.5">
+                  <span>Compre e pague via PIX / Cartão</span>
+                  <span className="flex items-center gap-1">Acessar Loja <ChevronRight className="w-3 h-3" /></span>
+                </div>
+              </div>
+            )}
+          </div>
 
       {/* ==================================================================== */}
       {/* MÓDULO 1: TELA INICIAL (DASHBOARD EXECUTIVO DO MORADOR)              */}
@@ -744,45 +1828,47 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
       {activeTab === 'inicio' && (
         <div className="space-y-6">
           {/* Banner Interfone & Walkie-Talkie Digital */}
-          <div
-            onClick={() => setActiveTab('interfone')}
-            className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-xl border border-indigo-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 cursor-pointer hover:border-amber-400/60 transition group"
-          >
-            <div className="flex items-start sm:items-center gap-3.5">
-              <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-lg shadow-amber-500/20 shrink-0 group-hover:scale-105 transition">
-                <Radio className="w-6 h-6 animate-pulse text-slate-950" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-black uppercase tracking-wider bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 px-2 py-0.5 rounded-full">
-                    Interfonia Digital (PTT)
-                  </span>
-                  <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    Portaria 24h & Vizinhos Online
-                  </span>
-                </div>
-                <h3 className="text-base sm:text-lg font-black text-white mt-1">
-                  Interfone & Walkie-Talkie em Tempo Real
-                </h3>
-                <p className="text-xs text-indigo-200 mt-0.5">
-                  Fale com a Portaria ou interfone para outro morador/vizinho direto pelo aplicativo.
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveTab('interfone');
-              }}
-              className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 flex items-center gap-2 transition shrink-0 cursor-pointer self-stretch sm:self-auto justify-center"
+          {modulosAtivos.interfone && (
+            <div
+              onClick={() => setActiveTab('interfone')}
+              className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-xl border border-indigo-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 cursor-pointer hover:border-amber-400/60 transition group"
             >
-              <Mic className="w-4 h-4" />
-              <span>Abrir Interfone & Falar</span>
-            </button>
-          </div>
+              <div className="flex items-start sm:items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-lg shadow-amber-500/20 shrink-0 group-hover:scale-105 transition">
+                  <Radio className="w-6 h-6 animate-pulse text-slate-950" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 px-2 py-0.5 rounded-full">
+                      Interfonia Digital (PTT)
+                    </span>
+                    <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                      Portaria 24h & Vizinhos Online
+                    </span>
+                  </div>
+                  <h3 className="text-base sm:text-lg font-black text-white mt-1">
+                    Interfone & Walkie-Talkie em Tempo Real
+                  </h3>
+                  <p className="text-xs text-indigo-200 mt-0.5">
+                    Fale com a Portaria ou interfone para outro morador/vizinho direto pelo aplicativo.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveTab('interfone');
+                }}
+                className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 flex items-center gap-2 transition shrink-0 cursor-pointer self-stretch sm:self-auto justify-center"
+              >
+                <Mic className="w-4 h-4" />
+                <span>Abrir Interfone & Falar</span>
+              </button>
+            </div>
+          )}
 
           {/* Card de Aviso Destaque (Aviso mais importante do dia) */}
           {avisoDestaque && (
@@ -818,98 +1904,129 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
           {/* Cards Rápidos de Acesso em 1 Clique */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* 1. Bicicletas Compartilhadas (Novolar) */}
-            <div
-              onClick={() => setActiveTab('bicicletario')}
-              className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-emerald-500 hover:shadow-md transition cursor-pointer group"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:scale-110 transition">
-                  <Bike className="w-5 h-5" />
-                </div>
-                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                  {availableBikesCount} livres
-                </span>
-              </div>
-              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-emerald-700 transition">
-                Bicicletas (5 min)
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Reserve em 1 clique com tolerância de 5 min para retirada no totem.
-              </p>
-            </div>
-
-            {/* 2. Contador de Entregas */}
-            <div
-              onClick={() => setActiveTab('encomendas')}
-              className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-amber-500 hover:shadow-md transition cursor-pointer group"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center group-hover:scale-110 transition">
-                  <Package className="w-5 h-5" />
-                </div>
-                {pendingPackages.length > 0 ? (
-                  <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-500 text-white animate-pulse">
-                    {pendingPackages.length} na portaria
+            {modulosAtivos.bicicletario && (
+              <div
+                onClick={() => setActiveTab('bicicletario')}
+                className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-emerald-500 hover:shadow-md transition cursor-pointer group"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:scale-110 transition">
+                    <Bike className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                    {availableBikesCount} livres
                   </span>
-                ) : (
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                    Tudo entregue
+                </div>
+                <h3 className="text-base font-extrabold text-slate-900 group-hover:text-emerald-700 transition">
+                  Bicicletas (5 min)
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Reserve em 1 clique com tolerância de 5 min para retirada no totem.
+                </p>
+              </div>
+            )}
+
+            {/* 2. Mercadinho & Comida 24h */}
+            {modulosAtivos.comida_mercado && (
+              <div
+                onClick={() => setActiveTab('comida_mercado')}
+                className="bg-white p-5 rounded-3xl border border-emerald-200 shadow-sm hover:border-emerald-500 hover:shadow-md transition cursor-pointer group"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center group-hover:scale-110 transition">
+                    <ShoppingBag className="w-5 h-5 text-emerald-700" />
+                  </div>
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                    Aberto 24h
                   </span>
-                )}
-              </div>
-              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-amber-700 transition">
-                {pendingPackages.length > 0
-                  ? `Você tem ${pendingPackages.length} pacote${pendingPackages.length > 1 ? 's' : ''} esperando!`
-                  : 'Minhas Encomendas'}
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">
-                {pendingPackages.length > 0
-                  ? 'Veja o código PIN de 6 dígitos para retirada na portaria.'
-                  : 'Histórico de entregas e notificações em tempo real.'}
-              </p>
-            </div>
-
-            {/* 3. Reservas de Áreas Comuns */}
-            <div
-              onClick={() => setActiveTab('lazer')}
-              className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition cursor-pointer group"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center group-hover:scale-110 transition">
-                  <Calendar className="w-5 h-5" />
                 </div>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
-                  {areasLazer.length} espaços
-                </span>
+                <h3 className="text-base font-extrabold text-slate-900 group-hover:text-emerald-700 transition">
+                  Mercadinho & Comida
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Bebidas geladas, refeições e snacks com pagamento imediato PIX.
+                </p>
               </div>
-              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-blue-700 transition">
-                Áreas de Lazer
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Churrasqueira, Salão de Festas, Quadra e Piscina com confirmação imediata.
-              </p>
-            </div>
+            )}
 
-            {/* 4. Ocorrências e Problemas */}
-            <div
-              onClick={() => setActiveTab('ocorrencias')}
-              className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-rose-500 hover:shadow-md transition cursor-pointer group"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-700 flex items-center justify-center group-hover:scale-110 transition">
-                  <AlertCircle className="w-5 h-5" />
+            {/* 3. Contador de Entregas */}
+            {modulosAtivos.encomendas && (
+              <div
+                onClick={() => setActiveTab('encomendas')}
+                className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-amber-500 hover:shadow-md transition cursor-pointer group"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center group-hover:scale-110 transition">
+                    <Package className="w-5 h-5" />
+                  </div>
+                  {pendingPackages.length > 0 ? (
+                    <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-500 text-white animate-pulse">
+                      {pendingPackages.length} na portaria
+                    </span>
+                  ) : (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                      Tudo entregue
+                    </span>
+                  )}
                 </div>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">
-                  {ocorrencias.length} chamados
-                </span>
+                <h3 className="text-base font-extrabold text-slate-900 group-hover:text-amber-700 transition">
+                  {pendingPackages.length > 0
+                    ? `Você tem ${pendingPackages.length} pacote${pendingPackages.length > 1 ? 's' : ''} esperando!`
+                    : 'Minhas Encomendas'}
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  {pendingPackages.length > 0
+                    ? 'Veja o código PIN de 6 dígitos para retirada na portaria.'
+                    : 'Histórico de entregas e notificações em tempo real.'}
+                </p>
               </div>
-              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-rose-700 transition">
-                Ocorrências
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Registre reparos, barulho ou limpeza com fotos e acompanhe a resposta do síndico.
-              </p>
-            </div>
+            )}
+
+            {/* 4. Reservas de Áreas Comuns */}
+            {modulosAtivos.lazer && (
+              <div
+                onClick={() => setActiveTab('lazer')}
+                className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition cursor-pointer group"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center group-hover:scale-110 transition">
+                    <Calendar className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                    {areasLazer.length} espaços
+                  </span>
+                </div>
+                <h3 className="text-base font-extrabold text-slate-900 group-hover:text-blue-700 transition">
+                  Áreas de Lazer
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Churrasqueira, Salão de Festas, Quadra e Piscina com confirmação imediata.
+                </p>
+              </div>
+            )}
+
+            {/* 5. Ocorrências e Problemas */}
+            {modulosAtivos.ocorrencias && (
+              <div
+                onClick={() => setActiveTab('ocorrencias')}
+                className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-rose-500 hover:shadow-md transition cursor-pointer group"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-700 flex items-center justify-center group-hover:scale-110 transition">
+                    <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">
+                    {ocorrencias.length} chamados
+                  </span>
+                </div>
+                <h3 className="text-base font-extrabold text-slate-900 group-hover:text-rose-700 transition">
+                  Ocorrências
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Registre reparos, barulho ou limpeza com fotos e acompanhe a resposta do síndico.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Seção Secundária: Câmeras ao Vivo & Boleto Rápido */}
@@ -1001,13 +2118,109 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
                   <p className="text-xs text-slate-500">Nenhum visitante liberado hoje.</p>
                   <button
                     onClick={() => setIsNovoVisitanteModalOpen(true)}
-                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow"
+                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Liberar Visita / Prestador</span>
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* CARD EXCLUSIVO DE ADMINISTRAÇÃO & LIGAÇÃO DIRETA COM O SÍNDICO */}
+            <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 text-white p-6 rounded-3xl border border-indigo-500/30 shadow-xl space-y-4 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-indigo-400" />
+                    <h3 className="font-extrabold text-white">Síndico & Administração</h3>
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300 bg-emerald-500/20 border border-emerald-400/30 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    Linha Direta
+                  </span>
+                </div>
+
+                <div className="mt-3 flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-lg shadow-md shadow-indigo-600/30">
+                    <Shield className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-sm text-white">{condominio.sindicoNome || 'Síndico Geral'}</h4>
+                    <p className="text-[11px] text-indigo-200">Administração Geral • Ramal 9</p>
+                    <p className="text-[10px] text-emerald-400 font-medium">Horário de Brasília (UTC-3)</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-indigo-800/60">
+                <button
+                  type="button"
+                  id="btn-card-ligar-sindico-audio"
+                  onClick={() => {
+                    condoStore.iniciarChamada({
+                      condominioId: condominio.id,
+                      callerId: morador.id,
+                      callerName: morador.nome,
+                      callerRole: 'morador',
+                      callerUnidade: morador.unidade,
+                      receiverId: 'sindico',
+                      receiverName: condominio.sindicoNome ? `Síndico (${condominio.sindicoNome})` : 'Síndico / Administração',
+                      receiverRole: 'sindico',
+                      tipo: 'audio',
+                    });
+                  }}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer"
+                  title="Ligar por áudio para o Síndico"
+                >
+                  <PhoneCall className="w-4 h-4" />
+                  <span>Ligar Áudio</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="btn-card-ligar-sindico-video"
+                  onClick={() => {
+                    condoStore.iniciarChamada({
+                      condominioId: condominio.id,
+                      callerId: morador.id,
+                      callerName: morador.nome,
+                      callerRole: 'morador',
+                      callerUnidade: morador.unidade,
+                      receiverId: 'sindico',
+                      receiverName: condominio.sindicoNome ? `Síndico (${condominio.sindicoNome})` : 'Síndico / Administração',
+                      receiverRole: 'sindico',
+                      tipo: 'video',
+                    });
+                  }}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition active:scale-95 cursor-pointer"
+                  title="Chamada de Vídeo com o Síndico"
+                >
+                  <Video className="w-4 h-4" />
+                  <span>Ligar Vídeo</span>
+                </button>
+
+                <a
+                  href={`https://api.whatsapp.com/send?phone=5521999999999&text=Ol%C3%A1%20S%C3%ADndico,%20aqui%20%C3%A9%20o%20morador%20${encodeURIComponent(
+                    morador.nome
+                  )}%20do%20Bloco%20${morador.unidade.bloco}%20Apto%20${morador.unidade.apto}.`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 font-bold text-xs transition cursor-pointer"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>WhatsApp</span>
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('ocorrencias')}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs transition cursor-pointer"
+                >
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Ocorrência</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1532,14 +2745,20 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
       )}
 
       {/* ==================================================================== */}
-      {/* MÓDULO INTERFONE & WALKIE-TALKIE PTT COM A PORTARIA (ESTILO ZELLO)  */}
+      {/* MÓDULO INTERFONE & CENTRAL TELEFÔNICA DIGITAL                       */}
       {/* ==================================================================== */}
       {activeTab === 'interfone' && (
-        <IntercomPTTView
+        <CentralTelefonicaView
           condominio={condominio}
-          currentUserRole="morador"
+          currentUser={{
+            id: morador.id,
+            nome: morador.nome,
+            email: morador.email,
+            role: 'morador',
+            condominioId: condominio.id,
+            unidade: morador.unidade,
+          }}
           currentMorador={morador}
-          currentUserName={morador.nome}
         />
       )}
 
@@ -1548,18 +2767,18 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
       {/* ==================================================================== */}
       {activeTab === 'ocorrencias' && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h3 className="text-xl font-extrabold text-slate-900">Ocorrências & Chamados</h3>
-              <p className="text-xs text-slate-500">Abra chamados para a administração e acompanhe o status em tempo real.</p>
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight">Ocorrências & Chamados</h3>
+              <p className="text-xs text-slate-500 font-medium">Abra chamados para a administração e acompanhe o status em tempo real.</p>
             </div>
 
             <button
               onClick={() => setIsNovaOcorrenciaModalOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-md shadow-rose-600/20 flex items-center gap-2 transition"
+              className="px-5 py-3 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs shadow-lg shadow-rose-600/30 flex items-center gap-2 transition cursor-pointer self-start sm:self-auto active:scale-95"
             >
               <Plus className="w-4 h-4" />
-              <span>Abrir Nova Ocorrência</span>
+              <span>+ Abrir Nova Ocorrência</span>
             </button>
           </div>
 
@@ -1610,10 +2829,14 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
                 </div>
               ))
             ) : (
-              <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 text-slate-500 space-y-2">
-                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
-                <h4 className="text-base font-bold text-slate-800">Nenhum chamado aberto</h4>
-                <p className="text-xs">Tudo tranquilo! Caso encontre qualquer problema no condomínio, abra uma ocorrência.</p>
+              <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 shadow-sm space-y-3">
+                <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-8 h-8" />
+                </div>
+                <h4 className="text-lg font-black text-slate-900">Nenhum chamado aberto</h4>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  Tudo tranquilo! Caso encontre qualquer problema no condomínio, abra uma ocorrência.
+                </p>
               </div>
             )}
           </div>
@@ -1773,6 +2996,92 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
               <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
                 {pendingPackages.length} aguardando na portaria
               </span>
+            </div>
+          </div>
+
+          {/* Card de Configuração e Teste de Alertas na Tela e Barra do Celular */}
+          <div className="p-5 rounded-3xl bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 text-white shadow-xl border border-emerald-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-emerald-500 text-slate-950 flex items-center justify-center font-black shadow-lg shadow-emerald-500/20 shrink-0">
+                <Smartphone className="w-5 h-5 text-slate-950" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-full">
+                    Avisos no Celular & Tela Bloqueada
+                  </span>
+                  <span
+                    className={`text-xs font-bold flex items-center gap-1 ${
+                      pushStatus === 'granted' ? 'text-emerald-400' : 'text-amber-400'
+                    }`}
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        pushStatus === 'granted' ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'
+                      }`}
+                    />
+                    {pushStatus === 'granted' ? 'Notificações Ativas' : 'Permissão Pendente'}
+                  </span>
+                </div>
+                <h4 className="text-sm sm:text-base font-black text-white mt-1">
+                  Alertas em Tempo Real quando Chegar Encomenda
+                </h4>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Receba o aviso sonoro e pop-up na tela do celular e na barra de notificações quando o aparelho estiver bloqueado.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto shrink-0">
+              {pushStatus !== 'granted' ? (
+                <button
+                  type="button"
+                  onClick={handleAtivarPushMorador}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
+                >
+                  <Bell className="w-4 h-4" />
+                  <span>Ativar Avisos no Celular</span>
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleTestarPushAgora}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-md flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
+                    title="Testar o som e a notificação na barra do celular agora"
+                  >
+                    <Bell className="w-3.5 h-3.5 text-slate-950" />
+                    <span>Testar Som & Notificação</span>
+                  </button>
+
+                  {lockScreenCountdown !== null ? (
+                    <div className="px-4 py-2.5 rounded-xl bg-amber-500 text-slate-950 font-black text-xs animate-pulse flex items-center gap-1.5">
+                      <Clock className="w-4 h-4" />
+                      <span>Bloqueie o celular! Notificando em {lockScreenCountdown}s</span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleTestarTelaBloqueada}
+                      className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 flex items-center justify-center gap-1.5 transition cursor-pointer"
+                      title="Clique, bloqueie a tela do celular e veja o alerta chegar na barra"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Testar Tela Bloqueada (5s)</span>
+                    </button>
+                  )}
+                </>
+              )}
+
+              <button
+                type="button"
+                onClick={handleSimularChegadaEncomenda}
+                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow flex items-center justify-center gap-1.5 transition cursor-pointer"
+                title="Simula a portaria recebendo um novo pacote para sua unidade"
+              >
+                <Package className="w-3.5 h-3.5" />
+                <span>+ Simular Encomenda</span>
+              </button>
             </div>
           </div>
 
@@ -1950,29 +3259,41 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
                           </p>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (enc.codigoResgate) {
-                              navigator.clipboard.writeText(enc.codigoResgate);
-                            }
-                            setCopiadoKey(`pin_${enc.id}`);
-                            setTimeout(() => setCopiadoKey(null), 2500);
-                          }}
-                          className="px-4 py-2.5 rounded-xl bg-white text-amber-900 font-extrabold text-xs hover:bg-amber-50 transition active:scale-95 shadow-sm shrink-0 flex items-center gap-1.5 cursor-pointer"
-                        >
-                          {copiadoKey === `pin_${enc.id}` ? (
-                            <>
-                              <Check className="w-4 h-4 text-emerald-600" />
-                              <span>Copiado!</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-4 h-4 text-amber-700" />
-                              <span>Copiar PIN</span>
-                            </>
-                          )}
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (enc.codigoResgate) {
+                                navigator.clipboard.writeText(enc.codigoResgate);
+                              }
+                              setCopiadoKey(`pin_${enc.id}`);
+                              setTimeout(() => setCopiadoKey(null), 2500);
+                            }}
+                            className="px-4 py-2.5 rounded-xl bg-white text-amber-900 font-extrabold text-xs hover:bg-amber-50 transition active:scale-95 shadow-sm shrink-0 flex items-center gap-1.5 cursor-pointer"
+                          >
+                            {copiadoKey === `pin_${enc.id}` ? (
+                              <>
+                                <Check className="w-4 h-4 text-emerald-600" />
+                                <span>Copiado!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-4 h-4 text-amber-700" />
+                                <span>Copiar PIN</span>
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSimularRetiradaEncomenda(enc.id)}
+                            className="px-3.5 py-2.5 rounded-xl bg-amber-900/40 hover:bg-amber-900/60 text-amber-100 font-extrabold text-xs border border-amber-400/40 transition active:scale-95 shadow-sm shrink-0 flex items-center gap-1.5 cursor-pointer"
+                            title="Simular a portaria validando a retirada desta encomenda"
+                          >
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                            <span>Simular Retirada</span>
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1987,6 +3308,13 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* MÓDULO COMIDA & MERCADINHO AUTÔNOMO 24H                              */}
+      {/* ==================================================================== */}
+      {activeTab === 'comida_mercado' && (
+        <MercadinhoComidaView condominio={condominio} morador={morador} />
       )}
 
       {/* ==================================================================== */}
@@ -2179,6 +3507,9 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
           </div>
         </div>
       )}
+
+        </div>
+      </div>
 
       {/* Modal: Marcar Bicicleta & Destravar com Senha sem QR Code */}
       <BikeSelectionModal
