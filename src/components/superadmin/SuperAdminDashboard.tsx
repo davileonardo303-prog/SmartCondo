@@ -48,6 +48,7 @@ import {
 } from '../../types';
 import { condoStore } from '../../services/mockStorage';
 import { whatsappService } from '../../services/whatsappService';
+import { ModulosCondominioModal } from './ModulosCondominioModal';
 import confetti from 'canvas-confetti';
 
 interface SuperAdminDashboardProps {
@@ -71,6 +72,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   const [editingCondo, setEditingCondo] = useState<Condominio | null>(null);
   const [billingCondo, setBillingCondo] = useState<Condominio | null>(null);
   const [planEditCondo, setPlanEditCondo] = useState<Condominio | null>(null);
+  const [modulosCondoModal, setModulosCondoModal] = useState<Condominio | null>(null);
   const [estenderTesteCondo, setEstenderTesteCondo] = useState<Condominio | null>(null);
   const [extensaoDias, setExtensaoDias] = useState<number>(90);
   const [extensaoDataCustom, setExtensaoDataCustom] = useState<string>('');
@@ -745,6 +747,16 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                               <span>+ Teste</span>
                             </button>
                           )}
+
+                          {/* Botão Gestão de Serviços & Módulos Contratados */}
+                          <button
+                            onClick={() => setModulosCondoModal(c)}
+                            title="Configurar Serviços e Módulos que este Condomínio terá (Bicicletas, Comida, etc.)"
+                            className="px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-bold text-xs transition inline-flex items-center gap-1 cursor-pointer border border-indigo-200"
+                          >
+                            <SlidersHorizontal className="w-3.5 h-3.5" />
+                            <span>Serviços</span>
+                          </button>
 
                           {/* Botão Enviar Notificação de Cobrança */}
                           <button
@@ -2190,6 +2202,20 @@ Condomínio: ${billingCondo.nome}
             </form>
           </div>
         </div>
+      )}
+
+      {/* MODAL 6: GESTÃO DE POLÍTICA DE SERVIÇOS & MÓDULOS POR CONDOMÍNIO */}
+      {modulosCondoModal && (
+        <ModulosCondominioModal
+          condominio={modulosCondoModal}
+          onClose={() => setModulosCondoModal(null)}
+          onSuccess={() => {
+            showNotification(
+              `Política de serviços do condomínio "${modulosCondoModal.nome}" atualizada com sucesso!`
+            );
+            setModulosCondoModal(null);
+          }}
+        />
       )}
     </div>
   );

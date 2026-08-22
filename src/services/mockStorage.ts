@@ -32,9 +32,22 @@ import {
   UserRole,
   InterfoneMensagem,
   ChamadaInterfone,
+  WhatsAppTicket,
+  WhatsAppTicketMessage,
+  WhatsAppQuickReply,
+  WhatsAppDropDeskConfig,
+  WhatsAppTicketStatus,
+  WhatsAppTicketPrioridade,
+  WhatsAppTicketSetor,
+  ModuloServicoId,
+  ModulosCondominioConfig,
+  ProdutoMercadinho,
+  PedidoMercadinho,
+  ItemCarrinhoMercadinho,
+  CategoriaProdutoMercado,
 } from '../types';
 import { whatsappService } from './whatsappService';
-import { notificationService } from './notificationService';
+import { notificationService, playNotificationSound } from './notificationService';
 import { audioAlertService } from '../utils/audioAlerts';
 import {
   db,
@@ -139,6 +152,56 @@ export const DEFAULT_PLANOS_CONFIG: Record<PlanoTipo, PlanoConfigItem> = {
   },
 };
 
+export const DEFAULT_MODULOS_CONDOMINIO: ModulosCondominioConfig = {
+  bicicletario: true,
+  comida_mercado: true,
+  encomendas: true,
+  interfone: true,
+  portaria_whatsapp: true,
+  lazer: true,
+  equipamentos: true,
+  seguranca: true,
+  garagem: true,
+  ocorrencias: true,
+  mural: true,
+  financeiro: true,
+  documentos: true,
+};
+
+// Preset de Módulos para Condomínio Exclusivo de Bicicletas
+export const PRESET_BIKE_ONLY_MODULOS: ModulosCondominioConfig = {
+  bicicletario: true,
+  comida_mercado: false,
+  encomendas: false,
+  interfone: false,
+  portaria_whatsapp: false,
+  lazer: false,
+  equipamentos: false,
+  seguranca: false,
+  garagem: false,
+  ocorrencias: false,
+  mural: false,
+  financeiro: false,
+  documentos: false,
+};
+
+// Preset de Módulos para Condomínio de Bicicletas + Comida / Mercadinho
+export const PRESET_BIKE_FOOD_MODULOS: ModulosCondominioConfig = {
+  bicicletario: true,
+  comida_mercado: true,
+  encomendas: false,
+  interfone: false,
+  portaria_whatsapp: false,
+  lazer: false,
+  equipamentos: false,
+  seguranca: false,
+  garagem: false,
+  ocorrencias: false,
+  mural: false,
+  financeiro: false,
+  documentos: false,
+};
+
 // Credenciais Únicas de Acesso Global (Super Administrador)
 const INITIAL_USUARIOS_SISTEMA: UsuarioSistema[] = [
   {
@@ -209,9 +272,14 @@ class MockCondoStore {
   private sugestoes: Record<string, SugestaoMorador[]> = {};
   private documentos: Record<string, DocumentoCondominio[]> = {};
   private itensCompartilhados: Record<string, ItemCompartilhado[]> = {};
+  private produtosMercadinho: Record<string, ProdutoMercadinho[]> = {};
+  private pedidosMercadinho: Record<string, PedidoMercadinho[]> = {};
   private funcionarios: Record<string, FuncionarioEquipe[]> = {};
   private interfoneMensagens: Record<string, InterfoneMensagem[]> = {};
   private chamadasInterfone: Record<string, ChamadaInterfone[]> = {};
+  private whatsAppTickets: Record<string, WhatsAppTicket[]> = {};
+  private whatsAppConfig: Record<string, WhatsAppDropDeskConfig> = {};
+  private whatsAppQuickReplies: Record<string, WhatsAppQuickReply[]> = {};
   private listeners: Set<Listener> = new Set();
   private subUnsubscribers: Record<string, (() => void)[]> = {};
   private version = 0;
@@ -716,7 +784,7 @@ class MockCondoStore {
               }
             } else if (change.type === 'modified') {
               // Se a encomenda acabou de ser retirada/entregue (< 2 min)
-              if (enc.status === 'entregue' && agora - (enc.retiradoEm || 0) < 120000) {
+              if (enc.status === 'entregue' && agora - (enc.entregueEm || 0) < 120000) {
                 notificationService.dispararNotificacaoNativa(
                   `✅ Encomenda Retirada! Bloco ${enc.unidade?.bloco || '1'} - Apto ${enc.unidade?.apto}`,
                   {
@@ -1008,9 +1076,14 @@ class MockCondoStore {
         this.sugestoes = parsed.sugestoes || {};
         this.documentos = parsed.documentos || {};
         this.itensCompartilhados = parsed.itensCompartilhados || {};
+        this.produtosMercadinho = parsed.produtosMercadinho || {};
+        this.pedidosMercadinho = parsed.pedidosMercadinho || {};
         this.funcionarios = parsed.funcionarios || {};
         this.interfoneMensagens = parsed.interfoneMensagens || {};
         this.chamadasInterfone = parsed.chamadasInterfone || {};
+        this.whatsAppTickets = parsed.whatsAppTickets || {};
+        this.whatsAppConfig = parsed.whatsAppConfig || {};
+        this.whatsAppQuickReplies = parsed.whatsAppQuickReplies || {};
         this.planosConfig = parsed.planosConfig
           ? { ...DEFAULT_PLANOS_CONFIG, ...parsed.planosConfig }
           : { ...DEFAULT_PLANOS_CONFIG };
@@ -1085,9 +1158,14 @@ class MockCondoStore {
         sugestoes: this.sugestoes,
         documentos: this.documentos,
         itensCompartilhados: this.itensCompartilhados,
+        produtosMercadinho: this.produtosMercadinho,
+        pedidosMercadinho: this.pedidosMercadinho,
         funcionarios: this.funcionarios,
         interfoneMensagens: this.interfoneMensagens,
         chamadasInterfone: this.chamadasInterfone,
+        whatsAppTickets: this.whatsAppTickets,
+        whatsAppConfig: this.whatsAppConfig,
+        whatsAppQuickReplies: this.whatsAppQuickReplies,
       };
       localStorage.setItem(STORAGE_KEY_PREFIX, JSON.stringify(data));
     } catch {
@@ -1267,6 +1345,303 @@ class MockCondoStore {
       );
       this.notify();
     }
+  }
+
+  // --- Gestão de Serviços & Módulos Contratados por Condomínio ---
+  public getModulosCondominio(condominioId: string): ModulosCondominioConfig {
+    const condo = this.getCondominio(condominioId);
+    if (!condo || !condo.modulosAtivos) {
+      return { ...DEFAULT_MODULOS_CONDOMINIO };
+    }
+    return {
+      ...DEFAULT_MODULOS_CONDOMINIO,
+      ...condo.modulosAtivos,
+    };
+  }
+
+  public updateModulosCondominio(
+    condominioId: string,
+    modulos: Partial<ModulosCondominioConfig>
+  ): boolean {
+    const condo = this.getCondominio(condominioId);
+    if (!condo) return false;
+
+    const current = this.getModulosCondominio(condominioId);
+    condo.modulosAtivos = {
+      ...current,
+      ...modulos,
+    };
+
+    syncCondominioToFirestore(condo).catch((err) =>
+      console.warn('Sync Modulos Condominio error:', err)
+    );
+    this.notify();
+    return true;
+  }
+
+  // --- Módulo de Mercadinho & Alimentos / Comida Autônoma ---
+  private inicializarProdutosMercadinhoPadrao(condominioId: string): ProdutoMercadinho[] {
+    return [
+      {
+        id: `prod_agua_${condominioId}`,
+        condominioId,
+        nome: 'Água Mineral Crystal 500ml',
+        categoria: 'bebidas',
+        preco: 3.5,
+        descricao: 'Água mineral sem gás em garrafa 500ml gelada na geladeira do condomínio.',
+        imagemUrl: 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=400&auto=format&fit=crop&q=80',
+        estoque: 24,
+        disponivel: true,
+        unidadeMedida: 'garrafa',
+        codigoBarras: '78910001001',
+      },
+      {
+        id: `prod_coca_${condominioId}`,
+        condominioId,
+        nome: 'Coca-Cola Original 350ml (Lata)',
+        categoria: 'bebidas',
+        preco: 5.9,
+        descricao: 'Refrigerante Coca-Cola em lata 350ml gelada.',
+        imagemUrl: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=400&auto=format&fit=crop&q=80',
+        estoque: 18,
+        disponivel: true,
+        unidadeMedida: 'lata',
+        codigoBarras: '78910001002',
+      },
+      {
+        id: `prod_cerveja_${condominioId}`,
+        condominioId,
+        nome: 'Cerveja Heineken Long Neck 330ml',
+        categoria: 'bebidas',
+        preco: 8.9,
+        descricao: 'Cerveja Puro Malte Heineken 330ml (Exclusivo maiores de 18 anos).',
+        imagemUrl: 'https://images.unsplash.com/photo-1608270586620-248524c67de9?w=400&auto=format&fit=crop&q=80',
+        estoque: 16,
+        disponivel: true,
+        unidadeMedida: 'un',
+        codigoBarras: '78910001003',
+      },
+      {
+        id: `prod_sanduiche_${condominioId}`,
+        condominioId,
+        nome: 'Sanduíche Natural Frango & Ervas Finas',
+        categoria: 'lanches',
+        preco: 13.9,
+        descricao: 'Pão integral, peito de frango desfiado, ricota fresca e cenoura ralada.',
+        imagemUrl: 'https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=400&auto=format&fit=crop&q=80',
+        estoque: 8,
+        disponivel: true,
+        unidadeMedida: 'un',
+        codigoBarras: '78910001004',
+      },
+      {
+        id: `prod_paoqueijo_${condominioId}`,
+        condominioId,
+        nome: 'Pão de Queijo Mineiro Artesanal (6 un)',
+        categoria: 'padaria',
+        preco: 12.5,
+        descricao: 'Pacote com 6 pães de queijo recheados pré-assados ou prontos para aquecer.',
+        imagemUrl: 'https://images.unsplash.com/photo-1598143153450-433cc05b1a38?w=400&auto=format&fit=crop&q=80',
+        estoque: 10,
+        disponivel: true,
+        unidadeMedida: 'pct',
+        codigoBarras: '78910001005',
+      },
+      {
+        id: `prod_pizza_${condominioId}`,
+        condominioId,
+        nome: 'Pizza Artesanal 4 Queijos Congelada',
+        categoria: 'lanches',
+        preco: 28.9,
+        descricao: 'Massa artesanal de fermentação natural com mussarela, gorgonzola, parmesão e provolone.',
+        imagemUrl: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400&auto=format&fit=crop&q=80',
+        estoque: 6,
+        disponivel: true,
+        unidadeMedida: 'un',
+        codigoBarras: '78910001006',
+      },
+      {
+        id: `prod_chips_${condominioId}`,
+        condominioId,
+        nome: 'Batata Chips Rústica Artesanal 100g',
+        categoria: 'lanches',
+        preco: 8.5,
+        descricao: 'Batatas crocantes com sal marinho e ervas.',
+        imagemUrl: 'https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=400&auto=format&fit=crop&q=80',
+        estoque: 15,
+        disponivel: true,
+        unidadeMedida: 'pct',
+        codigoBarras: '78910001007',
+      },
+      {
+        id: `prod_choco_${condominioId}`,
+        condominioId,
+        nome: 'Barra de Chocolate Nestlé Classic 80g',
+        categoria: 'doces',
+        preco: 6.9,
+        descricao: 'Chocolate ao leite macio e cremoso.',
+        imagemUrl: 'https://images.unsplash.com/photo-1511381939415-e44015466834?w=400&auto=format&fit=crop&q=80',
+        estoque: 20,
+        disponivel: true,
+        unidadeMedida: 'barra',
+        codigoBarras: '78910001008',
+      },
+      {
+        id: `prod_suco_${condominioId}`,
+        condominioId,
+        nome: 'Suco Integral Prats Laranja 900ml',
+        categoria: 'bebidas',
+        preco: 11.9,
+        descricao: '100% natural, sem adição de açúcar ou conservantes.',
+        imagemUrl: 'https://images.unsplash.com/photo-1600271886742-f049cd451bba?w=400&auto=format&fit=crop&q=80',
+        estoque: 12,
+        disponivel: true,
+        unidadeMedida: 'garrafa',
+        codigoBarras: '78910001009',
+      },
+      {
+        id: `prod_cafe_${condominioId}`,
+        condominioId,
+        nome: 'Cápsulas de Café Gourmet Espresso (10 un)',
+        categoria: 'mercearia',
+        preco: 22.0,
+        descricao: 'Compatível Nespresso, café arábica 100% torra média.',
+        imagemUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=400&auto=format&fit=crop&q=80',
+        estoque: 14,
+        disponivel: true,
+        unidadeMedida: 'cx',
+        codigoBarras: '78910001010',
+      },
+    ];
+  }
+
+  public getProdutosMercadinho(condominioId: string, categoria?: string): ProdutoMercadinho[] {
+    if (!this.produtosMercadinho[condominioId] || this.produtosMercadinho[condominioId].length === 0) {
+      this.produtosMercadinho[condominioId] = this.inicializarProdutosMercadinhoPadrao(condominioId);
+      this.saveToStorage();
+    }
+    const list = this.produtosMercadinho[condominioId] || [];
+    if (categoria && categoria !== 'todos') {
+      return list.filter((p) => p.categoria === categoria);
+    }
+    return list;
+  }
+
+  public addProdutoMercadinho(condominioId: string, produto: Omit<ProdutoMercadinho, 'id' | 'condominioId'>): ProdutoMercadinho {
+    const newProd: ProdutoMercadinho = {
+      ...produto,
+      id: `prod_${Date.now()}`,
+      condominioId,
+    };
+    if (!this.produtosMercadinho[condominioId]) {
+      this.produtosMercadinho[condominioId] = this.inicializarProdutosMercadinhoPadrao(condominioId);
+    }
+    this.produtosMercadinho[condominioId].unshift(newProd);
+    this.saveToStorage();
+    this.notify();
+    return newProd;
+  }
+
+  public updateProdutoMercadinho(condominioId: string, produtoId: string, data: Partial<ProdutoMercadinho>): boolean {
+    const list = this.produtosMercadinho[condominioId];
+    if (!list) return false;
+    const prod = list.find((p) => p.id === produtoId);
+    if (!prod) return false;
+    Object.assign(prod, data);
+    this.saveToStorage();
+    this.notify();
+    return true;
+  }
+
+  public deleteProdutoMercadinho(condominioId: string, produtoId: string): boolean {
+    if (!this.produtosMercadinho[condominioId]) return false;
+    this.produtosMercadinho[condominioId] = this.produtosMercadinho[condominioId].filter((p) => p.id !== produtoId);
+    this.saveToStorage();
+    this.notify();
+    return true;
+  }
+
+  public realizarPedidoMercadinho(
+    condominioId: string,
+    morador: Morador,
+    itens: ItemCarrinhoMercadinho[],
+    formaPagamento: 'pix' | 'taxa_condominio' | 'cartao_app'
+  ): { success: boolean; pedido?: PedidoMercadinho; message: string } {
+    if (!itens || itens.length === 0) {
+      return { success: false, message: 'O carrinho está vazio.' };
+    }
+
+    const prods = this.getProdutosMercadinho(condominioId);
+    let valorTotal = 0;
+    const itensFormatados: PedidoMercadinho['itens'] = [];
+
+    for (const it of itens) {
+      const p = prods.find((prod) => prod.id === it.produto.id);
+      if (p) {
+        if (p.estoque < it.quantidade) {
+          return {
+            success: false,
+            message: `Estoque insuficiente para o item "${p.nome}". Disponível: ${p.estoque}.`,
+          };
+        }
+        p.estoque -= it.quantidade;
+        const subtotal = p.preco * it.quantidade;
+        valorTotal += subtotal;
+        itensFormatados.push({
+          produtoId: p.id,
+          nome: p.nome,
+          precoUnitario: p.preco,
+          quantidade: it.quantidade,
+          subtotal,
+        });
+      }
+    }
+
+    const newPedido: PedidoMercadinho = {
+      id: `ped_mercado_${Date.now()}`,
+      condominioId,
+      moradorId: morador.id,
+      moradorNome: morador.nome,
+      moradorUnidade: morador.unidade,
+      itens: itensFormatados,
+      valorTotal,
+      formaPagamento,
+      status: 'concluido',
+      criadoEm: Date.now(),
+    };
+
+    if (!this.pedidosMercadinho[condominioId]) {
+      this.pedidosMercadinho[condominioId] = [];
+    }
+    this.pedidosMercadinho[condominioId].unshift(newPedido);
+
+    // Se for cobrança na taxa de condomínio, registra item de débito no extrato/boleto
+    if (formaPagamento === 'taxa_condominio') {
+      this.addExtratoItem(condominioId, {
+        descricao: `Consumo Mercadinho Autônomo - Apto ${morador.unidade.bloco}-${morador.unidade.apto} (${morador.nome})`,
+        categoria: 'outros',
+        tipo: 'receita',
+        valor: valorTotal,
+        mesReferencia: 'Agosto / 2026',
+        data: new Date().toISOString().split('T')[0],
+      });
+    }
+
+    this.saveToStorage();
+    this.notify();
+    return {
+      success: true,
+      pedido: newPedido,
+      message: 'Compra no Mercadinho registrada com sucesso!',
+    };
+  }
+
+  public getPedidosMercadinho(condominioId: string, moradorId?: string): PedidoMercadinho[] {
+    const list = this.pedidosMercadinho[condominioId] || [];
+    if (moradorId) {
+      return list.filter((p) => p.moradorId === moradorId);
+    }
+    return list;
   }
 
   // --- Autenticação e Gestão de Usuários / Síndicos ---
@@ -4832,7 +5207,15 @@ class MockCondoStore {
   public getHistoricoChamadas(condoId: string, userId?: string): ChamadaInterfone[] {
     const list = this.chamadasInterfone[condoId] || [];
     if (!userId) return list;
-    return list.filter((c) => c.callerId === userId || c.receiverId === userId || c.receiverId === 'portaria');
+    return list.filter(
+      (c) =>
+        c.callerId === userId ||
+        c.receiverId === userId ||
+        c.receiverId === 'portaria' ||
+        c.receiverId === 'sindico' ||
+        c.receiverRole === 'sindico' ||
+        c.receiverRole === 'portaria'
+    );
   }
 
   public limparHistoricoChamadas(condoId: string): void {
@@ -5798,7 +6181,909 @@ class MockCondoStore {
       this.itensCompartilhados[demoCondoId] = [];
     }
 
+    // 13. DropDesk: Configuração WhatsApp Inicial
+    if (!this.whatsAppConfig[demoCondoId]) {
+      this.whatsAppConfig[demoCondoId] = {
+        status: 'conectado',
+        numeroConectado: '+55 (11) 98765-4321',
+        nomeInstancia: 'Portaria & Síndico SmartCondo - WhatsApp Business',
+        bateria: 94,
+        webhookAtivo: true,
+        ultimaSincronizacao: Date.now(),
+      };
+    }
+
+    // 14. DropDesk: Respostas Rápidas / Macros
+    if (!this.whatsAppQuickReplies[demoCondoId] || this.whatsAppQuickReplies[demoCondoId].length === 0) {
+      this.whatsAppQuickReplies[demoCondoId] = [
+        {
+          id: 'qr_1',
+          atalho: '/encomenda',
+          titulo: '📦 Aviso de Encomenda na Portaria',
+          conteudo: 'Olá {nome}! Sua encomenda foi recebida e conferida na portaria. Para retirar, basta informar seu código PIN ou apresentar documento.',
+          categoria: 'encomendas',
+        },
+        {
+          id: 'qr_2',
+          atalho: '/visitante',
+          titulo: '👤 Confirmação de Visitante na Guarita',
+          conteudo: 'Olá {nome}! Há um visitante na portaria se identificando como {visitante}. O acesso está autorizado pela sua unidade?',
+          categoria: 'portaria',
+        },
+        {
+          id: 'qr_3',
+          atalho: '/portao',
+          titulo: '🚗 Aviso sobre Portão / Garagem',
+          conteudo: 'Olá {nome}! Solicitamos a gentileza de verificar seu veículo na vaga, pois precisamos realizar uma manobra no subsolo.',
+          categoria: 'portaria',
+        },
+        {
+          id: 'qr_4',
+          atalho: '/regras',
+          titulo: '📋 Regras do Condomínio & Horários',
+          conteudo: 'Prezado(a) morador(a), lembramos que o horário de silêncio do condomínio inicia às 22h00 e as áreas de lazer encerram às 22h.',
+          categoria: 'geral',
+        },
+        {
+          id: 'qr_5',
+          atalho: '/boleto',
+          titulo: '📄 Segunda Via de Boleto Condominial',
+          conteudo: 'Olá {nome}! O boleto da taxa condominial está disponível no seu app SmartCondo ou podemos enviar o código de barras Pix por aqui.',
+          categoria: 'sindico',
+        },
+        {
+          id: 'qr_6',
+          atalho: '/finalizar',
+          titulo: '✅ Mensagem de Encerramento do Chamado',
+          conteudo: 'Agradecemos o contato com a administração/portaria do condomínio! Seu chamado foi finalizado com sucesso. Tenha um excelente dia!',
+          categoria: 'geral',
+        },
+      ];
+    }
+
+    // 15. DropDesk: Atendimentos & Tickets Iniciais estilo DropDesk
+    if (!this.whatsAppTickets[demoCondoId] || this.whatsAppTickets[demoCondoId].length === 0) {
+      const agora = Date.now();
+      this.whatsAppTickets[demoCondoId] = [
+        {
+          id: '#780',
+          protocolo: 'ATD-780',
+          condominioId: demoCondoId,
+          clienteNome: 'Sérgio Andrade',
+          clienteTelefone: '55 (21) 9 8719-1589',
+          clienteUnidade: { bloco: 'A', apto: '302' },
+          clienteAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80',
+          status: 'cancelado',
+          prioridade: 'normal',
+          setor: 'portaria',
+          atendenteId: 'sindico_carlos',
+          atendenteNome: 'Carlos Eduardo Mendes',
+          atendenteRole: 'sindico',
+          tags: ['8 - IMENDES', '#Visitante'],
+          assunto: 'Cancelamento de liberação de prestador',
+          criadoEm: agora - 120 * 60 * 1000,
+          iniciadoEm: agora - 110 * 60 * 1000,
+          finalizadoEm: agora - 80 * 60 * 1000,
+          ultimaMensagem: 'Atendimento encerrado pelo solicitante.',
+          ultimaMensagemTimestamp: agora - 80 * 60 * 1000,
+          mensagensNaoLidas: 0,
+          resumoFinalizacao: 'Morador informou que o prestador cancelou a visita de hoje.',
+          mensagens: [
+            {
+              id: 'msg_780_1',
+              ticketId: '#780',
+              remetente: 'cliente',
+              remetenteNome: 'Sérgio Andrade',
+              tipo: 'texto',
+              conteudo: 'Boa tarde, por favor cancelem a autorização do encanador hoje, ele remarcou para sexta.',
+              timestamp: agora - 120 * 60 * 1000,
+              status: 'lido',
+            },
+            {
+              id: 'msg_780_2',
+              ticketId: '#780',
+              remetente: 'atendente',
+              remetenteNome: 'Carlos Eduardo Mendes',
+              tipo: 'texto',
+              conteudo: 'Perfeito Sr. Sérgio, autorização cancelada no sistema de portaria. Qualquer novidade estamos à disposição.',
+              timestamp: agora - 100 * 60 * 1000,
+              status: 'lido',
+            },
+          ],
+        },
+        {
+          id: '#779',
+          protocolo: 'ATD-779',
+          condominioId: demoCondoId,
+          clienteNome: 'Carlos Ailto',
+          clienteTelefone: '55 (11) 9 9482-3112',
+          clienteUnidade: { bloco: 'B', apto: '104' },
+          clienteAvatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=120&auto=format&fit=crop&q=80',
+          status: 'atendendo',
+          prioridade: 'alta',
+          setor: 'portaria',
+          atendenteId: 'portaria_central',
+          atendenteNome: 'Portaria 24 Horas',
+          atendenteRole: 'portaria',
+          tags: ['7 - ETIQUETAS', '#Encomenda', '#Urgente'],
+          assunto: 'Chegada de encomenda refrigerada / remédio',
+          criadoEm: agora - 25 * 60 * 1000,
+          iniciadoEm: agora - 20 * 60 * 1000,
+          ultimaMensagem: 'Sim, recebemos e já colocamos no frigobar da guarita!',
+          ultimaMensagemTimestamp: agora - 4 * 60 * 1000,
+          mensagensNaoLidas: 0,
+          mensagens: [
+            {
+              id: 'msg_779_1',
+              ticketId: '#779',
+              remetente: 'cliente',
+              remetenteNome: 'Carlos Ailto',
+              tipo: 'texto',
+              conteudo: 'Olá portaria! Uma entrega da Drogasil de medicamentos que precisam de geladeira acabou de sair para entrega. Conseguem guardar no frigobar assim que chegar?',
+              timestamp: agora - 25 * 60 * 1000,
+              status: 'lido',
+            },
+            {
+              id: 'msg_779_2',
+              ticketId: '#779',
+              remetente: 'atendente',
+              remetenteNome: 'Portaria 24 Horas',
+              tipo: 'texto',
+              conteudo: 'Olá Carlos! Com certeza, já deixamos o aviso com a equipe da guarita para armazenar imediatamente no refrigerador.',
+              timestamp: agora - 20 * 60 * 1000,
+              status: 'lido',
+            },
+            {
+              id: 'msg_779_3',
+              ticketId: '#779',
+              remetente: 'atendente',
+              remetenteNome: 'Portaria 24 Horas',
+              tipo: 'texto',
+              isNotaInterna: true,
+              conteudo: '📌 NOTA INTERNA: Pacote entregue pela Drogasil às 14:15. Guardado no frigobar da guarita - Gaveta 2.',
+              timestamp: agora - 10 * 60 * 1000,
+              status: 'lido',
+            },
+            {
+              id: 'msg_779_4',
+              ticketId: '#779',
+              remetente: 'atendente',
+              remetenteNome: 'Portaria 24 Horas',
+              tipo: 'texto',
+              conteudo: 'Sim, recebemos e já colocamos no frigobar da guarita! Código PIN para retirada: 482910.',
+              timestamp: agora - 4 * 60 * 1000,
+              status: 'entregue',
+            },
+          ],
+        },
+        {
+          id: '#778',
+          protocolo: 'ATD-778',
+          condominioId: demoCondoId,
+          clienteNome: 'Mariana Souza',
+          clienteTelefone: '55 (11) 9 8234-9910',
+          clienteUnidade: { bloco: 'A', apto: '501' },
+          clienteAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80',
+          status: 'aguardando',
+          prioridade: 'urgente',
+          setor: 'sindico',
+          tags: ['#Barulho', '#Reclamação'],
+          assunto: 'Barulho de obra fora do horário no apto 601',
+          criadoEm: agora - 12 * 60 * 1000,
+          ultimaMensagem: 'Tem alguém martelando no piso de cima desde às 12h30, poderiam verificar?',
+          ultimaMensagemTimestamp: agora - 12 * 60 * 1000,
+          mensagensNaoLidas: 1,
+          mensagens: [
+            {
+              id: 'msg_778_1',
+              ticketId: '#778',
+              remetente: 'cliente',
+              remetenteNome: 'Mariana Souza',
+              tipo: 'texto',
+              conteudo: 'Boa tarde administração! Tem alguém martelando e usando furadeira no 601 bem no horário de almoço. Poderiam interfonar para lá?',
+              timestamp: agora - 12 * 60 * 1000,
+              status: 'entregue',
+            },
+          ],
+        },
+        {
+          id: '#777',
+          protocolo: 'ATD-777',
+          condominioId: demoCondoId,
+          clienteNome: 'Roberto Dias',
+          clienteTelefone: '55 (11) 9 7123-4567',
+          clienteUnidade: { bloco: 'B', apto: '202' },
+          clienteAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80',
+          status: 'finalizado',
+          prioridade: 'baixa',
+          setor: 'portaria',
+          atendenteId: 'portaria_central',
+          atendenteNome: 'Porteiro Marcos',
+          atendenteRole: 'portaria',
+          tags: ['#Portão', '#Controle'],
+          assunto: 'Troca de bateria do controle do portão',
+          criadoEm: agora - 360 * 60 * 1000,
+          iniciadoEm: agora - 340 * 60 * 1000,
+          finalizadoEm: agora - 300 * 60 * 1000,
+          ultimaMensagem: 'Obrigado Marcos, testei e funcionou perfeitamente!',
+          ultimaMensagemTimestamp: agora - 300 * 60 * 1000,
+          mensagensNaoLidas: 0,
+          resumoFinalizacao: 'Bateria do controle veicular substituída na portaria.',
+          mensagens: [
+            {
+              id: 'msg_777_1',
+              ticketId: '#777',
+              remetente: 'cliente',
+              remetenteNome: 'Roberto Dias',
+              tipo: 'texto',
+              conteudo: 'Bom dia! A portaria tem bateria 2032 para troca no controle do portão?',
+              timestamp: agora - 360 * 60 * 1000,
+              status: 'lido',
+            },
+            {
+              id: 'msg_777_2',
+              ticketId: '#777',
+              remetente: 'atendente',
+              remetenteNome: 'Porteiro Marcos',
+              tipo: 'texto',
+              conteudo: 'Bom dia Sr. Roberto! Sim, temos peças no almoxarifado. Pode descer na portaria quando quiser.',
+              timestamp: agora - 340 * 60 * 1000,
+              status: 'lido',
+            },
+            {
+              id: 'msg_777_3',
+              ticketId: '#777',
+              remetente: 'cliente',
+              remetenteNome: 'Roberto Dias',
+              tipo: 'texto',
+              conteudo: 'Obrigado Marcos, testei e funcionou perfeitamente!',
+              timestamp: agora - 300 * 60 * 1000,
+              status: 'lido',
+            },
+          ],
+        },
+      ];
+    }
+
     this.saveToStorage();
+  }
+
+  // --- MÉTODOS WHATSAPP DROPDESK & ATENDIMENTOS MULTIATENDENTE ---
+
+  public getWhatsAppTickets(condoId: string): WhatsAppTicket[] {
+    this.ensureCondoSubscribed(condoId);
+    return [...(this.whatsAppTickets[condoId] || [])].sort(
+      (a, b) => b.ultimaMensagemTimestamp - a.ultimaMensagemTimestamp
+    );
+  }
+
+  public getWhatsAppTicketById(condoId: string, ticketId: string): WhatsAppTicket | undefined {
+    const list = this.whatsAppTickets[condoId] || [];
+    return list.find((t) => t.id === ticketId || t.protocolo === ticketId);
+  }
+
+  public getWhatsAppConfig(condoId: string): WhatsAppDropDeskConfig {
+    const existing = this.whatsAppConfig[condoId];
+    // Se não existir ou se tiver número falso legado de teste, reseta para desconectado real
+    if (!existing || existing.numeroConectado === '+55 (11) 98765-4321' || !existing.status) {
+      this.whatsAppConfig[condoId] = {
+        status: 'desconectado',
+        numeroConectado: '',
+        nomeInstancia: 'Instância Portaria SmartCondo',
+        nomePerfil: '',
+        avatarPerfil: '',
+        plataforma: '',
+        servidorApiUrl: '',
+        apiKey: '',
+        bateria: null,
+        conectadoEm: null,
+        webhookAtivo: false,
+        webhookUrl: '/api/whatsapp/webhook',
+        ultimaSincronizacao: Date.now(),
+      };
+      this.saveToStorage();
+    }
+    return this.whatsAppConfig[condoId];
+  }
+
+  public updateWhatsAppConfig(condoId: string, config: Partial<WhatsAppDropDeskConfig>) {
+    const current = this.getWhatsAppConfig(condoId);
+    this.whatsAppConfig[condoId] = { ...current, ...config, ultimaSincronizacao: Date.now() };
+    this.saveToStorage();
+    this.notify();
+  }
+
+  public conectarWhatsApp(
+    condoId: string,
+    dados: {
+      numero: string;
+      nomePerfil?: string;
+      avatarPerfil?: string;
+      plataforma?: string;
+      nomeInstancia?: string;
+      servidorApiUrl?: string;
+      apiKey?: string;
+    }
+  ): WhatsAppDropDeskConfig {
+    const limpo = (dados.numero || '').replace(/\D/g, '');
+    let numFormatado = dados.numero;
+    if (limpo.length === 10 || limpo.length === 11) {
+      numFormatado = `+55 (${limpo.substring(0, 2)}) ${limpo.substring(2, 7)}-${limpo.substring(7)}`;
+    } else if (limpo.length === 12 || limpo.length === 13) {
+      numFormatado = `+${limpo.substring(0, 2)} (${limpo.substring(2, 4)}) ${limpo.substring(4, 9)}-${limpo.substring(9)}`;
+    }
+
+    const agora = Date.now();
+    const configAtualizada: WhatsAppDropDeskConfig = {
+      status: 'conectado',
+      numeroConectado: numFormatado,
+      nomeInstancia: dados.nomeInstancia || 'Portaria Principal (Oficial)',
+      nomePerfil: dados.nomePerfil || 'Portaria SmartCondo WhatsApp Business',
+      avatarPerfil: dados.avatarPerfil || '',
+      plataforma: dados.plataforma || 'WhatsApp Business para Android / iOS',
+      servidorApiUrl: dados.servidorApiUrl || '',
+      apiKey: dados.apiKey || '',
+      bateria: 98,
+      conectadoEm: agora,
+      webhookAtivo: true,
+      webhookUrl: '/api/whatsapp/webhook',
+      ultimaSincronizacao: agora,
+    };
+
+    this.whatsAppConfig[condoId] = configAtualizada;
+    this.saveToStorage();
+    this.notify();
+    return configAtualizada;
+  }
+
+  public desconectarWhatsApp(condoId: string): WhatsAppDropDeskConfig {
+    const configDesconectada: WhatsAppDropDeskConfig = {
+      status: 'desconectado',
+      numeroConectado: '',
+      nomeInstancia: 'Instância Portaria SmartCondo',
+      nomePerfil: '',
+      avatarPerfil: '',
+      plataforma: '',
+      servidorApiUrl: '',
+      apiKey: '',
+      bateria: null,
+      conectadoEm: null,
+      webhookAtivo: false,
+      webhookUrl: '/api/whatsapp/webhook',
+      ultimaSincronizacao: Date.now(),
+    };
+
+    this.whatsAppConfig[condoId] = configDesconectada;
+    this.saveToStorage();
+    this.notify();
+    return configDesconectada;
+  }
+
+  public getWhatsAppQuickReplies(condoId: string): WhatsAppQuickReply[] {
+    return this.whatsAppQuickReplies[condoId] || [];
+  }
+
+  public addWhatsAppQuickReply(condoId: string, reply: Omit<WhatsAppQuickReply, 'id'>): WhatsAppQuickReply {
+    if (!this.whatsAppQuickReplies[condoId]) {
+      this.whatsAppQuickReplies[condoId] = [];
+    }
+    const newReply: WhatsAppQuickReply = {
+      ...reply,
+      id: `qr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      atalho: reply.atalho.startsWith('/') ? reply.atalho : `/${reply.atalho}`,
+    };
+    this.whatsAppQuickReplies[condoId].push(newReply);
+    this.saveToStorage();
+    this.notify();
+    return newReply;
+  }
+
+  public deleteWhatsAppQuickReply(condoId: string, id: string) {
+    if (!this.whatsAppQuickReplies[condoId]) return;
+    this.whatsAppQuickReplies[condoId] = this.whatsAppQuickReplies[condoId].filter((r) => r.id !== id);
+    this.saveToStorage();
+    this.notify();
+  }
+
+  public criarWhatsAppTicket(condoId: string, data: Partial<WhatsAppTicket>): WhatsAppTicket {
+    if (!this.whatsAppTickets[condoId]) {
+      this.whatsAppTickets[condoId] = [];
+    }
+
+    const nextNum = (this.whatsAppTickets[condoId].length + 781);
+    const id = `#${nextNum}`;
+    const protocolo = `ATD-${nextNum}`;
+    const agora = Date.now();
+
+    const novoTicket: WhatsAppTicket = {
+      id,
+      protocolo,
+      condominioId: condoId,
+      clienteNome: data.clienteNome || 'Morador Via WhatsApp',
+      clienteTelefone: data.clienteTelefone || '+55 (11) 99999-9999',
+      clienteUnidade: data.clienteUnidade,
+      clienteAvatar: data.clienteAvatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80',
+      status: data.status || 'aguardando',
+      prioridade: data.prioridade || 'normal',
+      setor: data.setor || 'portaria',
+      atendenteId: data.atendenteId,
+      atendenteNome: data.atendenteNome,
+      atendenteRole: data.atendenteRole,
+      tags: data.tags || ['#WhatsApp'],
+      assunto: data.assunto || 'Atendimento aberto via WhatsApp',
+      criadoEm: agora,
+      ultimaMensagem: data.ultimaMensagem || 'Atendimento iniciado.',
+      ultimaMensagemTimestamp: agora,
+      mensagensNaoLidas: 1,
+      mensagens: data.mensagens || [],
+    };
+
+    this.whatsAppTickets[condoId].unshift(novoTicket);
+    this.saveToStorage();
+    this.notify();
+
+    // Notificação e som
+    playNotificationSound('mensagem');
+    notificationService.dispararNotificacaoNativa(
+      `💬 Novo WhatsApp: ${novoTicket.clienteNome} (${novoTicket.id})`,
+      {
+        body: novoTicket.ultimaMensagem,
+        tag: `ticket-${novoTicket.id}`,
+      }
+    );
+
+    return novoTicket;
+  }
+
+  public enviarMensagemTicket(
+    condoId: string,
+    ticketId: string,
+    msg: Omit<WhatsAppTicketMessage, 'id' | 'ticketId' | 'timestamp' | 'status'>
+  ): WhatsAppTicketMessage {
+    const list = this.whatsAppTickets[condoId] || [];
+    const ticket = list.find((t) => t.id === ticketId);
+    if (!ticket) {
+      throw new Error(`Ticket ${ticketId} não encontrado.`);
+    }
+
+    const agora = Date.now();
+    const novaMensagem: WhatsAppTicketMessage = {
+      ...msg,
+      id: `msg_${agora}_${Math.random().toString(36).substring(2, 7)}`,
+      ticketId,
+      timestamp: agora,
+      status: 'entregue',
+    };
+
+    ticket.mensagens.push(novaMensagem);
+    if (!msg.isNotaInterna) {
+      ticket.ultimaMensagem = msg.conteudo;
+      ticket.ultimaMensagemTimestamp = agora;
+      if (msg.remetente === 'cliente') {
+        ticket.mensagensNaoLidas += 1;
+      }
+    }
+
+    // Se estiver em espera e o atendente respondeu, passa para 'atendendo'
+    if (ticket.status === 'aguardando' && msg.remetente === 'atendente') {
+      ticket.status = 'atendendo';
+      ticket.iniciadoEm = ticket.iniciadoEm || agora;
+    }
+
+    this.saveToStorage();
+    this.notify();
+
+    // Se for atendente respondendo para cliente, despacha para a API em background
+    if (msg.remetente === 'atendente' && !msg.isNotaInterna) {
+      fetch('/api/whatsapp/send-automated', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telefone: ticket.clienteTelefone,
+          mensagem: msg.conteudo,
+          condominioNome: 'SmartCondo',
+          moradorNome: ticket.clienteNome,
+          unidade: ticket.clienteUnidade ? `Bloco ${ticket.clienteUnidade.bloco || '1'} - Apto ${ticket.clienteUnidade.apto}` : 'Portaria',
+          tipo: 'atendimento_dropdesk',
+        }),
+      }).catch(() => {});
+    }
+
+    return novaMensagem;
+  }
+
+  public assumirTicket(
+    condoId: string,
+    ticketId: string,
+    atendente: { id: string; nome: string; role?: UserRole }
+  ) {
+    const list = this.whatsAppTickets[condoId] || [];
+    const ticket = list.find((t) => t.id === ticketId);
+    if (!ticket) return;
+
+    const agora = Date.now();
+    ticket.atendenteId = atendente.id;
+    ticket.atendenteNome = atendente.nome;
+    ticket.atendenteRole = atendente.role;
+    ticket.status = 'atendendo';
+    ticket.iniciadoEm = ticket.iniciadoEm || agora;
+    ticket.mensagensNaoLidas = 0;
+
+    // Registra mensagem de sistema
+    ticket.mensagens.push({
+      id: `sys_${agora}`,
+      ticketId,
+      remetente: 'sistema',
+      remetenteNome: 'DropDesk Bot',
+      tipo: 'texto',
+      conteudo: `🙋‍♂️ Atendimento assumido por ${atendente.nome}.`,
+      timestamp: agora,
+      status: 'lido',
+    });
+
+    this.saveToStorage();
+    this.notify();
+  }
+
+  public transferirTicket(
+    condoId: string,
+    ticketId: string,
+    setor: WhatsAppTicketSetor,
+    novoAtendenteNome?: string
+  ) {
+    const list = this.whatsAppTickets[condoId] || [];
+    const ticket = list.find((t) => t.id === ticketId);
+    if (!ticket) return;
+
+    const agora = Date.now();
+    const setorAnterior = ticket.setor;
+    ticket.setor = setor;
+    if (novoAtendenteNome) {
+      ticket.atendenteNome = novoAtendenteNome;
+    } else {
+      ticket.atendenteId = undefined;
+      ticket.atendenteNome = undefined;
+      ticket.status = 'aguardando';
+    }
+
+    ticket.mensagens.push({
+      id: `sys_trans_${agora}`,
+      ticketId,
+      remetente: 'sistema',
+      remetenteNome: 'DropDesk Bot',
+      tipo: 'texto',
+      conteudo: `🔄 Chamado transferido do setor ${setorAnterior.toUpperCase()} para ${setor.toUpperCase()}${novoAtendenteNome ? ` (${novoAtendenteNome})` : ''}.`,
+      timestamp: agora,
+      status: 'lido',
+    });
+
+    this.saveToStorage();
+    this.notify();
+  }
+
+  public atualizarStatusTicket(
+    condoId: string,
+    ticketId: string,
+    status: WhatsAppTicketStatus,
+    resumoFinalizacao?: string
+  ) {
+    const list = this.whatsAppTickets[condoId] || [];
+    const ticket = list.find((t) => t.id === ticketId);
+    if (!ticket) return;
+
+    const agora = Date.now();
+    ticket.status = status;
+    if (status === 'finalizado' || status === 'cancelado') {
+      ticket.finalizadoEm = agora;
+      ticket.resumoFinalizacao = resumoFinalizacao;
+    }
+    ticket.mensagensNaoLidas = 0;
+
+    ticket.mensagens.push({
+      id: `sys_stat_${agora}`,
+      ticketId,
+      remetente: 'sistema',
+      remetenteNome: 'DropDesk Bot',
+      tipo: 'texto',
+      conteudo: status === 'finalizado'
+        ? `✅ Atendimento encerrado. ${resumoFinalizacao ? `Motivo: ${resumoFinalizacao}` : ''}`
+        : status === 'cancelado'
+        ? `❌ Atendimento cancelado. ${resumoFinalizacao ? `Motivo: ${resumoFinalizacao}` : ''}`
+        : `Status alterado para ${status.toUpperCase()}.`,
+      timestamp: agora,
+      status: 'lido',
+    });
+
+    this.saveToStorage();
+    this.notify();
+  }
+
+  public adicionarTagTicket(condoId: string, ticketId: string, tag: string) {
+    const list = this.whatsAppTickets[condoId] || [];
+    const ticket = list.find((t) => t.id === ticketId);
+    if (!ticket) return;
+
+    const formattedTag = tag.trim().startsWith('#') || tag.includes('-') ? tag.trim() : `#${tag.trim()}`;
+    if (!ticket.tags.includes(formattedTag)) {
+      ticket.tags.push(formattedTag);
+      this.saveToStorage();
+      this.notify();
+    }
+  }
+
+  public removerTagTicket(condoId: string, ticketId: string, tag: string) {
+    const list = this.whatsAppTickets[condoId] || [];
+    const ticket = list.find((t) => t.id === ticketId);
+    if (!ticket) return;
+
+    ticket.tags = ticket.tags.filter((t) => t !== tag);
+    this.saveToStorage();
+    this.notify();
+  }
+
+  public marcarTicketComoLido(condoId: string, ticketId: string) {
+    const list = this.whatsAppTickets[condoId] || [];
+    const ticket = list.find((t) => t.id === ticketId);
+    if (!ticket) return;
+
+    if (ticket.mensagensNaoLidas > 0) {
+      ticket.mensagensNaoLidas = 0;
+      this.saveToStorage();
+      this.notify();
+    }
+  }
+
+  public transformarTicketEmOcorrencia(
+    condoId: string,
+    ticketId: string,
+    titulo: string,
+    categoria: string
+  ): Ocorrencia {
+    const list = this.whatsAppTickets[condoId] || [];
+    const ticket = list.find((t) => t.id === ticketId);
+    if (!ticket) throw new Error('Ticket não encontrado');
+
+    const desc = `[Origem: WhatsApp DropDesk - Chamado ${ticket.id} (${ticket.protocolo})]\nMorador: ${ticket.clienteNome} (${ticket.clienteTelefone})\nUnidade: ${ticket.clienteUnidade ? `Bloco ${ticket.clienteUnidade.bloco || '1'} - Apto ${ticket.clienteUnidade.apto}` : 'N/A'}\n\nHistórico das Mensagens:\n` +
+      ticket.mensagens.filter((m) => !m.isNotaInterna).map((m) => `[${m.remetenteNome}]: ${m.conteudo}`).join('\n');
+
+    let morador = ticket.clienteId ? this.getMorador(condoId, ticket.clienteId) : null;
+    if (!morador) {
+      const moradores = this.getMoradores(condoId);
+      morador = moradores.find((m) =>
+        m.telefone.replace(/\D/g, '').includes(ticket.clienteTelefone.replace(/\D/g, '')) ||
+        m.nome.toLowerCase() === ticket.clienteNome.toLowerCase()
+      ) || null;
+
+      if (!morador && moradores.length > 0) {
+        morador = moradores[0];
+      }
+
+      if (!morador) {
+        morador = this.cadastrarOuObterMoradorRapido(condoId, {
+          bloco: ticket.clienteUnidade?.bloco || '1',
+          apto: ticket.clienteUnidade?.apto || '101',
+          nome: ticket.clienteNome,
+          telefone: ticket.clienteTelefone,
+        });
+      }
+    }
+
+    const novaOcorrencia = this.addOcorrencia(condoId, {
+      moradorId: morador.id,
+      titulo: titulo || ticket.assunto || `Ocorrência gerada via WhatsApp (${ticket.id})`,
+      descricao: desc,
+      categoria: (categoria as any) || 'barulho',
+      prioridade: (ticket.prioridade === 'urgente' ? 'urgente' : ticket.prioridade === 'alta' ? 'alta' : 'media') as any,
+    });
+
+    ticket.ocorrenciaGeradaId = novaOcorrencia.id;
+    ticket.tags.push('#OcorrênciaGerada');
+    ticket.mensagens.push({
+      id: `sys_oco_${Date.now()}`,
+      ticketId,
+      remetente: 'sistema',
+      remetenteNome: 'DropDesk Bot',
+      tipo: 'texto',
+      conteudo: `📋 Ocorrência registrada no painel do síndico (Protocolo: ${novaOcorrencia.id}).`,
+      timestamp: Date.now(),
+      status: 'lido',
+    });
+
+    this.saveToStorage();
+    this.notify();
+    return novaOcorrencia;
+  }
+
+  public simularMensagemEntradaWhatsApp(
+    condoId: string,
+    dados: {
+      clienteNome: string;
+      clienteTelefone?: string;
+      telefone?: string;
+      clienteUnidade?: { bloco?: string; apto: string };
+      unidade?: Unidade;
+      texto: string;
+      tipoMidia?: 'texto' | 'audio' | 'imagem' | 'arquivo';
+      mediaUrl?: string;
+    }
+  ): WhatsAppTicket {
+    this.ensureCondoSubscribed(condoId);
+    if (!this.whatsAppTickets[condoId]) {
+      this.whatsAppTickets[condoId] = [];
+    }
+    const list = this.whatsAppTickets[condoId];
+    const agora = Date.now();
+    const tel = dados.clienteTelefone || dados.telefone || '+55 (11) 99999-9999';
+    const limpo = tel.replace(/\D/g, '');
+    const unidadeObj: Unidade = {
+      bloco: dados.clienteUnidade?.bloco || dados.unidade?.bloco || '1',
+      apto: dados.clienteUnidade?.apto || dados.unidade?.apto || '101',
+    };
+
+    // Procura ticket em aberto/aguardando desse mesmo telefone ou unidade
+    let ticket = list.find((t) => {
+      if (t.status !== 'finalizado' && t.status !== 'cancelado') {
+        if (limpo && t.clienteTelefone.replace(/\D/g, '').includes(limpo.substring(2))) return true;
+        if (
+          t.clienteUnidade &&
+          t.clienteUnidade.apto === unidadeObj.apto &&
+          (t.clienteUnidade.bloco || '1') === unidadeObj.bloco
+        ) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (!ticket) {
+      // Cria novo chamado na fila
+      const nextNum = list.length + 781;
+      ticket = {
+        id: `#${nextNum}`,
+        protocolo: `ATD-${nextNum}`,
+        condominioId: condoId,
+        clienteNome: dados.clienteNome,
+        clienteTelefone: tel,
+        clienteUnidade: unidadeObj,
+        clienteAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
+        status: 'aguardando',
+        prioridade: 'normal',
+        setor: 'portaria',
+        tags: ['#WhatsApp', '#Morador'],
+        assunto: dados.texto.substring(0, 50) + (dados.texto.length > 50 ? '...' : ''),
+        criadoEm: agora,
+        ultimaMensagem: dados.texto,
+        ultimaMensagemTimestamp: agora,
+        mensagensNaoLidas: 1,
+        mensagens: [],
+      };
+      this.whatsAppTickets[condoId].unshift(ticket);
+    } else if (ticket.status === 'finalizado') {
+      ticket.status = 'aguardando';
+    }
+
+    ticket.mensagens.push({
+      id: `msg_${agora}_${Math.random().toString(36).substring(2, 6)}`,
+      ticketId: ticket.id,
+      remetente: 'cliente',
+      remetenteNome: dados.clienteNome,
+      tipo: dados.tipoMidia || 'texto',
+      conteudo: dados.texto,
+      mediaUrl: dados.mediaUrl,
+      audioDuracao: dados.tipoMidia === 'audio' ? 5 : undefined,
+      timestamp: agora,
+      status: 'entregue',
+    });
+
+    ticket.ultimaMensagem = dados.texto;
+    ticket.ultimaMensagemTimestamp = agora;
+    ticket.mensagensNaoLidas += 1;
+
+    this.saveToStorage();
+    this.notify();
+
+    playNotificationSound('mensagem');
+    notificationService.dispararNotificacaoNativa(
+      `💬 WhatsApp de ${dados.clienteNome}`,
+      {
+        body: dados.texto,
+        tag: `ticket-${ticket.id}`,
+      }
+    );
+
+    return ticket;
+  }
+
+  public obterOuCriarTicketParaMorador(
+    condoId: string,
+    morador: Morador,
+    assuntoInicial?: string,
+    mensagemInicial?: string
+  ): WhatsAppTicket {
+    this.ensureCondoSubscribed(condoId);
+    if (!this.whatsAppTickets[condoId]) {
+      this.whatsAppTickets[condoId] = [];
+    }
+    const list = this.whatsAppTickets[condoId];
+
+    // Procura ticket existente do morador
+    const telMoradorLimpo = (morador.telefone || '').replace(/\D/g, '');
+    let ticketExistente = list.find((t) => {
+      if (t.clienteId && t.clienteId === morador.id) return true;
+      if (telMoradorLimpo && t.clienteTelefone) {
+        const telTicketLimpo = t.clienteTelefone.replace(/\D/g, '');
+        if (telTicketLimpo && (telTicketLimpo.includes(telMoradorLimpo) || telMoradorLimpo.includes(telTicketLimpo))) return true;
+      }
+      if (t.clienteUnidade && morador.unidade) {
+        const a1 = String(t.clienteUnidade.apto).trim().toLowerCase();
+        const a2 = String(morador.unidade.apto).trim().toLowerCase();
+        const b1 = String(t.clienteUnidade.bloco || '1').trim().toLowerCase();
+        const b2 = String(morador.unidade.bloco || '1').trim().toLowerCase();
+        if (a1 === a2 && b1 === b2) return true;
+      }
+      return false;
+    });
+
+    const agora = Date.now();
+
+    if (ticketExistente) {
+      if (ticketExistente.status === 'finalizado' || ticketExistente.status === 'cancelado') {
+        ticketExistente.status = 'atendendo';
+      }
+      if (mensagemInicial) {
+        this.enviarMensagemTicket(condoId, ticketExistente.id, {
+          remetente: 'atendente',
+          remetenteNome: 'Portaria 24 Horas',
+          tipo: 'texto',
+          conteudo: mensagemInicial,
+        });
+      }
+      return ticketExistente;
+    }
+
+    const nextNum = list.length + 782;
+    const novoTicket: WhatsAppTicket = {
+      id: `#${nextNum}`,
+      protocolo: `ATD-${nextNum}`,
+      condominioId: condoId,
+      clienteId: morador.id,
+      clienteNome: morador.nome,
+      clienteTelefone: morador.telefone || '+55 (11) 99999-9999',
+      clienteUnidade: morador.unidade,
+      clienteAvatar: morador.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80',
+      status: 'atendendo',
+      prioridade: 'normal',
+      setor: 'portaria',
+      atendenteId: 'portaria_central',
+      atendenteNome: 'Portaria 24 Horas',
+      atendenteRole: 'portaria',
+      tags: ['#Morador', `#Apto${morador.unidade?.apto || '101'}`],
+      assunto: assuntoInicial || `Atendimento Apto ${morador.unidade?.apto || ''}`,
+      criadoEm: agora,
+      iniciadoEm: agora,
+      ultimaMensagem: mensagemInicial || 'Conversa iniciada com o morador.',
+      ultimaMensagemTimestamp: agora,
+      mensagensNaoLidas: 0,
+      mensagens: mensagemInicial
+        ? [
+            {
+              id: `msg_${agora}_1`,
+              ticketId: `#${nextNum}`,
+              remetente: 'atendente',
+              remetenteNome: 'Portaria 24 Horas',
+              tipo: 'texto',
+              conteudo: mensagemInicial,
+              timestamp: agora,
+              status: 'entregue',
+            },
+          ]
+        : [],
+    };
+
+    list.unshift(novoTicket);
+    this.saveToStorage();
+    this.notify();
+    return novoTicket;
   }
 
   // --- Consulta de Moradores por Unidade (Múltiplos moradores no mesmo apto) ---

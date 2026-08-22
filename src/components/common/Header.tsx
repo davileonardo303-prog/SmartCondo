@@ -12,6 +12,7 @@ import {
   Sliders,
   Download,
   X,
+  Clock,
 } from 'lucide-react';
 import { UserRole, Condominio, Morador, AppNotification, UserAccount } from '../../types';
 import { condoStore } from '../../services/mockStorage';
@@ -43,6 +44,22 @@ export const Header: React.FC<HeaderProps> = ({
     return 'default';
   });
   const [pushTestMessage, setPushTestMessage] = useState<string | null>(null);
+
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const timeFormatted = currentTime.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZone: 'America/Sao_Paulo',
+  });
 
   const unreadCount = notifications.filter((n) => !n.lida).length;
 
@@ -395,6 +412,12 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+            {/* Indicador de Fuso Horário Oficial do Brasil (Horário de Brasília) */}
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-[11px] font-medium" title="Fuso Horário Oficial: Horário de Brasília (UTC-3)">
+              <Clock className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+              <span>Brasília (UTC-3): <strong className="font-mono text-slate-900 dark:text-white font-bold">{timeFormatted}</strong></span>
+            </div>
+
             <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 truncate max-w-[180px]">
               {currentCondo.nome}
             </span>

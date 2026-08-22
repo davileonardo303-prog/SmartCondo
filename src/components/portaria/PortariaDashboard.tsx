@@ -19,6 +19,7 @@ import { FotoEtiquetaCapture } from './FotoEtiquetaCapture';
 import { VisitantesAlertBanner } from './VisitantesAlertBanner';
 import { IntercomPTTView } from '../interfone/IntercomPTTView';
 import { CentralTelefonicaView } from '../interfone/CentralTelefonicaView';
+import { WhatsAppDropDeskView } from '../whatsapp/WhatsAppDropDeskView';
 import {
   Package,
   Bike,
@@ -70,9 +71,46 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
   historicoLocacoes,
   currentUser,
 }) => {
+  // Módulos contratados e ativos para este condomínio
+  const modulosAtivos = condoStore.getModulosCondominio(condominio.id);
+
   const [activeTab, setActiveTab] = useState<
-    'receber' | 'bicicletario' | 'equipamentos' | 'visitantes' | 'interfone' | 'historico'
-  >('receber');
+    'receber' | 'bicicletario' | 'equipamentos' | 'visitantes' | 'interfone' | 'whatsapp_desk' | 'historico'
+  >(() => {
+    if (modulosAtivos.encomendas) return 'receber';
+    if (modulosAtivos.bicicletario) return 'bicicletario';
+    if (modulosAtivos.equipamentos) return 'equipamentos';
+    if (modulosAtivos.seguranca) return 'visitantes';
+    if (modulosAtivos.interfone) return 'interfone';
+    if (modulosAtivos.portaria_whatsapp) return 'whatsapp_desk';
+    return 'historico';
+  });
+
+  // Garantia de tab válida caso os módulos mudem
+  useEffect(() => {
+    const isTabValid = (tab: string): boolean => {
+      if (tab === 'receber') return !!modulosAtivos.encomendas;
+      if (tab === 'bicicletario') return !!modulosAtivos.bicicletario;
+      if (tab === 'equipamentos') return !!modulosAtivos.equipamentos;
+      if (tab === 'visitantes') return !!modulosAtivos.seguranca;
+      if (tab === 'interfone') return !!modulosAtivos.interfone;
+      if (tab === 'whatsapp_desk') return !!modulosAtivos.portaria_whatsapp;
+      if (tab === 'historico') return true;
+      return true;
+    };
+
+    if (!isTabValid(activeTab)) {
+      if (modulosAtivos.bicicletario) {
+        setActiveTab('bicicletario');
+      } else if (modulosAtivos.encomendas) {
+        setActiveTab('receber');
+      } else if (modulosAtivos.equipamentos) {
+        setActiveTab('equipamentos');
+      } else {
+        setActiveTab('historico');
+      }
+    }
+  }, [condominio.id, modulosAtivos, activeTab]);
 
   // Encomendas: Receber & Lote por Apartamento
   const [cadastroMode, setCadastroMode] = useState<'lista' | 'manual'>('manual');
@@ -159,6 +197,9 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
 
   // Dados reativos da Portaria
   const visitantes = condoStore.getVisitantes(condominio.id);
+  const whatsAppTickets = condoStore.getWhatsAppTickets(condominio.id);
+  const whatsAppUnreadCount = whatsAppTickets.reduce((acc, t) => acc + (t.mensagensNaoLidas || 0), 0);
+  const whatsAppWaitingCount = whatsAppTickets.filter((t) => t.status === 'aguardando').length;
 
   const pendingPackages = encomendas.filter((e) => e.status === 'na_portaria');
   const deliveredPackages = encomendas.filter((e) => e.status === 'entregue');
@@ -567,96 +608,132 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
             <QrCode className="w-4 h-4" />
             <span>⚡ Scanner Universal (QR & PIN)</span>
           </button>
-          <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl text-center border border-white/10 min-w-[90px]">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block">Na Portaria</span>
-            <span className="text-xl font-black text-amber-400 font-mono">{pendingPackages.length}</span>
-          </div>
-          <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl text-center border border-white/10 min-w-[90px]">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block">Bikes em 5min</span>
-            <span className="text-xl font-black text-emerald-400 font-mono">{reservedBikes.length}</span>
-          </div>
+          {modulosAtivos.encomendas && (
+            <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl text-center border border-white/10 min-w-[90px]">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Na Portaria</span>
+              <span className="text-xl font-black text-amber-400 font-mono">{pendingPackages.length}</span>
+            </div>
+          )}
+          {modulosAtivos.bicicletario && (
+            <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl text-center border border-white/10 min-w-[90px]">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Bikes em 5min</span>
+              <span className="text-xl font-black text-emerald-400 font-mono">{reservedBikes.length}</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Banner de Notificação Gigante de Liberação de Visitantes Emitida pelos Moradores */}
-      <VisitantesAlertBanner
-        condominio={condominio}
-        onOpenVisitantesTab={() => setActiveTab('visitantes')}
-      />
+      {/* Banner de Notificação Gigante de Liberação de Visitantes Emitida pelos Moradores (Se módulo de segurança ativo) */}
+      {modulosAtivos.seguranca && (
+        <VisitantesAlertBanner
+          condominio={condominio}
+          onOpenVisitantesTab={() => setActiveTab('visitantes')}
+        />
+      )}
 
       {/* Navegação de Abas */}
       <ScrollableTabsNav>
-        <button
-          onClick={() => setActiveTab('receber')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'receber'
-              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Package className="w-4 h-4" />
-          <span>Receber & Entregar Encomendas</span>
-          {pendingPackages.length > 0 && (
-            <span className="text-[10px] bg-white text-amber-900 font-black px-1.5 py-0.5 rounded-full ml-1 shadow-xs">
-              {pendingPackages.length}
-            </span>
-          )}
-        </button>
+        {modulosAtivos.encomendas && (
+          <button
+            onClick={() => setActiveTab('receber')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
+              activeTab === 'receber'
+                ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Package className="w-4 h-4" />
+            <span>Receber & Entregar Encomendas</span>
+            {pendingPackages.length > 0 && (
+              <span className="text-[10px] bg-white text-amber-900 font-black px-1.5 py-0.5 rounded-full ml-1 shadow-xs">
+                {pendingPackages.length}
+              </span>
+            )}
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab('bicicletario')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'bicicletario'
-              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Bike className="w-4 h-4" />
-          <span>Totem & Bikes (5 min)</span>
-          {reservedBikes.length > 0 && (
-            <span className="text-[10px] bg-emerald-500 text-white font-black px-2 py-0.5 rounded-full animate-bounce">
-              {reservedBikes.length} reservadas
-            </span>
-          )}
-        </button>
+        {modulosAtivos.bicicletario && (
+          <button
+            onClick={() => setActiveTab('bicicletario')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
+              activeTab === 'bicicletario'
+                ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Bike className="w-4 h-4" />
+            <span>Totem & Bikes (5 min)</span>
+            {reservedBikes.length > 0 && (
+              <span className="text-[10px] bg-emerald-500 text-white font-black px-2 py-0.5 rounded-full animate-bounce">
+                {reservedBikes.length} reservadas
+              </span>
+            )}
+          </button>
+        )}
 
-        <button
-          id="tab-portaria-equipamentos"
-          onClick={() => setActiveTab('equipamentos')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'equipamentos'
-              ? 'bg-teal-700 text-white shadow-md shadow-teal-700/20'
-              : 'text-teal-900 bg-teal-50 hover:bg-teal-100 border border-teal-200'
-          }`}
-        >
-          <Wrench className="w-4 h-4 text-teal-700" />
-          <span>Itens & Equipamentos (5 min)</span>
-        </button>
+        {modulosAtivos.equipamentos && (
+          <button
+            id="tab-portaria-equipamentos"
+            onClick={() => setActiveTab('equipamentos')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
+              activeTab === 'equipamentos'
+                ? 'bg-teal-700 text-white shadow-md shadow-teal-700/20'
+                : 'text-teal-900 bg-teal-50 hover:bg-teal-100 border border-teal-200'
+            }`}
+          >
+            <Wrench className="w-4 h-4 text-teal-700" />
+            <span>Itens & Equipamentos (5 min)</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab('visitantes')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'visitantes'
-              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Controle de Visitantes</span>
-        </button>
+        {modulosAtivos.seguranca && (
+          <button
+            onClick={() => setActiveTab('visitantes')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
+              activeTab === 'visitantes'
+                ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Controle de Visitantes</span>
+          </button>
+        )}
 
-        <button
-          id="tab-portaria-interfone"
-          onClick={() => setActiveTab('interfone')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'interfone'
-              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-              : 'text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200'
-          }`}
-        >
-          <PhoneCall className="w-4 h-4 text-indigo-600" />
-          <span>📞 Interfone & Moradores</span>
-        </button>
+        {modulosAtivos.interfone && (
+          <button
+            id="tab-portaria-interfone"
+            onClick={() => setActiveTab('interfone')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
+              activeTab === 'interfone'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                : 'text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200'
+            }`}
+          >
+            <PhoneCall className="w-4 h-4 text-indigo-600" />
+            <span>📞 Interfone & Moradores</span>
+          </button>
+        )}
+
+        {modulosAtivos.portaria_whatsapp && (
+          <button
+            id="tab-portaria-whatsapp-desk"
+            onClick={() => setActiveTab('whatsapp_desk')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'whatsapp_desk'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                : 'text-emerald-950 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300'
+            }`}
+          >
+            <Phone className="w-4 h-4 text-emerald-600" />
+            <span>💬 WhatsApp Portaria (DropDesk)</span>
+            {(whatsAppUnreadCount > 0 || whatsAppWaitingCount > 0) && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white animate-pulse shadow-xs">
+                {whatsAppUnreadCount > 0 ? whatsAppUnreadCount : whatsAppWaitingCount}
+              </span>
+            )}
+          </button>
+        )}
 
         <button
           onClick={() => setActiveTab('historico')}
@@ -1745,26 +1822,18 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
 
       {/* ABA 5: INTERFONE, CENTRAL TELEFÔNICA & PTT */}
       {activeTab === 'interfone' && (
-        <div className="space-y-6">
-          <CentralTelefonicaView
-            condominio={condominio}
-            currentUser={
-              currentUser || {
-                id: 'portaria',
-                nome: 'Portaria Central 24h',
-                email: 'portaria@condominio.com',
-                role: 'portaria',
-                condominioId: condominio.id,
-              }
+        <CentralTelefonicaView
+          condominio={condominio}
+          currentUser={
+            currentUser || {
+              id: 'portaria',
+              nome: 'Portaria Central 24h',
+              email: 'portaria@condominio.com',
+              role: 'portaria',
+              condominioId: condominio.id,
             }
-          />
-
-          <IntercomPTTView
-            condominio={condominio}
-            currentUserRole="portaria"
-            currentUserName="Portaria Central"
-          />
-        </div>
+          }
+        />
       )}
 
       {/* MODAL DE VISTORIA FOTOGRÁFICA DE DEVOLUÇÃO NA PORTARIA */}
@@ -2136,6 +2205,17 @@ export const PortariaDashboard: React.FC<PortariaDashboardProps> = ({
             </table>
           </div>
         </div>
+      )}
+
+      {/* ABA: WHATSAPP DROPDESK MULTIATENDENTE */}
+      {activeTab === 'whatsapp_desk' && (
+        <WhatsAppDropDeskView
+          condominio={condominio}
+          moradores={moradores}
+          currentUserRole="portaria"
+          currentUserName="Porteiro de Plantão"
+          currentUserId={currentUser?.id || 'portaria_central'}
+        />
       )}
 
       {/* Modal: Validação Segura de Entrega de Encomenda */}

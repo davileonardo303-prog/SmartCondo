@@ -16,7 +16,7 @@ export interface EmailNotificationLog {
  * Toca um som harmônico de notificação agradável (campainha suave / chime)
  * utilizando a Web Audio API nativa sem depender de arquivos externos.
  */
-export function playNotificationSound(tipo: 'encomenda' | 'aviso' | 'sucesso' = 'encomenda') {
+export function playNotificationSound(tipo: 'encomenda' | 'aviso' | 'sucesso' | 'mensagem' | 'sucesso_acao' = 'encomenda') {
   if (typeof window === 'undefined') return;
   try {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -55,6 +55,19 @@ export function playNotificationSound(tipo: 'encomenda' | 'aviso' | 'sucesso' = 
       osc2.start(now);
       osc1.stop(now + 0.9);
       osc2.stop(now + 0.9);
+    } else if (tipo === 'mensagem') {
+      // Ping suave de mensagem (E5 -> E6)
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(659.25, now);
+      osc.frequency.exponentialRampToValueAtTime(1318.5, now + 0.12);
+
+      gainNode.gain.setValueAtTime(0.3, now);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+      osc.connect(gainNode);
+      osc.start(now);
+      osc.stop(now + 0.25);
     } else {
       // Tom suave de confirmação
       const osc = ctx.createOscillator();

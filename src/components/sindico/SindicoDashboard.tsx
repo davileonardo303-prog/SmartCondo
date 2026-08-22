@@ -14,6 +14,7 @@ import {
   Send,
   Check,
   PhoneCall,
+  Video,
   Search,
   Settings,
   X,
@@ -59,6 +60,7 @@ import {
 } from '../../types';
 import { condoStore } from '../../services/mockStorage';
 import { WhatsAppBroadcastPanel } from './WhatsAppBroadcastPanel';
+import { WhatsAppDropDeskView } from '../whatsapp/WhatsAppDropDeskView';
 import { GestaoEquipePermissoes } from './GestaoEquipePermissoes';
 import { RegrasEncomendasPanel } from './RegrasEncomendasPanel';
 import { RelatorioMensalAssembleiaModal } from './RelatorioMensalAssembleiaModal';
@@ -88,6 +90,11 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
   avisos,
   currentUser,
 }) => {
+  // Módulos contratados e ativos para este condomínio
+  const modulosAtivos = condoStore.getModulosCondominio(condominio.id);
+  const totalModulosAtivos = Object.values(modulosAtivos).filter(Boolean).length;
+  const isApenasBike = modulosAtivos.bicicletario && totalModulosAtivos === 1;
+
   const [activeTab, setActiveTab] = useState<
     | 'moradores'
     | 'interfone'
@@ -106,7 +113,37 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
     | 'whatsapp'
     | 'aprovacoes'
     | 'configuracoes'
-  >('moradores');
+  >(() => {
+    // Inicia na frota se for condomínio exclusivo de bike, ou moradores
+    if (isApenasBike) return 'frota';
+    return 'moradores';
+  });
+
+  // Garantia de fallback se o usuário ou módulo for desativado
+  useEffect(() => {
+    const isTabValid = (tab: string): boolean => {
+      if (tab === 'moradores' || tab === 'equipe' || tab === 'aprovacoes' || tab === 'configuracoes') return true;
+      if (tab === 'frota' || tab === 'liberacoes') return !!modulosAtivos.bicicletario;
+      if (tab === 'regras_encomendas') return !!modulosAtivos.encomendas;
+      if (tab === 'interfone') return !!modulosAtivos.interfone;
+      if (tab === 'equipamentos') return !!modulosAtivos.equipamentos;
+      if (tab === 'lazer' || tab === 'reservas') return !!modulosAtivos.lazer;
+      if (tab === 'ocorrencias') return !!modulosAtivos.ocorrencias;
+      if (tab === 'financeiro') return !!modulosAtivos.financeiro;
+      if (tab === 'comunidade' || tab === 'avisos') return !!modulosAtivos.mural;
+      if (tab === 'documentos') return !!modulosAtivos.documentos;
+      if (tab === 'whatsapp') return !!modulosAtivos.portaria_whatsapp;
+      return true;
+    };
+
+    if (!isTabValid(activeTab)) {
+      if (modulosAtivos.bicicletario) {
+        setActiveTab('frota');
+      } else {
+        setActiveTab('moradores');
+      }
+    }
+  }, [condominio.id, modulosAtivos, activeTab]);
 
   // Filtro de Moradores
   const [moradorSearch, setMoradorSearch] = useState('');
@@ -791,14 +828,18 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
               <div className="text-base font-extrabold text-indigo-900 leading-tight">{moradores.length}</div>
               <div className="text-[10px] font-semibold text-indigo-700">Moradores</div>
             </div>
-            <div className="bg-purple-50 px-3 py-1.5 rounded-xl border border-purple-200 text-center">
-              <div className="text-base font-extrabold text-purple-900 leading-tight">{bikes.length}</div>
-              <div className="text-[10px] font-semibold text-purple-700">Frota Bikes</div>
-            </div>
-            <div className="bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 text-center">
-              <div className="text-base font-extrabold text-emerald-900 leading-tight">{areasLazer.length}</div>
-              <div className="text-[10px] font-semibold text-emerald-700">Áreas Lazer</div>
-            </div>
+            {modulosAtivos.bicicletario && (
+              <div className="bg-purple-50 px-3 py-1.5 rounded-xl border border-purple-200 text-center">
+                <div className="text-base font-extrabold text-purple-900 leading-tight">{bikes.length}</div>
+                <div className="text-[10px] font-semibold text-purple-700">Frota Bikes</div>
+              </div>
+            )}
+            {modulosAtivos.lazer && (
+              <div className="bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 text-center">
+                <div className="text-base font-extrabold text-emerald-900 leading-tight">{areasLazer.length}</div>
+                <div className="text-[10px] font-semibold text-emerald-700">Áreas Lazer</div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -816,7 +857,7 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
         </div>
       )}
 
-      {/* Abas de Navegação */}
+      {/* Abas de Navegação Condicionadas aos Módulos Ativos do Condomínio */}
       <ScrollableTabsNav>
         <button
           onClick={() => setActiveTab('moradores')}
@@ -830,18 +871,20 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
           <span>Moradores & Cadastros ({moradores.length})</span>
         </button>
 
-        <button
-          id="tab-sindico-interfone"
-          onClick={() => setActiveTab('interfone')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'interfone'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
-              : 'text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300'
-          }`}
-        >
-          <PhoneCall className="w-4 h-4 text-emerald-600" />
-          <span>Central Telefônica & Interfone</span>
-        </button>
+        {modulosAtivos.interfone && (
+          <button
+            id="tab-sindico-interfone"
+            onClick={() => setActiveTab('interfone')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'interfone'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+                : 'text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300'
+            }`}
+          >
+            <PhoneCall className="w-4 h-4 text-emerald-600" />
+            <span>Central Telefônica & Interfone</span>
+          </button>
+        )}
 
         <button
           id="tab-sindico-equipe"
@@ -856,162 +899,186 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
           <span>Equipe & Permissões ({condoStore.getFuncionarios(condominio.id).length})</span>
         </button>
 
-        <button
-          id="tab-sindico-regras-encomendas"
-          onClick={() => setActiveTab('regras_encomendas')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'regras_encomendas'
-              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
-              : 'text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200'
-          }`}
-        >
-          <Package className="w-4 h-4 text-amber-600" />
-          <span>Regras de Encomendas ({condominio.regras?.diasLimiteRetiradaEncomenda ?? 5} dias)</span>
-        </button>
+        {modulosAtivos.encomendas && (
+          <button
+            id="tab-sindico-regras-encomendas"
+            onClick={() => setActiveTab('regras_encomendas')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'regras_encomendas'
+                ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
+                : 'text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200'
+            }`}
+          >
+            <Package className="w-4 h-4 text-amber-600" />
+            <span>Regras de Encomendas ({condominio.regras?.diasLimiteRetiradaEncomenda ?? 5} dias)</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab('frota')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'frota'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Bike className="w-4 h-4" />
-          <span>Gestão da Frota ({bikes.length})</span>
-        </button>
+        {modulosAtivos.bicicletario && (
+          <button
+            onClick={() => setActiveTab('frota')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'frota'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Bike className="w-4 h-4" />
+            <span>Gestão da Frota ({bikes.length})</span>
+          </button>
+        )}
 
-        <button
-          id="tab-sindico-liberacoes"
-          onClick={() => setActiveTab('liberacoes')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'liberacoes'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-              : 'text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200'
-          }`}
-        >
-          <KeyRound className="w-4 h-4 text-emerald-600" />
-          <span>Liberação & Senhas ({bikes.filter((b) => b.status === 'reservada_5min').length})</span>
-          {bikes.filter((b) => b.status === 'reservada_5min').length > 0 && (
-            <span className="bg-emerald-600 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full animate-pulse">
-              {bikes.filter((b) => b.status === 'reservada_5min').length}
-            </span>
-          )}
-        </button>
+        {modulosAtivos.bicicletario && (
+          <button
+            id="tab-sindico-liberacoes"
+            onClick={() => setActiveTab('liberacoes')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'liberacoes'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                : 'text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200'
+            }`}
+          >
+            <KeyRound className="w-4 h-4 text-emerald-600" />
+            <span>Liberação & Senhas ({bikes.filter((b) => b.status === 'reservada_5min').length})</span>
+            {bikes.filter((b) => b.status === 'reservada_5min').length > 0 && (
+              <span className="bg-emerald-600 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full animate-pulse">
+                {bikes.filter((b) => b.status === 'reservada_5min').length}
+              </span>
+            )}
+          </button>
+        )}
 
-        <button
-          id="tab-sindico-equipamentos"
-          onClick={() => setActiveTab('equipamentos')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'equipamentos'
-              ? 'bg-teal-700 text-white shadow-sm'
-              : 'text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200'
-          }`}
-        >
-          <Wrench className="w-4 h-4" />
-          <span>Itens & Equipamentos</span>
-        </button>
+        {modulosAtivos.equipamentos && (
+          <button
+            id="tab-sindico-equipamentos"
+            onClick={() => setActiveTab('equipamentos')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'equipamentos'
+                ? 'bg-teal-700 text-white shadow-sm'
+                : 'text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200'
+            }`}
+          >
+            <Wrench className="w-4 h-4" />
+            <span>Itens & Equipamentos</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab('lazer')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'lazer'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Sparkles className="w-4 h-4" />
-          <span>Áreas Comuns & Lazer ({areasLazer.length})</span>
-        </button>
+        {modulosAtivos.lazer && (
+          <button
+            onClick={() => setActiveTab('lazer')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'lazer'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Áreas Comuns & Lazer ({areasLazer.length})</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab('reservas')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'reservas'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Calendar className="w-4 h-4" />
-          <span>Agenda & Reservas ({reservas.length})</span>
-        </button>
+        {modulosAtivos.lazer && (
+          <button
+            onClick={() => setActiveTab('reservas')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'reservas'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            <span>Agenda & Reservas ({reservas.length})</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab('ocorrencias')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap relative cursor-pointer ${
-            activeTab === 'ocorrencias'
-              ? 'bg-amber-600 text-white shadow-sm'
-              : 'text-amber-700 bg-amber-50 hover:bg-amber-100 hover:text-amber-900 border border-amber-200/80'
-          }`}
-        >
-          <Wrench className="w-4 h-4" />
-          <span>Ocorrências & Chamados ({ocorrencias.length})</span>
-          {ocorrencias.filter((o) => o.status === 'aberto').length > 0 && (
-            <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full">
-              {ocorrencias.filter((o) => o.status === 'aberto').length}
-            </span>
-          )}
-        </button>
+        {modulosAtivos.ocorrencias && (
+          <button
+            onClick={() => setActiveTab('ocorrencias')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap relative cursor-pointer ${
+              activeTab === 'ocorrencias'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'text-amber-700 bg-amber-50 hover:bg-amber-100 hover:text-amber-900 border border-amber-200/80'
+            }`}
+          >
+            <Wrench className="w-4 h-4" />
+            <span>Ocorrências & Chamados ({ocorrencias.length})</span>
+            {ocorrencias.filter((o) => o.status === 'aberto').length > 0 && (
+              <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full">
+                {ocorrencias.filter((o) => o.status === 'aberto').length}
+              </span>
+            )}
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab('financeiro')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'financeiro'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <DollarSign className="w-4 h-4" />
-          <span>Financeiro & Prestação</span>
-        </button>
+        {modulosAtivos.financeiro && (
+          <button
+            onClick={() => setActiveTab('financeiro')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'financeiro'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <DollarSign className="w-4 h-4" />
+            <span>Financeiro & Prestação</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab('comunidade')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'comunidade'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Vote className="w-4 h-4" />
-          <span>Comunidade & Enquetes ({enquetes.length})</span>
-        </button>
+        {modulosAtivos.mural && (
+          <button
+            onClick={() => setActiveTab('comunidade')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'comunidade'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Vote className="w-4 h-4" />
+            <span>Comunidade & Enquetes ({enquetes.length})</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab('documentos')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'documentos'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <FileText className="w-4 h-4" />
-          <span>Documentos ({documentos.length})</span>
-        </button>
+        {modulosAtivos.documentos && (
+          <button
+            onClick={() => setActiveTab('documentos')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'documentos'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>Documentos ({documentos.length})</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab('avisos')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'avisos'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <AlertCircle className="w-4 h-4" />
-          <span>Comunicados ({avisos.length})</span>
-        </button>
+        {modulosAtivos.mural && (
+          <button
+            onClick={() => setActiveTab('avisos')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'avisos'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <AlertCircle className="w-4 h-4" />
+            <span>Comunicados ({avisos.length})</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab('whatsapp')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'whatsapp'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
-              : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-900 border border-emerald-200/80'
-          }`}
-        >
-          <PhoneCall className="w-4 h-4" />
-          <span>Disparador WhatsApp</span>
-        </button>
+        {modulosAtivos.portaria_whatsapp && (
+          <button
+            onClick={() => setActiveTab('whatsapp')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'whatsapp'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+                : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-900 border border-emerald-200/80'
+            }`}
+          >
+            <PhoneCall className="w-4 h-4" />
+            <span>💬 Central WhatsApp (DropDesk)</span>
+          </button>
+        )}
 
         <button
           onClick={() => setActiveTab('aprovacoes')}
@@ -1206,6 +1273,51 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
                           </span>
                         </td>
                         <td className="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
+                          {/* Ligar para o Morador por Voz */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              condoStore.iniciarChamada({
+                                condominioId: condominio.id,
+                                callerId: currentUser?.id || 'sindico',
+                                callerName: condominio.sindicoNome ? `Síndico (${condominio.sindicoNome})` : 'Síndico / Administração',
+                                callerRole: 'sindico',
+                                receiverId: m.id,
+                                receiverName: m.nome,
+                                receiverRole: 'morador',
+                                receiverUnidade: m.unidade,
+                                tipo: 'audio',
+                              });
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition cursor-pointer shadow-xs"
+                            title={`Ligar via interfone para ${m.nome} (Bloco ${m.unidade.bloco} - Apto ${m.unidade.apto})`}
+                          >
+                            <PhoneCall className="w-3.5 h-3.5" />
+                            <span>Ligar</span>
+                          </button>
+
+                          {/* Chamada de Vídeo */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              condoStore.iniciarChamada({
+                                condominioId: condominio.id,
+                                callerId: currentUser?.id || 'sindico',
+                                callerName: condominio.sindicoNome ? `Síndico (${condominio.sindicoNome})` : 'Síndico / Administração',
+                                callerRole: 'sindico',
+                                receiverId: m.id,
+                                receiverName: m.nome,
+                                receiverRole: 'morador',
+                                receiverUnidade: m.unidade,
+                                tipo: 'video',
+                              });
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition cursor-pointer shadow-xs"
+                            title={`Chamada de vídeo com ${m.nome}`}
+                          >
+                            <Video className="w-3.5 h-3.5" />
+                          </button>
+
                           {/* Enviar WhatsApp */}
                           <a
                             href={`https://wa.me/${m.telefone.replace(/\D/g, '')}?text=${encodeURIComponent(
@@ -1252,26 +1364,18 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
       {/* ABA: CENTRAL TELEFÔNICA & INTERFONE DIGITAL SÍNDICO */}
       {/* ========================================================================= */}
       {activeTab === 'interfone' && (
-        <div className="space-y-6">
-          <CentralTelefonicaView
-            condominio={condominio}
-            currentUser={
-              currentUser || {
-                id: 'sindico',
-                nome: condominio.sindicoNome || 'Síndico / Administração',
-                email: condominio.sindicoEmail || 'sindico@condominio.com',
-                role: 'sindico',
-                condominioId: condominio.id,
-              }
+        <CentralTelefonicaView
+          condominio={condominio}
+          currentUser={
+            currentUser || {
+              id: 'sindico',
+              nome: condominio.sindicoNome || 'Síndico / Administração',
+              email: condominio.sindicoEmail || 'sindico@condominio.com',
+              role: 'sindico',
+              condominioId: condominio.id,
             }
-          />
-
-          <IntercomPTTView
-            condominio={condominio}
-            currentUserRole="sindico"
-            currentUserName={condominio.sindicoNome || 'Síndico / Gestor'}
-          />
-        </div>
+          }
+        />
       )}
 
       {/* ========================================================================= */}
@@ -2057,12 +2161,15 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* ABA: DISPARO WHATSAPP EM MASSA */}
+      {/* ABA: WHATSAPP DROPDESK & DISPARO EM MASSA */}
       {/* ========================================================================= */}
       {activeTab === 'whatsapp' && (
-        <WhatsAppBroadcastPanel
+        <WhatsAppDropDeskView
           condominio={condominio}
           moradores={moradores}
+          currentUserRole="sindico"
+          currentUserName={currentUser?.nome || 'Síndico(a)'}
+          currentUserId={currentUser?.id || 'sindico_admin'}
         />
       )}
 
@@ -3083,29 +3190,6 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* ABA: CENTRAL TELEFÔNICA, LIGAÇÕES & INTERFONE SÍNDICO                     */}
-      {/* ========================================================================= */}
-      {activeTab === 'interfone' && (
-        <div className="space-y-6">
-          <CentralTelefonicaView
-            condominio={condominio}
-            currentUser={{
-              id: 'sindico',
-              nome: condominio.sindicoNome || 'Síndico Geral',
-              email: condominio.sindicoEmail || 'sindico@condominio.com',
-              role: 'sindico',
-              condominioId: condominio.id,
-            }}
-          />
-
-          <IntercomPTTView
-            condominio={condominio}
-            currentUserRole="sindico"
-            currentUserName={condominio.sindicoNome || 'Síndico Geral'}
-          />
-        </div>
-      )}
 
       {/* ========================================================================= */}
       {/* MODAL: CADASTRAR NOVO MORADOR */}

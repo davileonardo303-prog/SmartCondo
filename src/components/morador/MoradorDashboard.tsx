@@ -84,6 +84,7 @@ import {
 } from '../../types';
 import { condoStore } from '../../services/mockStorage';
 import { notificationService, playNotificationSound } from '../../services/notificationService';
+import { audioAlertService } from '../../utils/audioAlerts';
 import { QrScannerModal } from '../common/QrScannerModal';
 import { BikeLockModal } from '../common/BikeLockModal';
 import { BikeReturnModal } from '../common/BikeReturnModal';
@@ -95,7 +96,8 @@ import { SmartMuralView } from '../common/SmartMuralView';
 import { ScrollableTabsNav } from '../common/ScrollableTabsNav';
 import { IntercomPTTView } from '../interfone/IntercomPTTView';
 import { CentralTelefonicaView } from '../interfone/CentralTelefonicaView';
-import { Wrench } from 'lucide-react';
+import { MercadinhoComidaView } from './MercadinhoComidaView';
+import { Wrench, ShoppingBag } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface MoradorDashboardProps {
@@ -119,10 +121,14 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
   avisos,
   historicoLocacoes,
 }) => {
+  // Módulos ativos contratados para este condomínio
+  const modulosAtivos = condoStore.getModulosCondominio(condominio.id);
+
   // Navigation Tabs (Todos os módulos do SmartCondo)
   const [activeTab, setActiveTab] = useState<
     | 'inicio'
     | 'bicicletario'
+    | 'comida_mercado'
     | 'equipamentos'
     | 'lazer'
     | 'seguranca'
@@ -144,6 +150,16 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
   const [selectedBikeForManualModal, setSelectedBikeForManualModal] = useState<Bicicleta | null>(null);
   const [currentLockPassword, setCurrentLockPassword] = useState('');
   const [bikeForReturn, setBikeForReturn] = useState<Bicicleta | null>(null);
+
+  // Sincroniza e protege a rota caso o síndico/superadmin desative o módulo correspondente
+  useEffect(() => {
+    if (activeTab !== 'inicio') {
+      const isAllowed = modulosAtivos[activeTab as keyof typeof modulosAtivos];
+      if (isAllowed === false) {
+        setActiveTab('inicio');
+      }
+    }
+  }, [activeTab, modulosAtivos]);
 
   // Mensagens e Alertas
   const [alertMessage, setAlertMessage] = useState<{ type: 'error' | 'success' | 'warning'; text: string } | null>(null);
@@ -634,6 +650,11 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
   const inUseBikesCount = (bikes || []).filter((b) => b && b.status === 'em_uso').length;
   const avisoDestaque = (avisos || []).find((a) => a && a.prioritario) || (avisos || [])[0];
 
+  // Configuração de Módulos e Permissões Ativas para este Condomínio
+  const totalModulosAtivos = Object.values(modulosAtivos).filter(Boolean).length;
+  const isApenasBike = modulosAtivos.bicicletario && totalModulosAtivos === 1;
+  const isBikeAndFood = modulosAtivos.bicicletario && modulosAtivos.comida_mercado && totalModulosAtivos === 2;
+
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5 sm:space-y-6 w-full max-w-full overflow-x-hidden">
       {/* Alerta de Feedback Superior */}
@@ -837,199 +858,242 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
                   </div>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('bicicletario');
-                    setIsMobileSidebarOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-                    activeTab === 'bicicletario'
-                      ? 'bg-emerald-800 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Bike className="w-4 h-4" />
-                    <span>Bicicletas (5 min)</span>
-                  </div>
-                  <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                {modulosAtivos.bicicletario && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('bicicletario');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
                       activeTab === 'bicicletario'
-                        ? 'bg-emerald-950 text-emerald-100'
-                        : 'bg-emerald-100 text-emerald-800'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
                   >
-                    {availableBikesCount} livres
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('equipamentos');
-                    setIsMobileSidebarOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-                    activeTab === 'equipamentos'
-                      ? 'bg-emerald-800 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Wrench className="w-4 h-4" />
-                    <span>Itens & Equipamentos</span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('lazer');
-                    setIsMobileSidebarOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-                    activeTab === 'lazer'
-                      ? 'bg-emerald-800 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Calendar className="w-4 h-4" />
-                    <span>Reservas & Lazer</span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('seguranca');
-                    setIsMobileSidebarOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-                    activeTab === 'seguranca'
-                      ? 'bg-emerald-800 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Users className="w-4 h-4" />
-                    <span>Visitantes & Convidados</span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('interfone');
-                    setIsMobileSidebarOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-                    activeTab === 'interfone'
-                      ? 'bg-emerald-800 text-white shadow-xs'
-                      : 'border border-emerald-300 text-emerald-800 bg-emerald-50/60 hover:bg-emerald-100'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <PhoneCall className="w-4 h-4 text-emerald-700" />
-                    <span>Interfone & Telefonia</span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('encomendas');
-                    setIsMobileSidebarOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-                    activeTab === 'encomendas'
-                      ? 'bg-emerald-800 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Package className="w-4 h-4" />
-                    <span>Encomendas</span>
-                  </div>
-                  {pendingPackages.length > 0 && (
-                    <span className="text-[10px] bg-amber-500 text-white px-2 py-0.5 rounded-full font-black">
-                      {pendingPackages.length}
+                    <div className="flex items-center gap-3">
+                      <Bike className="w-4 h-4" />
+                      <span>Bicicletas (5 min)</span>
+                    </div>
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                        activeTab === 'bicicletario'
+                          ? 'bg-emerald-950 text-emerald-100'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}
+                    >
+                      {availableBikesCount} livres
                     </span>
-                  )}
-                </button>
+                  </button>
+                )}
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('ocorrencias');
-                    setIsMobileSidebarOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-                    activeTab === 'ocorrencias'
-                      ? 'bg-emerald-800 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <AlertCircle className="w-4 h-4" />
-                    <span>Ocorrências</span>
-                  </div>
-                </button>
+                {modulosAtivos.comida_mercado && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('comida_mercado');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'comida_mercado'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <ShoppingBag className="w-4 h-4 text-emerald-600" />
+                      <span>Mercadinho & Comida</span>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-emerald-100 text-emerald-800">
+                      Loja
+                    </span>
+                  </button>
+                )}
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('financeiro');
-                    setIsMobileSidebarOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-                    activeTab === 'financeiro'
-                      ? 'bg-emerald-800 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <DollarSign className="w-4 h-4" />
-                    <span>Financeiro</span>
-                  </div>
-                </button>
+                {modulosAtivos.equipamentos && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('equipamentos');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'equipamentos'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Wrench className="w-4 h-4" />
+                      <span>Itens & Equipamentos</span>
+                    </div>
+                  </button>
+                )}
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('mural');
-                    setIsMobileSidebarOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-                    activeTab === 'mural'
-                      ? 'bg-emerald-800 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <MessageSquare className="w-4 h-4" />
-                    <span>Comunidade</span>
-                  </div>
-                </button>
+                {modulosAtivos.lazer && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('lazer');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'lazer'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Calendar className="w-4 h-4" />
+                      <span>Reservas & Lazer</span>
+                    </div>
+                  </button>
+                )}
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('documentos');
-                    setIsMobileSidebarOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-                    activeTab === 'documentos'
-                      ? 'bg-emerald-800 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <FileText className="w-4 h-4" />
-                    <span>Documentos</span>
-                  </div>
-                </button>
+                {modulosAtivos.seguranca && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('seguranca');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'seguranca'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Users className="w-4 h-4" />
+                      <span>Visitantes & Convidados</span>
+                    </div>
+                  </button>
+                )}
+
+                {modulosAtivos.interfone && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('interfone');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'interfone'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'border border-emerald-300 text-emerald-800 bg-emerald-50/60 hover:bg-emerald-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <PhoneCall className="w-4 h-4 text-emerald-700" />
+                      <span>Interfone & Telefonia</span>
+                    </div>
+                  </button>
+                )}
+
+                {modulosAtivos.encomendas && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('encomendas');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'encomendas'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Package className="w-4 h-4" />
+                      <span>Encomendas</span>
+                    </div>
+                    {pendingPackages.length > 0 && (
+                      <span className="text-[10px] bg-amber-500 text-white px-2 py-0.5 rounded-full font-black">
+                        {pendingPackages.length}
+                      </span>
+                    )}
+                  </button>
+                )}
+
+                {modulosAtivos.ocorrencias && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('ocorrencias');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'ocorrencias'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>Ocorrências</span>
+                    </div>
+                  </button>
+                )}
+
+                {modulosAtivos.financeiro && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('financeiro');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'financeiro'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <DollarSign className="w-4 h-4" />
+                      <span>Financeiro</span>
+                    </div>
+                  </button>
+                )}
+
+                {modulosAtivos.mural && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('mural');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'mural'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <MessageSquare className="w-4 h-4" />
+                      <span>Comunidade</span>
+                    </div>
+                  </button>
+                )}
+
+                {modulosAtivos.documentos && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('documentos');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                      activeTab === 'documentos'
+                        ? 'bg-emerald-800 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <FileText className="w-4 h-4" />
+                      <span>Documentos</span>
+                    </div>
+                  </button>
+                )}
               </nav>
             </div>
 
@@ -1071,143 +1135,178 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
               <span>Início</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('bicicletario')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
-                activeTab === 'bicicletario'
-                  ? 'bg-emerald-700 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
-              }`}
-            >
-              <Bike className="w-3.5 h-3.5" />
-              <span>Bicicletas</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${activeTab === 'bicicletario' ? 'bg-emerald-900 text-emerald-100' : 'bg-emerald-100 text-emerald-800'}`}>
-                {availableBikesCount}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('interfone')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
-                activeTab === 'interfone'
-                  ? 'bg-emerald-700 text-white shadow-xs'
-                  : 'text-emerald-800 bg-emerald-50 border border-emerald-200'
-              }`}
-            >
-              <PhoneCall className="w-3.5 h-3.5" />
-              <span>Interfone</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('encomendas')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
-                activeTab === 'encomendas'
-                  ? 'bg-emerald-700 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
-              }`}
-            >
-              <Package className="w-3.5 h-3.5" />
-              <span>Encomendas</span>
-              {pendingPackages.length > 0 && (
-                <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.2 rounded-full font-black">
-                  {pendingPackages.length}
+            {modulosAtivos.bicicletario && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('bicicletario')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'bicicletario'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <Bike className="w-3.5 h-3.5" />
+                <span>Bicicletas</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${activeTab === 'bicicletario' ? 'bg-emerald-900 text-emerald-100' : 'bg-emerald-100 text-emerald-800'}`}>
+                  {availableBikesCount}
                 </span>
-              )}
-            </button>
+              </button>
+            )}
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('lazer')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
-                activeTab === 'lazer'
-                  ? 'bg-emerald-700 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
-              }`}
-            >
-              <Calendar className="w-3.5 h-3.5" />
-              <span>Lazer</span>
-            </button>
+            {modulosAtivos.comida_mercado && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('comida_mercado')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'comida_mercado'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <ShoppingBag className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Mercadinho</span>
+              </button>
+            )}
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('equipamentos')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
-                activeTab === 'equipamentos'
-                  ? 'bg-emerald-700 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
-              }`}
-            >
-              <Wrench className="w-3.5 h-3.5" />
-              <span>Itens</span>
-            </button>
+            {modulosAtivos.interfone && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('interfone')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'interfone'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-emerald-800 bg-emerald-50 border border-emerald-200'
+                }`}
+              >
+                <PhoneCall className="w-3.5 h-3.5" />
+                <span>Interfone</span>
+              </button>
+            )}
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('seguranca')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
-                activeTab === 'seguranca'
-                  ? 'bg-emerald-700 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>Visitantes</span>
-            </button>
+            {modulosAtivos.encomendas && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('encomendas')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'encomendas'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <Package className="w-3.5 h-3.5" />
+                <span>Encomendas</span>
+                {pendingPackages.length > 0 && (
+                  <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.2 rounded-full font-black">
+                    {pendingPackages.length}
+                  </span>
+                )}
+              </button>
+            )}
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('ocorrencias')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
-                activeTab === 'ocorrencias'
-                  ? 'bg-emerald-700 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
-              }`}
-            >
-              <AlertCircle className="w-3.5 h-3.5" />
-              <span>Ocorrências</span>
-            </button>
+            {modulosAtivos.lazer && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('lazer')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'lazer'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Lazer</span>
+              </button>
+            )}
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('financeiro')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
-                activeTab === 'financeiro'
-                  ? 'bg-emerald-700 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
-              }`}
-            >
-              <DollarSign className="w-3.5 h-3.5" />
-              <span>Financeiro</span>
-            </button>
+            {modulosAtivos.equipamentos && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('equipamentos')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'equipamentos'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <Wrench className="w-3.5 h-3.5" />
+                <span>Itens</span>
+              </button>
+            )}
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('mural')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
-                activeTab === 'mural'
-                  ? 'bg-emerald-700 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
-              }`}
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span>Comunidade</span>
-            </button>
+            {modulosAtivos.seguranca && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('seguranca')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'seguranca'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Visitantes</span>
+              </button>
+            )}
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('documentos')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
-                activeTab === 'documentos'
-                  ? 'bg-emerald-700 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 bg-slate-50'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Documentos</span>
-            </button>
+            {modulosAtivos.ocorrencias && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('ocorrencias')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'ocorrencias'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>Ocorrências</span>
+              </button>
+            )}
+
+            {modulosAtivos.financeiro && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('financeiro')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'financeiro'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <DollarSign className="w-3.5 h-3.5" />
+                <span>Financeiro</span>
+              </button>
+            )}
+
+            {modulosAtivos.mural && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('mural')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'mural'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>Comunidade</span>
+              </button>
+            )}
+
+            {modulosAtivos.documentos && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('documentos')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'documentos'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-slate-50'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Documentos</span>
+              </button>
+            )}
           </div>
         </ScrollableTabsNav>
       </div>
@@ -1233,176 +1332,216 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
             </div>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('bicicletario')}
-            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-              activeTab === 'bicicletario'
-                ? 'bg-emerald-800 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <Bike className="w-4 h-4" />
-              <span>Bicicletas (5 min)</span>
-            </div>
-            <span
-              className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+          {modulosAtivos.bicicletario && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('bicicletario')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
                 activeTab === 'bicicletario'
-                  ? 'bg-emerald-950 text-emerald-100'
-                  : 'bg-emerald-100 text-emerald-800'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              {availableBikesCount} livres
-            </span>
-          </button>
+              <div className="flex items-center gap-3">
+                <Bike className="w-4 h-4" />
+                <span>Bicicletas (5 min)</span>
+              </div>
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                  activeTab === 'bicicletario'
+                    ? 'bg-emerald-950 text-emerald-100'
+                    : 'bg-emerald-100 text-emerald-800'
+                }`}
+              >
+                {availableBikesCount} livres
+              </span>
+            </button>
+          )}
 
-          <button
-            type="button"
-            id="tab-morador-equipamentos"
-            onClick={() => setActiveTab('equipamentos')}
-            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-              activeTab === 'equipamentos'
-                ? 'bg-emerald-800 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <Wrench className="w-4 h-4" />
-              <span>Itens & Equipamentos</span>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('lazer')}
-            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-              activeTab === 'lazer'
-                ? 'bg-emerald-800 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <Calendar className="w-4 h-4" />
-              <span>Reservas & Lazer</span>
-            </div>
-            {myReservations.length > 0 && (
+          {modulosAtivos.comida_mercado && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('comida_mercado')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'comida_mercado'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <ShoppingBag className="w-4 h-4 text-emerald-600" />
+                <span>Mercadinho & Comida</span>
+              </div>
               <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-emerald-100 text-emerald-800">
-                {myReservations.length}
+                Loja
               </span>
-            )}
-          </button>
+            </button>
+          )}
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('seguranca')}
-            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-              activeTab === 'seguranca'
-                ? 'bg-emerald-800 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <Users className="w-4 h-4" />
-              <span>Visitantes & Convidados</span>
-            </div>
-          </button>
+          {modulosAtivos.equipamentos && (
+            <button
+              type="button"
+              id="tab-morador-equipamentos"
+              onClick={() => setActiveTab('equipamentos')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'equipamentos'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Wrench className="w-4 h-4" />
+                <span>Itens & Equipamentos</span>
+              </div>
+            </button>
+          )}
 
-          <button
-            type="button"
-            id="tab-morador-interfone"
-            onClick={() => setActiveTab('interfone')}
-            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-              activeTab === 'interfone'
-                ? 'bg-emerald-800 text-white shadow-xs'
-                : 'border border-emerald-300 text-emerald-800 bg-emerald-50/60 hover:bg-emerald-100'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <PhoneCall className="w-4 h-4 text-emerald-700" />
-              <span>Interfone & Telefonia</span>
-            </div>
-          </button>
+          {modulosAtivos.lazer && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('lazer')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'lazer'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Calendar className="w-4 h-4" />
+                <span>Reservas & Lazer</span>
+              </div>
+              {myReservations.length > 0 && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-emerald-100 text-emerald-800">
+                  {myReservations.length}
+                </span>
+              )}
+            </button>
+          )}
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('encomendas')}
-            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-              activeTab === 'encomendas'
-                ? 'bg-emerald-800 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <Package className="w-4 h-4" />
-              <span>Encomendas</span>
-            </div>
-            {pendingPackages.length > 0 && (
-              <span className="text-[10px] bg-amber-500 text-white font-black px-2 py-0.5 rounded-full animate-bounce">
-                {pendingPackages.length}
-              </span>
-            )}
-          </button>
+          {modulosAtivos.seguranca && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('seguranca')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'seguranca'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Users className="w-4 h-4" />
+                <span>Visitantes & Convidados</span>
+              </div>
+            </button>
+          )}
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('ocorrencias')}
-            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-              activeTab === 'ocorrencias'
-                ? 'bg-emerald-800 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <AlertCircle className="w-4 h-4" />
-              <span>Ocorrências</span>
-            </div>
-          </button>
+          {modulosAtivos.interfone && (
+            <button
+              type="button"
+              id="tab-morador-interfone"
+              onClick={() => setActiveTab('interfone')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'interfone'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'border border-emerald-300 text-emerald-800 bg-emerald-50/60 hover:bg-emerald-100'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <PhoneCall className="w-4 h-4 text-emerald-700" />
+                <span>Interfone & Telefonia</span>
+              </div>
+            </button>
+          )}
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('financeiro')}
-            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-              activeTab === 'financeiro'
-                ? 'bg-emerald-800 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <DollarSign className="w-4 h-4" />
-              <span>Financeiro</span>
-            </div>
-          </button>
+          {modulosAtivos.encomendas && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('encomendas')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'encomendas'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Package className="w-4 h-4" />
+                <span>Encomendas</span>
+              </div>
+              {pendingPackages.length > 0 && (
+                <span className="text-[10px] bg-amber-500 text-white font-black px-2 py-0.5 rounded-full animate-bounce">
+                  {pendingPackages.length}
+                </span>
+              )}
+            </button>
+          )}
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('mural')}
-            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-              activeTab === 'mural'
-                ? 'bg-emerald-800 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <MessageSquare className="w-4 h-4" />
-              <span>Comunidade</span>
-            </div>
-          </button>
+          {modulosAtivos.ocorrencias && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('ocorrencias')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'ocorrencias'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-4 h-4" />
+                <span>Ocorrências</span>
+              </div>
+            </button>
+          )}
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('documentos')}
-            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
-              activeTab === 'documentos'
-                ? 'bg-emerald-800 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <FileText className="w-4 h-4" />
-              <span>Documentos</span>
-            </div>
-          </button>
+          {modulosAtivos.financeiro && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('financeiro')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'financeiro'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <DollarSign className="w-4 h-4" />
+                <span>Financeiro</span>
+              </div>
+            </button>
+          )}
+
+          {modulosAtivos.mural && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('mural')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'mural'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <MessageSquare className="w-4 h-4" />
+                <span>Comunidade</span>
+              </div>
+            </button>
+          )}
+
+          {modulosAtivos.documentos && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('documentos')}
+              className={`w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer text-left ${
+                activeTab === 'documentos'
+                  ? 'bg-emerald-800 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <FileText className="w-4 h-4" />
+                <span>Documentos</span>
+              </div>
+            </button>
+          )}
         </aside>
 
         {/* COLUNA PRINCIPAL DE CONTEÚDO (DIREITA) */}
@@ -1439,6 +1578,7 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
 
             {/* Ações Rápidas Coesas e Elegantes */}
             <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              {/* BOTÃO LIGAR PORTARIA */}
               <button
                 id="btn-header-ligar-portaria-ao-vivo"
                 type="button"
@@ -1456,9 +1596,34 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
                   });
                 }}
                 className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                title="Ligar para a Portaria 24h via Interfone"
               >
                 <PhoneCall className="w-3.5 h-3.5" />
                 <span>Ligar Portaria</span>
+              </button>
+
+              {/* BOTÃO LIGAR SÍNDICO / ADMINISTRAÇÃO */}
+              <button
+                id="btn-header-ligar-sindico"
+                type="button"
+                onClick={() => {
+                  condoStore.iniciarChamada({
+                    condominioId: condominio.id,
+                    callerId: morador.id,
+                    callerName: morador.nome,
+                    callerRole: 'morador',
+                    callerUnidade: morador.unidade,
+                    receiverId: 'sindico',
+                    receiverName: condominio.sindicoNome ? `Síndico (${condominio.sindicoNome})` : 'Síndico / Administração',
+                    receiverRole: 'sindico',
+                    tipo: 'audio',
+                  });
+                }}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                title="Ligar diretamente para o Síndico / Administração"
+              >
+                <Shield className="w-3.5 h-3.5" />
+                <span>Ligar Síndico</span>
               </button>
 
               <button
@@ -1500,130 +1665,161 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
           {/* ==================================================================== */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* 1. STATUS DE ENCOMENDAS */}
-            <div
-              onClick={() => setActiveTab('encomendas')}
-              className={`p-4 sm:p-5 rounded-3xl border transition cursor-pointer flex flex-col justify-between gap-3 ${
-                pendingPackages.length > 0
-                  ? 'bg-amber-50/70 border-amber-300 hover:border-amber-400 shadow-xs'
-                  : 'bg-white border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2.5">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${pendingPackages.length > 0 ? 'bg-amber-500 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
-                    <Package className="w-4 h-4" />
+            {modulosAtivos.encomendas && (
+              <div
+                onClick={() => setActiveTab('encomendas')}
+                className={`p-4 sm:p-5 rounded-3xl border transition cursor-pointer flex flex-col justify-between gap-3 ${
+                  pendingPackages.length > 0
+                    ? 'bg-amber-50/70 border-amber-300 hover:border-amber-400 shadow-xs'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${pendingPackages.length > 0 ? 'bg-amber-500 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
+                      <Package className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-900">
+                        {pendingPackages.length > 0 ? 'Encomendas na Portaria' : 'Encomendas & Entregas'}
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        {pendingPackages.length > 0
+                          ? `${pendingPackages.length} encomenda(s) aguardando retirada`
+                          : 'Nenhuma encomenda pendente no momento'}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-bold text-sm text-slate-900">
-                      {pendingPackages.length > 0 ? 'Encomendas na Portaria' : 'Encomendas & Entregas'}
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      {pendingPackages.length > 0
-                        ? `${pendingPackages.length} encomenda(s) aguardando retirada`
-                        : 'Nenhuma encomenda pendente no momento'}
-                    </p>
-                  </div>
+
+                  {pendingPackages.length > 0 ? (
+                    <span className="text-[11px] font-black bg-amber-500 text-white px-2 py-0.5 rounded-full animate-pulse">
+                      {pendingPackages.length} pendente{pendingPackages.length > 1 ? 's' : ''}
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                      Em dia
+                    </span>
+                  )}
                 </div>
 
-                {pendingPackages.length > 0 ? (
-                  <span className="text-[11px] font-black bg-amber-500 text-white px-2 py-0.5 rounded-full animate-pulse">
-                    {pendingPackages.length} pendente{pendingPackages.length > 1 ? 's' : ''}
-                  </span>
-                ) : (
-                  <span className="text-[11px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
-                    Em dia
-                  </span>
+                {pendingPackages.length > 0 && (
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200 text-xs flex items-center justify-between">
+                    <span className="text-slate-700 font-medium">
+                      PIN da portaria: <strong className="font-mono text-amber-800">{pendingPackages[0]?.codigoResgate || '1234'}</strong>
+                    </span>
+                    <span className="text-amber-800 font-bold flex items-center gap-1">
+                      Ver detalhes <ChevronRight className="w-3 h-3" />
+                    </span>
+                  </div>
                 )}
               </div>
-
-              {pendingPackages.length > 0 && (
-                <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200 text-xs flex items-center justify-between">
-                  <span className="text-slate-700 font-medium">
-                    PIN da portaria: <strong className="font-mono text-amber-800">{pendingPackages[0]?.codigoResgate || '1234'}</strong>
-                  </span>
-                  <span className="text-amber-800 font-bold flex items-center gap-1">
-                    Ver detalhes <ChevronRight className="w-3 h-3" />
-                  </span>
-                </div>
-              )}
-            </div>
+            )}
 
             {/* 2. STATUS DE BICICLETA & CONTAGEM DE TEMPO (RESERVA OU USO) */}
-            <div
-              onClick={() => setActiveTab('bicicletario')}
-              className={`p-4 sm:p-5 rounded-3xl border transition cursor-pointer flex flex-col justify-between gap-3 ${
-                bikeReservadaMorador
-                  ? 'bg-amber-50/80 border-amber-400 shadow-xs'
-                  : activeBikeInUse
-                  ? 'bg-emerald-50/80 border-emerald-400 shadow-xs'
-                  : 'bg-white border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2.5">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                    bikeReservadaMorador ? 'bg-amber-500 text-white' : activeBikeInUse ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'
-                  }`}>
-                    <Bike className="w-4 h-4" />
+            {modulosAtivos.bicicletario && (
+              <div
+                onClick={() => setActiveTab('bicicletario')}
+                className={`p-4 sm:p-5 rounded-3xl border transition cursor-pointer flex flex-col justify-between gap-3 ${
+                  bikeReservadaMorador
+                    ? 'bg-amber-50/80 border-amber-400 shadow-xs'
+                    : activeBikeInUse
+                    ? 'bg-emerald-50/80 border-emerald-400 shadow-xs'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                      bikeReservadaMorador ? 'bg-amber-500 text-white' : activeBikeInUse ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      <Bike className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-900">
+                        {bikeReservadaMorador
+                          ? `Bike #${bikeReservadaMorador.codigo} Reservada`
+                          : activeBikeInUse
+                          ? `Bike #${activeBikeInUse.codigo} em Uso`
+                          : 'Bicicletas Compartilhadas'}
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        {bikeReservadaMorador
+                          ? 'Tolerância de 5 min para retirar no totem'
+                          : activeBikeInUse
+                          ? `Regra de uso: máx. ${condominio.regras.limiteTempoBikeMinutos} minutos`
+                          : `${availableBikesCount} bikes livres para retirada`}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-bold text-sm text-slate-900">
-                      {bikeReservadaMorador
-                        ? `Bike #${bikeReservadaMorador.codigo} Reservada`
-                        : activeBikeInUse
-                        ? `Bike #${activeBikeInUse.codigo} em Uso`
-                        : 'Bicicletas Compartilhadas'}
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      {bikeReservadaMorador
-                        ? 'Tolerância de 5 min para retirar no totem'
-                        : activeBikeInUse
-                        ? `Regra de uso: máx. ${condominio.regras.limiteTempoBikeMinutos} minutos`
-                        : `${availableBikesCount} bikes livres para retirada`}
-                    </p>
-                  </div>
+
+                  {bikeReservadaMorador ? (
+                    <span className="text-xs font-black font-mono bg-amber-600 text-white px-2.5 py-0.5 rounded-full">
+                      {formatCountdown(segundosRestantes5Min)}
+                    </span>
+                  ) : activeBikeInUse ? (
+                    <span className="text-[11px] font-bold bg-emerald-700 text-white px-2 py-0.5 rounded-full">
+                      ~{elapsedMinutes} min de uso
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                      {availableBikesCount} livres
+                    </span>
+                  )}
                 </div>
 
                 {bikeReservadaMorador ? (
-                  <span className="text-xs font-black font-mono bg-amber-600 text-white px-2.5 py-0.5 rounded-full">
-                    {formatCountdown(segundosRestantes5Min)}
-                  </span>
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200 text-xs flex items-center justify-between">
+                    <span className="text-slate-700">
+                      Cód: <strong className="font-mono text-amber-800">{bikeReservadaMorador.reservaCodigo || 'BK-5MIN'}</strong> • Senha: <strong>{bikeReservadaMorador.lockPassword}</strong>
+                    </span>
+                    <span className="text-amber-800 font-bold flex items-center gap-1">
+                      Destravar <ChevronRight className="w-3 h-3" />
+                    </span>
+                  </div>
                 ) : activeBikeInUse ? (
-                  <span className="text-[11px] font-bold bg-emerald-700 text-white px-2 py-0.5 rounded-full">
-                    ~{elapsedMinutes} min de uso
-                  </span>
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-200 text-xs flex items-center justify-between">
+                    <span className="text-slate-700">
+                      Tempo restante: <strong className="text-emerald-800">~{Math.max(0, condominio.regras.limiteTempoBikeMinutos - elapsedMinutes)} min</strong>
+                    </span>
+                    <span className="text-emerald-800 font-bold flex items-center gap-1">
+                      Devolver <ChevronRight className="w-3 h-3" />
+                    </span>
+                  </div>
                 ) : (
-                  <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-                    {availableBikesCount} livres
-                  </span>
+                  <div className="text-[11px] text-emerald-800 font-bold flex items-center justify-between pt-0.5">
+                    <span>Tolerância de retirada rápida em 1 clique</span>
+                    <span className="flex items-center gap-1">Reservar <ChevronRight className="w-3 h-3" /></span>
+                  </div>
                 )}
               </div>
+            )}
 
-              {bikeReservadaMorador ? (
-                <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200 text-xs flex items-center justify-between">
-                  <span className="text-slate-700">
-                    Cód: <strong className="font-mono text-amber-800">{bikeReservadaMorador.reservaCodigo || 'BK-5MIN'}</strong> • Senha: <strong>{bikeReservadaMorador.lockPassword}</strong>
-                  </span>
-                  <span className="text-amber-800 font-bold flex items-center gap-1">
-                    Destravar <ChevronRight className="w-3 h-3" />
+            {/* 3. STATUS DO MERCADINHO & COMIDA */}
+            {modulosAtivos.comida_mercado && (
+              <div
+                onClick={() => setActiveTab('comida_mercado')}
+                className="p-4 sm:p-5 rounded-3xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 hover:border-emerald-300 transition cursor-pointer flex flex-col justify-between gap-3 shadow-xs"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-700 text-white flex items-center justify-center">
+                      <ShoppingBag className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-900">Mercadinho & Comida 24h</h3>
+                      <p className="text-xs text-slate-500">Bebidas, snacks, gelo e refeições no condomínio</p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-bold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full">
+                    Aberto 24h
                   </span>
                 </div>
-              ) : activeBikeInUse ? (
-                <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-200 text-xs flex items-center justify-between">
-                  <span className="text-slate-700">
-                    Tempo restante: <strong className="text-emerald-800">~{Math.max(0, condominio.regras.limiteTempoBikeMinutos - elapsedMinutes)} min</strong>
-                  </span>
-                  <span className="text-emerald-800 font-bold flex items-center gap-1">
-                    Devolver <ChevronRight className="w-3 h-3" />
-                  </span>
-                </div>
-              ) : (
                 <div className="text-[11px] text-emerald-800 font-bold flex items-center justify-between pt-0.5">
-                  <span>Tolerância de retirada rápida em 1 clique</span>
-                  <span className="flex items-center gap-1">Reservar <ChevronRight className="w-3 h-3" /></span>
+                  <span>Compre e pague via PIX / Cartão</span>
+                  <span className="flex items-center gap-1">Acessar Loja <ChevronRight className="w-3 h-3" /></span>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
       {/* ==================================================================== */}
@@ -1632,45 +1828,47 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
       {activeTab === 'inicio' && (
         <div className="space-y-6">
           {/* Banner Interfone & Walkie-Talkie Digital */}
-          <div
-            onClick={() => setActiveTab('interfone')}
-            className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-xl border border-indigo-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 cursor-pointer hover:border-amber-400/60 transition group"
-          >
-            <div className="flex items-start sm:items-center gap-3.5">
-              <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-lg shadow-amber-500/20 shrink-0 group-hover:scale-105 transition">
-                <Radio className="w-6 h-6 animate-pulse text-slate-950" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-black uppercase tracking-wider bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 px-2 py-0.5 rounded-full">
-                    Interfonia Digital (PTT)
-                  </span>
-                  <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    Portaria 24h & Vizinhos Online
-                  </span>
-                </div>
-                <h3 className="text-base sm:text-lg font-black text-white mt-1">
-                  Interfone & Walkie-Talkie em Tempo Real
-                </h3>
-                <p className="text-xs text-indigo-200 mt-0.5">
-                  Fale com a Portaria ou interfone para outro morador/vizinho direto pelo aplicativo.
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveTab('interfone');
-              }}
-              className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 flex items-center gap-2 transition shrink-0 cursor-pointer self-stretch sm:self-auto justify-center"
+          {modulosAtivos.interfone && (
+            <div
+              onClick={() => setActiveTab('interfone')}
+              className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-xl border border-indigo-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 cursor-pointer hover:border-amber-400/60 transition group"
             >
-              <Mic className="w-4 h-4" />
-              <span>Abrir Interfone & Falar</span>
-            </button>
-          </div>
+              <div className="flex items-start sm:items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-lg shadow-amber-500/20 shrink-0 group-hover:scale-105 transition">
+                  <Radio className="w-6 h-6 animate-pulse text-slate-950" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 px-2 py-0.5 rounded-full">
+                      Interfonia Digital (PTT)
+                    </span>
+                    <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                      Portaria 24h & Vizinhos Online
+                    </span>
+                  </div>
+                  <h3 className="text-base sm:text-lg font-black text-white mt-1">
+                    Interfone & Walkie-Talkie em Tempo Real
+                  </h3>
+                  <p className="text-xs text-indigo-200 mt-0.5">
+                    Fale com a Portaria ou interfone para outro morador/vizinho direto pelo aplicativo.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveTab('interfone');
+                }}
+                className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 flex items-center gap-2 transition shrink-0 cursor-pointer self-stretch sm:self-auto justify-center"
+              >
+                <Mic className="w-4 h-4" />
+                <span>Abrir Interfone & Falar</span>
+              </button>
+            </div>
+          )}
 
           {/* Card de Aviso Destaque (Aviso mais importante do dia) */}
           {avisoDestaque && (
@@ -1706,98 +1904,129 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
           {/* Cards Rápidos de Acesso em 1 Clique */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* 1. Bicicletas Compartilhadas (Novolar) */}
-            <div
-              onClick={() => setActiveTab('bicicletario')}
-              className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-emerald-500 hover:shadow-md transition cursor-pointer group"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:scale-110 transition">
-                  <Bike className="w-5 h-5" />
-                </div>
-                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                  {availableBikesCount} livres
-                </span>
-              </div>
-              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-emerald-700 transition">
-                Bicicletas (5 min)
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Reserve em 1 clique com tolerância de 5 min para retirada no totem.
-              </p>
-            </div>
-
-            {/* 2. Contador de Entregas */}
-            <div
-              onClick={() => setActiveTab('encomendas')}
-              className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-amber-500 hover:shadow-md transition cursor-pointer group"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center group-hover:scale-110 transition">
-                  <Package className="w-5 h-5" />
-                </div>
-                {pendingPackages.length > 0 ? (
-                  <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-500 text-white animate-pulse">
-                    {pendingPackages.length} na portaria
+            {modulosAtivos.bicicletario && (
+              <div
+                onClick={() => setActiveTab('bicicletario')}
+                className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-emerald-500 hover:shadow-md transition cursor-pointer group"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:scale-110 transition">
+                    <Bike className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                    {availableBikesCount} livres
                   </span>
-                ) : (
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                    Tudo entregue
+                </div>
+                <h3 className="text-base font-extrabold text-slate-900 group-hover:text-emerald-700 transition">
+                  Bicicletas (5 min)
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Reserve em 1 clique com tolerância de 5 min para retirada no totem.
+                </p>
+              </div>
+            )}
+
+            {/* 2. Mercadinho & Comida 24h */}
+            {modulosAtivos.comida_mercado && (
+              <div
+                onClick={() => setActiveTab('comida_mercado')}
+                className="bg-white p-5 rounded-3xl border border-emerald-200 shadow-sm hover:border-emerald-500 hover:shadow-md transition cursor-pointer group"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center group-hover:scale-110 transition">
+                    <ShoppingBag className="w-5 h-5 text-emerald-700" />
+                  </div>
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                    Aberto 24h
                   </span>
-                )}
-              </div>
-              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-amber-700 transition">
-                {pendingPackages.length > 0
-                  ? `Você tem ${pendingPackages.length} pacote${pendingPackages.length > 1 ? 's' : ''} esperando!`
-                  : 'Minhas Encomendas'}
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">
-                {pendingPackages.length > 0
-                  ? 'Veja o código PIN de 6 dígitos para retirada na portaria.'
-                  : 'Histórico de entregas e notificações em tempo real.'}
-              </p>
-            </div>
-
-            {/* 3. Reservas de Áreas Comuns */}
-            <div
-              onClick={() => setActiveTab('lazer')}
-              className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition cursor-pointer group"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center group-hover:scale-110 transition">
-                  <Calendar className="w-5 h-5" />
                 </div>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
-                  {areasLazer.length} espaços
-                </span>
+                <h3 className="text-base font-extrabold text-slate-900 group-hover:text-emerald-700 transition">
+                  Mercadinho & Comida
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Bebidas geladas, refeições e snacks com pagamento imediato PIX.
+                </p>
               </div>
-              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-blue-700 transition">
-                Áreas de Lazer
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Churrasqueira, Salão de Festas, Quadra e Piscina com confirmação imediata.
-              </p>
-            </div>
+            )}
 
-            {/* 4. Ocorrências e Problemas */}
-            <div
-              onClick={() => setActiveTab('ocorrencias')}
-              className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-rose-500 hover:shadow-md transition cursor-pointer group"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-700 flex items-center justify-center group-hover:scale-110 transition">
-                  <AlertCircle className="w-5 h-5" />
+            {/* 3. Contador de Entregas */}
+            {modulosAtivos.encomendas && (
+              <div
+                onClick={() => setActiveTab('encomendas')}
+                className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-amber-500 hover:shadow-md transition cursor-pointer group"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center group-hover:scale-110 transition">
+                    <Package className="w-5 h-5" />
+                  </div>
+                  {pendingPackages.length > 0 ? (
+                    <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-500 text-white animate-pulse">
+                      {pendingPackages.length} na portaria
+                    </span>
+                  ) : (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                      Tudo entregue
+                    </span>
+                  )}
                 </div>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">
-                  {ocorrencias.length} chamados
-                </span>
+                <h3 className="text-base font-extrabold text-slate-900 group-hover:text-amber-700 transition">
+                  {pendingPackages.length > 0
+                    ? `Você tem ${pendingPackages.length} pacote${pendingPackages.length > 1 ? 's' : ''} esperando!`
+                    : 'Minhas Encomendas'}
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  {pendingPackages.length > 0
+                    ? 'Veja o código PIN de 6 dígitos para retirada na portaria.'
+                    : 'Histórico de entregas e notificações em tempo real.'}
+                </p>
               </div>
-              <h3 className="text-base font-extrabold text-slate-900 group-hover:text-rose-700 transition">
-                Ocorrências
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Registre reparos, barulho ou limpeza com fotos e acompanhe a resposta do síndico.
-              </p>
-            </div>
+            )}
+
+            {/* 4. Reservas de Áreas Comuns */}
+            {modulosAtivos.lazer && (
+              <div
+                onClick={() => setActiveTab('lazer')}
+                className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition cursor-pointer group"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center group-hover:scale-110 transition">
+                    <Calendar className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                    {areasLazer.length} espaços
+                  </span>
+                </div>
+                <h3 className="text-base font-extrabold text-slate-900 group-hover:text-blue-700 transition">
+                  Áreas de Lazer
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Churrasqueira, Salão de Festas, Quadra e Piscina com confirmação imediata.
+                </p>
+              </div>
+            )}
+
+            {/* 5. Ocorrências e Problemas */}
+            {modulosAtivos.ocorrencias && (
+              <div
+                onClick={() => setActiveTab('ocorrencias')}
+                className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-rose-500 hover:shadow-md transition cursor-pointer group"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-700 flex items-center justify-center group-hover:scale-110 transition">
+                    <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">
+                    {ocorrencias.length} chamados
+                  </span>
+                </div>
+                <h3 className="text-base font-extrabold text-slate-900 group-hover:text-rose-700 transition">
+                  Ocorrências
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Registre reparos, barulho ou limpeza com fotos e acompanhe a resposta do síndico.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Seção Secundária: Câmeras ao Vivo & Boleto Rápido */}
@@ -1889,13 +2118,109 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
                   <p className="text-xs text-slate-500">Nenhum visitante liberado hoje.</p>
                   <button
                     onClick={() => setIsNovoVisitanteModalOpen(true)}
-                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow"
+                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Liberar Visita / Prestador</span>
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* CARD EXCLUSIVO DE ADMINISTRAÇÃO & LIGAÇÃO DIRETA COM O SÍNDICO */}
+            <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 text-white p-6 rounded-3xl border border-indigo-500/30 shadow-xl space-y-4 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-indigo-400" />
+                    <h3 className="font-extrabold text-white">Síndico & Administração</h3>
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300 bg-emerald-500/20 border border-emerald-400/30 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    Linha Direta
+                  </span>
+                </div>
+
+                <div className="mt-3 flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-lg shadow-md shadow-indigo-600/30">
+                    <Shield className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-sm text-white">{condominio.sindicoNome || 'Síndico Geral'}</h4>
+                    <p className="text-[11px] text-indigo-200">Administração Geral • Ramal 9</p>
+                    <p className="text-[10px] text-emerald-400 font-medium">Horário de Brasília (UTC-3)</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-indigo-800/60">
+                <button
+                  type="button"
+                  id="btn-card-ligar-sindico-audio"
+                  onClick={() => {
+                    condoStore.iniciarChamada({
+                      condominioId: condominio.id,
+                      callerId: morador.id,
+                      callerName: morador.nome,
+                      callerRole: 'morador',
+                      callerUnidade: morador.unidade,
+                      receiverId: 'sindico',
+                      receiverName: condominio.sindicoNome ? `Síndico (${condominio.sindicoNome})` : 'Síndico / Administração',
+                      receiverRole: 'sindico',
+                      tipo: 'audio',
+                    });
+                  }}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer"
+                  title="Ligar por áudio para o Síndico"
+                >
+                  <PhoneCall className="w-4 h-4" />
+                  <span>Ligar Áudio</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="btn-card-ligar-sindico-video"
+                  onClick={() => {
+                    condoStore.iniciarChamada({
+                      condominioId: condominio.id,
+                      callerId: morador.id,
+                      callerName: morador.nome,
+                      callerRole: 'morador',
+                      callerUnidade: morador.unidade,
+                      receiverId: 'sindico',
+                      receiverName: condominio.sindicoNome ? `Síndico (${condominio.sindicoNome})` : 'Síndico / Administração',
+                      receiverRole: 'sindico',
+                      tipo: 'video',
+                    });
+                  }}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition active:scale-95 cursor-pointer"
+                  title="Chamada de Vídeo com o Síndico"
+                >
+                  <Video className="w-4 h-4" />
+                  <span>Ligar Vídeo</span>
+                </button>
+
+                <a
+                  href={`https://api.whatsapp.com/send?phone=5521999999999&text=Ol%C3%A1%20S%C3%ADndico,%20aqui%20%C3%A9%20o%20morador%20${encodeURIComponent(
+                    morador.nome
+                  )}%20do%20Bloco%20${morador.unidade.bloco}%20Apto%20${morador.unidade.apto}.`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 font-bold text-xs transition cursor-pointer"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>WhatsApp</span>
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('ocorrencias')}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs transition cursor-pointer"
+                >
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Ocorrência</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2420,30 +2745,21 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
       )}
 
       {/* ==================================================================== */}
-      {/* MÓDULO INTERFONE & WALKIE-TALKIE PTT COM A PORTARIA (ESTILO ZELLO)  */}
+      {/* MÓDULO INTERFONE & CENTRAL TELEFÔNICA DIGITAL                       */}
       {/* ==================================================================== */}
       {activeTab === 'interfone' && (
-        <div className="space-y-6">
-          <CentralTelefonicaView
-            condominio={condominio}
-            currentUser={{
-              id: morador.id,
-              nome: morador.nome,
-              email: morador.email,
-              role: 'morador',
-              condominioId: condominio.id,
-              unidade: morador.unidade,
-            }}
-            currentMorador={morador}
-          />
-
-          <IntercomPTTView
-            condominio={condominio}
-            currentUserRole="morador"
-            currentMorador={morador}
-            currentUserName={morador.nome}
-          />
-        </div>
+        <CentralTelefonicaView
+          condominio={condominio}
+          currentUser={{
+            id: morador.id,
+            nome: morador.nome,
+            email: morador.email,
+            role: 'morador',
+            condominioId: condominio.id,
+            unidade: morador.unidade,
+          }}
+          currentMorador={morador}
+        />
       )}
 
       {/* ==================================================================== */}
@@ -2992,6 +3308,13 @@ export const MoradorDashboard: React.FC<MoradorDashboardProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* MÓDULO COMIDA & MERCADINHO AUTÔNOMO 24H                              */}
+      {/* ==================================================================== */}
+      {activeTab === 'comida_mercado' && (
+        <MercadinhoComidaView condominio={condominio} morador={morador} />
       )}
 
       {/* ==================================================================== */}

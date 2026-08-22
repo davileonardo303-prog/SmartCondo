@@ -170,7 +170,58 @@ class AudioAlertService {
     }
   }
 
-  // 5. Notificação Nativa do Navegador (Segundo Plano)
+  // 5. Som de Mensagem Recebida no WhatsApp (Pop / Ping agradável)
+  public playIncomingMessageSound() {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    try {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(659.25, now); // E5
+      osc.frequency.exponentialRampToValueAtTime(1318.5, now + 0.12); // E6
+
+      gain.gain.setValueAtTime(0.35, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.25);
+    } catch (err) {
+      console.warn('Error playing incoming message sound:', err);
+    }
+  }
+
+  // 6. Som de Sucesso de Ação / Envio (Chime Duplo Suave)
+  public playActionSuccessSound() {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    try {
+      const now = ctx.currentTime;
+      const osc1 = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(523.25, now); // C5
+      osc1.frequency.exponentialRampToValueAtTime(783.99, now + 0.1); // G5
+
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+
+      osc1.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc1.start(now);
+      osc1.stop(now + 0.3);
+    } catch (err) {
+      console.warn('Error playing action success sound:', err);
+    }
+  }
+
+  // 7. Notificação Nativa do Navegador (Segundo Plano)
   public async requestNotificationPermission(): Promise<boolean> {
     if (typeof window === 'undefined' || !('Notification' in window)) return false;
     try {
