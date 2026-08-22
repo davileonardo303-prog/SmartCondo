@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Building2,
   Bike,
@@ -68,8 +68,9 @@ import { ItensCompartilhadosView } from '../compartilhados/ItensCompartilhadosVi
 import { CentralTelefonicaView } from '../interfone/CentralTelefonicaView';
 import { IntercomPTTView } from '../interfone/IntercomPTTView';
 import { ScrollableTabsNav } from '../common/ScrollableTabsNav';
-import { TrendingUp } from 'lucide-react';
+import { TrendingUp, Menu, Pin, PinOff, LayoutGrid, Layers, ChevronRight } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { SindicoSidebar, SindicoTabType } from './SindicoSidebar';
 
 interface SindicoDashboardProps {
   condominio: Condominio;
@@ -95,29 +96,40 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
   const totalModulosAtivos = Object.values(modulosAtivos).filter(Boolean).length;
   const isApenasBike = modulosAtivos.bicicletario && totalModulosAtivos === 1;
 
-  const [activeTab, setActiveTab] = useState<
-    | 'moradores'
-    | 'interfone'
-    | 'equipe'
-    | 'regras_encomendas'
-    | 'frota'
-    | 'equipamentos'
-    | 'liberacoes'
-    | 'lazer'
-    | 'reservas'
-    | 'ocorrencias'
-    | 'financeiro'
-    | 'comunidade'
-    | 'documentos'
-    | 'avisos'
-    | 'whatsapp'
-    | 'aprovacoes'
-    | 'configuracoes'
-  >(() => {
+  const [activeTab, setActiveTab] = useState<SindicoTabType>(() => {
     // Inicia na frota se for condomínio exclusivo de bike, ou moradores
     if (isApenasBike) return 'frota';
     return 'moradores';
   });
+
+  // Controle da Barra Lateral (Sidebar) Retrátil
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarPinned, setSidebarPinned] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('smartcondo_sindico_sidebar_pinned') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSidebarPin = () => {
+    setSidebarPinned((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('smartcondo_sindico_sidebar_pinned', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  // Escuta o clique nos 3 traços no cabeçalho ao lado do nome do usuário
+  useEffect(() => {
+    const handleToggle = () => {
+      setSidebarOpen((prev) => !prev);
+    };
+    window.addEventListener('toggle-sindico-sidebar', handleToggle);
+    return () => window.removeEventListener('toggle-sindico-sidebar', handleToggle);
+  }, []);
 
   // Garantia de fallback se o usuário ou módulo for desativado
   useEffect(() => {
@@ -305,6 +317,47 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
   const documentos = condoStore.getDocumentos(condoId);
   const adimplentesCount = safeMoradores.filter((m) => m.statusAdimplencia === 'em_dia').length;
   const inadimplentesCount = safeMoradores.filter((m) => m.statusAdimplencia === 'com_pendencia').length;
+
+  const currentTabInfo = useMemo(() => {
+    switch (activeTab) {
+      case 'moradores':
+        return { label: 'Moradores & Cadastros', badge: safeMoradores.length, icon: Users, color: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40' };
+      case 'equipe':
+        return { label: 'Equipe & Permissões', badge: condoStore.getFuncionarios(condominio.id).length, icon: ShieldCheck, color: 'text-indigo-700 bg-indigo-50 dark:bg-indigo-950/40' };
+      case 'aprovacoes':
+        return { label: 'Aprovações Pendentes', badge: moradoresPendentes.length, icon: CheckCircle2, color: 'text-rose-600 bg-rose-50 dark:bg-rose-950/40' };
+      case 'regras_encomendas':
+        return { label: 'Regras de Encomendas', badge: `${condominio.regras?.diasLimiteRetiradaEncomenda ?? 5} dias`, icon: Package, color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/40' };
+      case 'frota':
+        return { label: 'Gestão da Frota de Bikes', badge: safeBikes.length, icon: Bike, color: 'text-purple-600 bg-purple-50 dark:bg-purple-950/40' };
+      case 'liberacoes':
+        return { label: 'Liberação & Senhas Digitais', badge: safeBikes.filter(b => b.status === 'reservada_5min').length, icon: KeyRound, color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40' };
+      case 'equipamentos':
+        return { label: 'Itens & Equipamentos', badge: null, icon: Wrench, color: 'text-teal-600 bg-teal-50 dark:bg-teal-950/40' };
+      case 'interfone':
+        return { label: 'Central Telefônica & Interfone', badge: null, icon: PhoneCall, color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40' };
+      case 'whatsapp':
+        return { label: 'Central WhatsApp (DropDesk)', badge: null, icon: PhoneCall, color: 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40' };
+      case 'lazer':
+        return { label: 'Áreas Comuns & Lazer', badge: safeAreasLazer.length, icon: Sparkles, color: 'text-pink-600 bg-pink-50 dark:bg-pink-950/40' };
+      case 'reservas':
+        return { label: 'Agenda & Reservas', badge: safeReservas.length, icon: Calendar, color: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40' };
+      case 'ocorrencias':
+        return { label: 'Ocorrências & Chamados', badge: ocorrencias.filter(o => o.status === 'aberto').length, icon: AlertCircle, color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/40' };
+      case 'financeiro':
+        return { label: 'Financeiro & Prestação', badge: null, icon: DollarSign, color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40' };
+      case 'documentos':
+        return { label: 'Documentos & Atas', badge: documentos.length, icon: FileText, color: 'text-blue-600 bg-blue-50 dark:bg-blue-950/40' };
+      case 'comunidade':
+        return { label: 'Comunidade & Enquetes', badge: enquetes.length, icon: Vote, color: 'text-violet-600 bg-violet-50 dark:bg-violet-950/40' };
+      case 'avisos':
+        return { label: 'Mural de Comunicados', badge: safeAvisos.length, icon: AlertCircle, color: 'text-sky-600 bg-sky-50 dark:bg-sky-950/40' };
+      case 'configuracoes':
+        return { label: 'Configurações & Regras', badge: null, icon: Settings, color: 'text-slate-700 bg-slate-100 dark:bg-slate-800' };
+      default:
+        return { label: 'Painel Geral', badge: null, icon: Building2, color: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40' };
+    }
+  }, [activeTab, safeMoradores, safeBikes, safeAreasLazer, safeReservas, ocorrencias, documentos, enquetes, safeAvisos, condominio, moradoresPendentes]);
 
   const showNotification = (msg: string) => {
     setFeedbackMsg(msg);
@@ -762,353 +815,198 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
     return true;
   });
 
+  const TabIcon = currentTabInfo.icon;
+  const pendenciasAprovacaoCount = moradoresPendentes.length;
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-      {/* Top Banner Executivo */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
-              Painel de Gestão do Síndico
-            </span>
-            <span className="text-xs text-slate-700 font-bold">{condominio.nome}</span>
-          </div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900">
-            Administração Geral do Condomínio
-          </h1>
-          <p className="text-xs text-slate-600 mt-1 flex items-center gap-2 flex-wrap">
-            <span>Síndico: <strong className="text-slate-800">{condominio.sindicoNome}</strong></span>
-            <span>•</span>
-            <span className="flex items-center gap-1 text-slate-500">
-              <MapPin className="w-3 h-3 text-indigo-600" />
-              {condominio.endereco || 'Endereço não informado'} ({condominio.cidade} - {condominio.uf})
-            </span>
-            <span>•</span>
-            <span><strong>{condominio.totalUnidades}</strong> Unidades</span>
-          </p>
-        </div>
+    <div className="flex flex-1 min-w-0 w-full min-h-[calc(100vh-80px)]">
+      {/* Barra Lateral Retrátil / Expansível */}
+      <SindicoSidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        isPinned={sidebarPinned}
+        onTogglePin={toggleSidebarPin}
+        activeTab={activeTab}
+        onSelectTab={(tab) => {
+          setActiveTab(tab);
+        }}
+        condominio={condominio}
+        modulosAtivos={modulosAtivos}
+        totalMoradores={moradores.length}
+        moradoresPendentesCount={moradoresPendentes.length}
+        totalFuncionarios={condoStore.getFuncionarios(condominio.id).length}
+        totalBikes={bikes.length}
+        bikesReservadasCount={bikes.filter((b) => b.status === 'reservada_5min').length}
+        totalAreasLazer={areasLazer.length}
+        totalReservas={reservas.length}
+        ocorrenciasAbertasCount={ocorrencias.filter((o) => o.status === 'aberto').length}
+        totalEnquetes={enquetes.length}
+        totalAvisos={avisos.length}
+        totalDocumentos={documentos.length}
+        diasEncomenda={condominio.regras?.diasLimiteRetiradaEncomenda ?? 5}
+      />
 
-        {/* Ações Rápidas do Síndico */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              id="btn-sindico-header-novo-morador"
-              onClick={() => {
-                setActiveTab('moradores');
-                setShowAddMoradorModal(true);
-              }}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm shadow-indigo-600/20 transition active:scale-98 cursor-pointer"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>+ Cadastrar Morador</span>
-            </button>
-
-            <button
-              id="btn-sindico-header-relatorio"
-              onClick={() => setShowRelatorioModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm shadow-emerald-600/20 transition active:scale-98 cursor-pointer"
-            >
-              <TrendingUp className="w-4 h-4" />
-              <span>Relatório de Assembleia</span>
-            </button>
-
-            <button
-              id="btn-sindico-header-config"
-              onClick={() => setActiveTab('configuracoes')}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition active:scale-98 cursor-pointer border border-slate-200"
-            >
-              <Settings className="w-4 h-4 text-slate-600" />
-              <span>Alterar Dados & Regras</span>
-            </button>
-          </div>
-
-          {/* Resumos Executivos */}
-          <div className="flex items-center gap-2">
-            <div className="bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-200 text-center">
-              <div className="text-base font-extrabold text-indigo-900 leading-tight">{moradores.length}</div>
-              <div className="text-[10px] font-semibold text-indigo-700">Moradores</div>
+      {/* Conteúdo Central Limpo e Focado */}
+      <div className="flex-1 min-w-0 max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+        {/* Barra Superior Executiva e Botão de Abertura do Menu Lateral */}
+        <div className="bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800">
+                  Painel de Gestão do Síndico
+                </span>
+                <span className="text-xs text-slate-700 dark:text-slate-300 font-bold">{condominio.nome}</span>
+              </div>
+              <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white">
+                Administração Geral do Condomínio
+              </h1>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
+                <span>Síndico: <strong className="text-slate-800 dark:text-slate-200">{condominio.sindicoNome}</strong></span>
+                <span>•</span>
+                <span className="flex items-center gap-1 text-slate-500">
+                  <MapPin className="w-3 h-3 text-indigo-600" />
+                  {condominio.endereco || 'Endereço não informado'} ({condominio.cidade} - {condominio.uf})
+                </span>
+                <span>•</span>
+                <span><strong>{condominio.totalUnidades}</strong> Unidades</span>
+              </p>
             </div>
-            {modulosAtivos.bicicletario && (
-              <div className="bg-purple-50 px-3 py-1.5 rounded-xl border border-purple-200 text-center">
-                <div className="text-base font-extrabold text-purple-900 leading-tight">{bikes.length}</div>
-                <div className="text-[10px] font-semibold text-purple-700">Frota Bikes</div>
+
+            {/* Ações Rápidas do Síndico */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                id="btn-sindico-header-novo-morador"
+                onClick={() => {
+                  setActiveTab('moradores');
+                  setShowAddMoradorModal(true);
+                }}
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm shadow-indigo-600/20 transition active:scale-98 cursor-pointer"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>+ Cadastrar Morador</span>
+              </button>
+
+              <button
+                id="btn-sindico-header-relatorio"
+                onClick={() => setShowRelatorioModal(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm shadow-emerald-600/20 transition active:scale-98 cursor-pointer"
+              >
+                <TrendingUp className="w-4 h-4" />
+                <span>Relatório de Assembleia</span>
+              </button>
+
+              <button
+                id="btn-sindico-header-config"
+                onClick={() => setActiveTab('configuracoes')}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition active:scale-98 cursor-pointer border border-slate-200 dark:border-slate-700"
+              >
+                <Settings className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+                <span>Alterar Dados & Regras</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Barra de Contexto da Aba Atual & Atalhos */}
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              {/* Pílula do Módulo Ativo na Tela */}
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold">
+                <div className={`p-1 rounded-lg ${currentTabInfo.color}`}>
+                  <TabIcon className="w-4 h-4" />
+                </div>
+                <span>Módulo Atual: <strong className="text-indigo-600 dark:text-indigo-400">{currentTabInfo.label}</strong></span>
+                {currentTabInfo.badge !== null && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-300 font-extrabold">
+                    {currentTabInfo.badge}
+                  </span>
+                )}
               </div>
-            )}
-            {modulosAtivos.lazer && (
-              <div className="bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 text-center">
-                <div className="text-base font-extrabold text-emerald-900 leading-tight">{areasLazer.length}</div>
-                <div className="text-[10px] font-semibold text-emerald-700">Áreas Lazer</div>
+
+              {pendenciasAprovacaoCount > 0 && (
+                <button
+                  onClick={() => setActiveTab('aprovacoes')}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-xs font-bold transition hover:bg-rose-100 cursor-pointer"
+                >
+                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+                  <span>{pendenciasAprovacaoCount} aprovações pendentes</span>
+                </button>
+              )}
+            </div>
+
+            {/* Ações de Visualização / Fixar Barra Lateral */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={toggleSidebarPin}
+                className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+                title={sidebarPinned ? 'Desafixar barra lateral' : 'Manter barra lateral fixa na tela'}
+              >
+                {sidebarPinned ? (
+                  <>
+                    <Pin className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Barra Fixada</span>
+                  </>
+                ) : (
+                  <>
+                    <PinOff className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Fixar Barra Lateral</span>
+                  </>
+                )}
+              </button>
+
+              {/* Atalhos Rápidos dos Módulos Principais */}
+              <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800/50 p-1 rounded-xl border border-slate-200/60 dark:border-slate-700">
+                <button
+                  onClick={() => setActiveTab('moradores')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    activeTab === 'moradores'
+                      ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  Moradores
+                </button>
+                {modulosAtivos.encomendas && (
+                  <button
+                    onClick={() => setActiveTab('regras_encomendas')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      activeTab === 'regras_encomendas'
+                        ? 'bg-white dark:bg-slate-700 text-amber-700 dark:text-amber-300 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    Encomendas
+                  </button>
+                )}
+                {modulosAtivos.bicicletario && (
+                  <button
+                    onClick={() => setActiveTab('frota')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      activeTab === 'frota'
+                        ? 'bg-white dark:bg-slate-700 text-purple-700 dark:text-purple-300 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    Bikes
+                  </button>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Feedback Alert */}
-      {feedbackMsg && (
-        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center justify-between shadow-sm animate-in fade-in">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>{feedbackMsg}</span>
+        {/* Feedback Alert */}
+        {feedbackMsg && (
+          <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs font-bold flex items-center justify-between shadow-sm animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>{feedbackMsg}</span>
+            </div>
+            <button onClick={() => setFeedbackMsg('')} className="text-emerald-700 hover:text-emerald-900 cursor-pointer">
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <button onClick={() => setFeedbackMsg('')} className="text-emerald-700 hover:text-emerald-900 cursor-pointer">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Abas de Navegação Condicionadas aos Módulos Ativos do Condomínio */}
-      <ScrollableTabsNav>
-        <button
-          onClick={() => setActiveTab('moradores')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'moradores'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Moradores & Cadastros ({moradores.length})</span>
-        </button>
-
-        {modulosAtivos.interfone && (
-          <button
-            id="tab-sindico-interfone"
-            onClick={() => setActiveTab('interfone')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'interfone'
-                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
-                : 'text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300'
-            }`}
-          >
-            <PhoneCall className="w-4 h-4 text-emerald-600" />
-            <span>Central Telefônica & Interfone</span>
-          </button>
         )}
-
-        <button
-          id="tab-sindico-equipe"
-          onClick={() => setActiveTab('equipe')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'equipe'
-              ? 'bg-indigo-900 text-white shadow-md shadow-indigo-900/30'
-              : 'text-indigo-950 bg-indigo-50/80 hover:bg-indigo-100 border border-indigo-200'
-          }`}
-        >
-          <ShieldCheck className="w-4 h-4 text-indigo-600" />
-          <span>Equipe & Permissões ({condoStore.getFuncionarios(condominio.id).length})</span>
-        </button>
-
-        {modulosAtivos.encomendas && (
-          <button
-            id="tab-sindico-regras-encomendas"
-            onClick={() => setActiveTab('regras_encomendas')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'regras_encomendas'
-                ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
-                : 'text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200'
-            }`}
-          >
-            <Package className="w-4 h-4 text-amber-600" />
-            <span>Regras de Encomendas ({condominio.regras?.diasLimiteRetiradaEncomenda ?? 5} dias)</span>
-          </button>
-        )}
-
-        {modulosAtivos.bicicletario && (
-          <button
-            onClick={() => setActiveTab('frota')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'frota'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Bike className="w-4 h-4" />
-            <span>Gestão da Frota ({bikes.length})</span>
-          </button>
-        )}
-
-        {modulosAtivos.bicicletario && (
-          <button
-            id="tab-sindico-liberacoes"
-            onClick={() => setActiveTab('liberacoes')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'liberacoes'
-                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                : 'text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200'
-            }`}
-          >
-            <KeyRound className="w-4 h-4 text-emerald-600" />
-            <span>Liberação & Senhas ({bikes.filter((b) => b.status === 'reservada_5min').length})</span>
-            {bikes.filter((b) => b.status === 'reservada_5min').length > 0 && (
-              <span className="bg-emerald-600 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full animate-pulse">
-                {bikes.filter((b) => b.status === 'reservada_5min').length}
-              </span>
-            )}
-          </button>
-        )}
-
-        {modulosAtivos.equipamentos && (
-          <button
-            id="tab-sindico-equipamentos"
-            onClick={() => setActiveTab('equipamentos')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'equipamentos'
-                ? 'bg-teal-700 text-white shadow-sm'
-                : 'text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200'
-            }`}
-          >
-            <Wrench className="w-4 h-4" />
-            <span>Itens & Equipamentos</span>
-          </button>
-        )}
-
-        {modulosAtivos.lazer && (
-          <button
-            onClick={() => setActiveTab('lazer')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'lazer'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Áreas Comuns & Lazer ({areasLazer.length})</span>
-          </button>
-        )}
-
-        {modulosAtivos.lazer && (
-          <button
-            onClick={() => setActiveTab('reservas')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'reservas'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Calendar className="w-4 h-4" />
-            <span>Agenda & Reservas ({reservas.length})</span>
-          </button>
-        )}
-
-        {modulosAtivos.ocorrencias && (
-          <button
-            onClick={() => setActiveTab('ocorrencias')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap relative cursor-pointer ${
-              activeTab === 'ocorrencias'
-                ? 'bg-amber-600 text-white shadow-sm'
-                : 'text-amber-700 bg-amber-50 hover:bg-amber-100 hover:text-amber-900 border border-amber-200/80'
-            }`}
-          >
-            <Wrench className="w-4 h-4" />
-            <span>Ocorrências & Chamados ({ocorrencias.length})</span>
-            {ocorrencias.filter((o) => o.status === 'aberto').length > 0 && (
-              <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full">
-                {ocorrencias.filter((o) => o.status === 'aberto').length}
-              </span>
-            )}
-          </button>
-        )}
-
-        {modulosAtivos.financeiro && (
-          <button
-            onClick={() => setActiveTab('financeiro')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'financeiro'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <DollarSign className="w-4 h-4" />
-            <span>Financeiro & Prestação</span>
-          </button>
-        )}
-
-        {modulosAtivos.mural && (
-          <button
-            onClick={() => setActiveTab('comunidade')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'comunidade'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Vote className="w-4 h-4" />
-            <span>Comunidade & Enquetes ({enquetes.length})</span>
-          </button>
-        )}
-
-        {modulosAtivos.documentos && (
-          <button
-            onClick={() => setActiveTab('documentos')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'documentos'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            <span>Documentos ({documentos.length})</span>
-          </button>
-        )}
-
-        {modulosAtivos.mural && (
-          <button
-            onClick={() => setActiveTab('avisos')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'avisos'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <AlertCircle className="w-4 h-4" />
-            <span>Comunicados ({avisos.length})</span>
-          </button>
-        )}
-
-        {modulosAtivos.portaria_whatsapp && (
-          <button
-            onClick={() => setActiveTab('whatsapp')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'whatsapp'
-                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
-                : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-900 border border-emerald-200/80'
-            }`}
-          >
-            <PhoneCall className="w-4 h-4" />
-            <span>💬 Central WhatsApp (DropDesk)</span>
-          </button>
-        )}
-
-        <button
-          onClick={() => setActiveTab('aprovacoes')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap relative cursor-pointer ${
-            activeTab === 'aprovacoes'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <ShieldCheck className="w-4 h-4" />
-          <span>Aprovações</span>
-          {moradoresPendentes.length > 0 && (
-            <span className="bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full animate-pulse">
-              {moradoresPendentes.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('configuracoes')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'configuracoes'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Settings className="w-4 h-4" />
-          <span>Configurações & Regras</span>
-        </button>
-      </ScrollableTabsNav>
 
       {/* ========================================================================= */}
       {/* ABA: MORADORES & CADASTROS */}
@@ -4252,6 +4150,7 @@ export const SindicoDashboard: React.FC<SindicoDashboardProps> = ({
         onClose={() => setShowRelatorioModal(false)}
         condominio={condominio}
       />
+      </div>
     </div>
   );
 };

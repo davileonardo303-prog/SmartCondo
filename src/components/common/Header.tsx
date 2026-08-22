@@ -13,6 +13,7 @@ import {
   Download,
   X,
   Clock,
+  Menu,
 } from 'lucide-react';
 import { UserRole, Condominio, Morador, AppNotification, UserAccount } from '../../types';
 import { condoStore } from '../../services/mockStorage';
@@ -398,6 +399,20 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="bg-slate-50/90 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-3 sm:px-4 py-2 text-xs text-slate-600 dark:text-slate-300">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0 max-w-full">
+            {/* Botão com os 3 traços para abrir o Menu de Serviços & Módulos */}
+            <button
+              id="header-btn-toggle-menu"
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('toggle-sindico-sidebar'));
+              }}
+              className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white shadow-xs transition active:scale-95 cursor-pointer flex items-center justify-center shrink-0 border border-indigo-500"
+              title="Abrir Menu de Serviços e Módulos"
+              aria-label="Menu de Serviços"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+
             <div className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 flex items-center justify-center font-black text-xs shadow-xs shrink-0">
               {currentUser.nome.charAt(0)}
             </div>
